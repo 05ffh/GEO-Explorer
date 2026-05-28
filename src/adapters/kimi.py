@@ -7,3 +7,4 @@ class KimiAdapter(OpenAICompatibleAdapter):
     base_url = settings.kimi_base_url
     default_model = settings.kimi_model
     api_key = settings.kimi_api_key
+    default_temperature = 1.0

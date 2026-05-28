@@ -40,6 +40,7 @@ class OpenAICompatibleAdapter(PlatformAdapter):
     base_url: str = ""
     default_model: str = ""
     api_key: str = ""
+    default_temperature: float = 0.3
 
     def __init__(self):
         self._client = None
@@ -60,7 +61,7 @@ class OpenAICompatibleAdapter(PlatformAdapter):
                     {"role": "system", "content": system_prompt or "你是一个诚实的AI助手。"},
                     {"role": "user", "content": prompt},
                 ],
-                temperature=kwargs.get("temperature", 0.3),
+                temperature=kwargs.get("temperature", self.default_temperature),
                 max_tokens=kwargs.get("max_tokens", 2048),
             )
             latency = int((time.time() - start) * 1000)
