@@ -6,19 +6,20 @@ services:
     depends_on: [db, redis]
     volumes: ["./src:/app/src"]
 
-  worker:
-    build: .
-    command: celery -A src.collector.tasks worker --loglevel=info
-    env_file: .env
-    depends_on: [db, redis]
-    volumes: ["./src:/app/src"]
-
-  beat:
-    build: .
-    command: celery -A src.collector.tasks beat --loglevel=info
-    env_file: .env
-    depends_on: [db, redis]
-    volumes: ["./src:/app/src"]
+  # worker and beat enabled in Phase 5 (Task 5.2) after celery tasks exist
+  # worker:
+  #   build: .
+  #   command: celery -A src.collector.tasks worker --loglevel=info
+  #   env_file: .env
+  #   depends_on: [db, redis]
+  #   volumes: ["./src:/app/src"]
+  #
+  # beat:
+  #   build: .
+  #   command: celery -A src.collector.tasks beat --loglevel=info
+  #   env_file: .env
+  #   depends_on: [db, redis]
+  #   volumes: ["./src:/app/src"]
 
   db:
     image: postgres:16-alpine
