@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>品牌 AI 可见度概览</h1>
+<div class="metric-grid" style="margin-top:16px;">
+    <div class="card metric-card">
+        <div class="value">{{ metrics.sov|default(0) }}</div>
+        <div class="label">声量份额 (SOV)</div>
+        <div class="sample">品牌被AI提及的比例</div>
+    </div>
+    <div class="card metric-card">
+        <div class="value">{{ metrics.first_rec_rate|default(0) }}</div>
+        <div class="label">首选推荐率</div>
+        <div class="sample">AI优先推荐的比例</div>
+    </div>
+    <div class="card metric-card">
+        <div class="value">{{ metrics.accuracy_rate|default(0) }}</div>
+        <div class="label">准确率</div>
+        <div class="sample">AI描述与事实一致的比例</div>
+    </div>
+    <div class="card metric-card">
+        <div class="value">{{ metrics.completeness_rate|default(0) }}</div>
+        <div class="label">完整度</div>
+        <div class="sample">关键字段被覆盖的比例</div>
+    </div>
+    <div class="card metric-card">
+        <div class="value">{{ metrics.citation_rate|default(0) }}</div>
+        <div class="label">引用率</div>
+        <div class="sample">品牌与官网被引用的比例</div>
+    </div>
+</div>
+
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
+    <div class="card">
+        <h3>待处理</h3>
+        <p>待处理行动计划: <strong>{{ pending_actions|default(0) }}</strong></p>
+        <p>未审核P0幻觉: <strong style="color:#c00;">{{ unreviewed_p0|default(0) }}</strong></p>
+    </div>
+    <div class="card">
+        <h3>品牌列表</h3>
+        <p>监测品牌数: <strong>{{ total_brands|default(0) }}</strong></p>
+    </div>
+</div>
+{% endblock %}

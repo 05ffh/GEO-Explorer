@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ brand.name }}</h1>
+<p>行业: {{ brand.industry }} | 别名: {{ brand.aliases|join(', ') }}</p>
+
+<h2 style="margin-top:20px;">Ground Truth (活跃版本)</h2>
+<div class="card">
+    {% if gt %}
+    <table>
+        {% for key, val in gt.ground_truth_json.items() %}
+        <tr><td><strong>{{ key }}</strong></td><td>{{ val }}</td></tr>
+        {% endfor %}
+    </table>
+    {% else %}
+    <p>暂无 Ground Truth 数据</p>
+    {% endif %}
+</div>
+
+<h2 style="margin-top:20px;">5 大指标</h2>
+<div class="metric-grid">
+    <div class="card metric-card">
+        <div class="value">{{ metrics.sov|default(0) }}</div>
+        <div class="label">SOV</div>
+    </div>
+    <div class="card metric-card">
+        <div class="value">{{ metrics.first_rec_rate|default(0) }}</div>
+        <div class="label">首选推荐率</div>
+    </div>
+    <div class="card metric-card">
+        <div class="value">{{ metrics.accuracy_rate|default(0) }}</div>
+        <div class="label">准确率</div>
+    </div>
+    <div class="card metric-card">
+        <div class="value">{{ metrics.completeness_rate|default(0) }}</div>
+        <div class="label">完整度</div>
+    </div>
+    <div class="card metric-card">
+        <div class="value">{{ metrics.citation_rate|default(0) }}</div>
+        <div class="label">引用率</div>
+    </div>
+</div>
+{% endblock %}
