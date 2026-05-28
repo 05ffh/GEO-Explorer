@@ -1,6 +1,7 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env")
     app_env: str = "development"
     secret_key: str = "change-me"
     database_url: str = "postgresql+asyncpg://geo:geo@localhost:5432/geo_explorer"
@@ -31,7 +32,5 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
 
-    class Config:
-        env_file = ".env"
 
 settings = Settings()
