@@ -6,8 +6,24 @@ from src.api.deps import get_current_user, get_org_brand_or_404
 from src.models.user import User
 from src.models.collection_run import CollectionRun
 from src.models.query_result import QueryResult
+from src.collector.tasks import collect_brand_task
 
 router = APIRouter(tags=["collections"])
+
+
+@router.post("/api/brands/{brand_id}/collections", status_code=202)
+async def trigger_collection(
+    brand_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await get_org_brand_or_404(brand_id, user, db)
+    task = collect_brand_task.delay(brand_id, str(user.organization_id))
+    return {
+        "task_id": task.id,
+        "brand_id": brand_id,
+        "status": "queued",
+    }
 
 
 @router.get("/api/brands/{brand_id}/collections")
