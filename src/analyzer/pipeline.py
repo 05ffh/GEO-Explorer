@@ -72,7 +72,7 @@ async def compute_and_save_metrics(
     except Exception:
         logger.exception("Insight generation failed for collection %s", collection_run_id)
 
-    # Auto-generate reports
+    # Auto-generate reports (3 formats: .md + .pdf + .docx)
     try:
         from src.reports.diagnostic import generate_diagnostic_report
         from src.reports.action_plan import generate_optimization_plan
@@ -84,6 +84,12 @@ async def compute_and_save_metrics(
         logger.info("Reports generated for collection %s", collection_run_id)
     except Exception:
         logger.exception("Report generation failed for collection %s", collection_run_id)
+
+    # Auto-generate Content Packages from top P0 action plans
+    try:
+        await _generate_content_packages(brand_id, org_id, db)
+    except Exception:
+        logger.exception("Content package generation failed for collection %s", collection_run_id)
 
     return snapshot
 
@@ -159,3 +165,93 @@ async def _run_hallucination_detection(
     logger.info("Hallucination detection complete: %d claims, %d incorrect, %d action plans",
                 len(all_hallucinations), len(incorrect_hallucinations),
                 len(incorrect_hallucinations))
+
+
+async def _generate_content_packages(
+    brand_id: str, org_id: str, db: AsyncSession,
+) -> None:
+    """Generate Content Packages from top P0 action plans using active GT."""
+    from src.models.content_package import ContentPackage
+
+    # Get top P0 plans that haven't been processed yet
+    plans = (await db.execute(
+        select(ActionPlan).where(
+            ActionPlan.brand_id == brand_id,
+            ActionPlan.priority == "P0",
+            ActionPlan.status == "pending",
+        ).limit(5)
+    )).scalars().all()
+
+    if not plans:
+        logger.info("No P0 action plans for content package generation")
+        return
+
+    # Get active GT
+    gt = (await db.execute(
+        select(GroundTruthVersion).where(
+            GroundTruthVersion.brand_id == brand_id,
+            GroundTruthVersion.status == "active",
+        )
+    )).scalar_one_or_none()
+
+    if not gt:
+        logger.info("No active GT for brand %s, skipping content packages", brand_id)
+        return
+
+    from src.actions.fact_checker import check_content_against_gt
+    from src.actions.schema_generator import generate_jsonld
+    from src.models.brand import Brand
+
+    brand = (await db.execute(select(Brand).where(Brand.id == brand_id))).scalar_one_or_none()
+    brand_name = brand.name if brand else "Unknown"
+    generated = 0
+
+    for plan in plans:
+        try:
+            # Build content from GT facts
+            field = plan.correct_ground_truth.get("field", "")
+            gt_value = str(plan.correct_ground_truth.get("value", ""))
+            content_type = plan.suggested_content_type or "FAQ"
+
+            content_items = [{
+                "type": content_type,
+                "title": f"{brand_name} - {field}",
+                "body": (
+                    f"# {brand_name} 官方信息\n\n"
+                    f"## {field}\n\n"
+                    f"{gt_value}\n\n"
+                    f"---\n"
+                    f"*本内容基于 GEO Explorer 认证的 Ground Truth 生成，确保与品牌事实一致。*"
+                ),
+            }]
+
+            # Fact check
+            fact_report = check_content_against_gt(content_items, gt.ground_truth_json)
+
+            # Schema.org
+            schema = generate_jsonld(brand_name, gt.ground_truth_json, content_type)
+
+            # Create ContentPackage
+            pkg = ContentPackage(
+                action_plan_id=plan.id,
+                organization_id=org_id,
+                brand_id=brand_id,
+                content_items=content_items,
+                schema_items=schema["schemas"],
+                publishing_checklist=[
+                    {"item": "确认所有事实与 GT 一致", "checked": fact_report["overall_pass"]},
+                    {"item": "Schema.org JSON-LD 格式验证", "checked": len(schema["schemas"]) > 0},
+                    {"item": "禁止性表述检查通过", "checked": fact_report["issues_found"] == 0},
+                    {"item": "内容适合发布到官方网站", "checked": False},
+                ],
+                fact_check_report=fact_report,
+                status="draft",
+            )
+            db.add(pkg)
+            plan.status = "in_progress"
+            generated += 1
+        except Exception as e:
+            logger.warning("Content package failed for plan %s: %s", plan.id, e)
+
+    await db.commit()
+    logger.info("Content packages generated: %d from %d plans", generated, len(plans))
