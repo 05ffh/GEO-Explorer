@@ -29,6 +29,26 @@ class Settings(BaseSettings):
     collector_timeout: int = 30
     collector_max_retries: int = 2
 
+    # --- 分析触发阈值 ---
+    min_success_platforms_for_analysis: int = 2
+    min_success_queries_for_analysis: int = 10
+
+    # --- 平台级并发 ---
+    platform_concurrency_limits: dict = {
+        "kimi": 2,
+        "deepseek": 4,
+        "doubao": 4,
+        "wenxin": 2,
+    }
+
+    # --- 平台级重试 ---
+    platform_retry_config: dict = {
+        "kimi": {"max_retries": 2, "backoff_seconds": [2, 4]},
+        "deepseek": {"max_retries": 2, "backoff_seconds": [1, 2]},
+        "doubao": {"max_retries": 2, "backoff_seconds": [1, 2]},
+        "wenxin": {"max_retries": 2, "backoff_seconds": [2, 4]},
+    }
+
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
 
