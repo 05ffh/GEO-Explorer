@@ -96,3 +96,19 @@ async def update_brand(
     brand.updated_by = user.id
     await db.commit()
     return {"id": str(brand.id), "name": brand.name}
+
+
+@router.post("/{brand_id}/gt-collect", status_code=202)
+async def trigger_gt_collection(
+    brand_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger GT auto-collection for a brand."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    try:
+        from src.collector.gt_collector import collect_gt_candidate
+        candidate = await collect_gt_candidate(str(brand.id), str(user.organization_id), db)
+        return {"status": "collected", "candidate_id": str(candidate.id), "confidence": candidate.overall_confidence}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"GT collection failed: {e}")

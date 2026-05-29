@@ -9,6 +9,8 @@ from src.models.metrics_snapshot import MetricsSnapshot
 from src.models.action_plan import ActionPlan
 from src.models.hallucination import HallucinationResult
 from src.models.insight_summary import InsightSummary
+from src.models.gt_candidate import GroundTruthCandidate
+from src.models.content_package import ContentPackage
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -78,6 +80,45 @@ async def dashboard_overview(
                 "generated_at": insight_q.generated_at.isoformat(),
             }
 
+    # Extended KPI averages from details_json
+    avg_scenario_recall = 0.0
+    avg_semantic_stability = 0.0
+    avg_differentiation = 0.0
+    avg_cross_platform_consistency = 0.0
+    avg_recommendation_quality = 0.0
+    if latest_metrics:
+        ek_counts = 0
+        for m in latest_metrics:
+            ek = (m.details or {}).get("extended_kpis", {})
+            if ek:
+                ek_counts += 1
+                avg_scenario_recall += ek.get("scenario_recall", {}).get("value", 0)
+                avg_semantic_stability += ek.get("semantic_stability", {}).get("value", 0)
+                avg_differentiation += ek.get("differentiation", {}).get("value", 0)
+                avg_cross_platform_consistency += ek.get("cross_platform_consistency", {}).get("value", 0)
+                avg_recommendation_quality += ek.get("recommendation_quality", {}).get("value", 0)
+        if ek_counts:
+            avg_scenario_recall /= ek_counts
+            avg_semantic_stability /= ek_counts
+            avg_differentiation /= ek_counts
+            avg_cross_platform_consistency /= ek_counts
+            avg_recommendation_quality /= ek_counts
+
+    # GT candidate stats
+    pending_candidates = (await db.execute(
+        select(func.count(GroundTruthCandidate.id)).where(
+            GroundTruthCandidate.organization_id == org_id,
+            GroundTruthCandidate.status == "pending_review",
+        )
+    )).scalar()
+
+    # Content package count
+    package_count = (await db.execute(
+        select(func.count(ContentPackage.id)).where(
+            ContentPackage.organization_id == org_id,
+        )
+    )).scalar()
+
     return {
         "total_brands": brand_count,
         "average_metrics": {
@@ -86,8 +127,15 @@ async def dashboard_overview(
             "accuracy_rate": round(avg_accuracy, 4),
             "completeness_rate": round(avg_completeness, 4),
             "citation_rate": round(avg_citation, 4),
+            "scenario_recall": round(avg_scenario_recall, 4),
+            "semantic_stability": round(avg_semantic_stability, 4),
+            "differentiation": round(avg_differentiation, 4),
+            "cross_platform_consistency": round(avg_cross_platform_consistency, 4),
+            "recommendation_quality": round(avg_recommendation_quality, 4),
         },
         "pending_action_plans": pending_actions,
         "unreviewed_p0_hallucinations": recent_p0,
+        "pending_gt_candidates": pending_candidates,
+        "content_package_count": package_count,
         "latest_insight": latest_insight,
     }
