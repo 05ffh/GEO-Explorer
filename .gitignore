@@ -1,9 +1,62 @@
+# ============================================================
+# GEO Explorer — .gitignore
+# ============================================================
+# Never committed: secrets, virtualenv, runtime data, reports
+# ============================================================
+
+# === Python cache (never sync) ===
 __pycache__/
 *.pyc
-.env
-.venv/
+*.pyo
 *.egg-info/
 .pytest_cache/
-.codegraph/
+.mypy_cache/
+.ruff_cache/
+
+# === Virtual environment (never sync — each machine builds its own) ===
+.venv/
+venv/
+env/
+
+# === Secrets & API Keys (never sync — each team member has their own) ===
+.env
+*.pem
+*.key
+credentials.json
+
+# === Local database data (never sync via git) ===
 pgdata/
 dump.rdb
+*.dump
+
+# === IDE / Editor (never sync) ===
+.codegraph/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# === Runtime outputs (never sync — regenerated on each machine) ===
+reports/*
+!reports/GEO_Explorer_*.md
+!reports/GEO_Explorer_*.pdf
+
+# === OS files (never sync) ===
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ============================================================
+# Everything else IS synced via git:
+#   src/          — all source code (92 .py + 21 .html)
+#   tests/        — all tests (112 tests)
+#   alembic/      — database migrations
+#   docs/         — design specs + implementation plans
+#   deploy/       — systemd service files
+#   requirements.txt  — dependency list
+#   setup.sh      — one-click setup script
+#   SYNC_GUIDE.md — what syncs and what doesn't
+#   CLAUDE.md     — project instructions
+#   .env.example  — template for API keys (no real keys)
+#   .gitignore    — this file
+# ============================================================

@@ -1,21 +1,57 @@
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-sqlalchemy[asyncio]==2.0.36
-asyncpg==0.30.0
-alembic==1.14.1
-celery[redis]==5.4.0
-redis==5.2.1
-jinja2==3.1.4
-python-multipart==0.0.19
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-pydantic==2.10.4
-pydantic-settings==2.7.1
-openai==1.59.9
-volcenginesdkarkruntime==1.0.0
+# GEO Explorer — Python Dependencies
+# Install: pip install -r requirements.txt
+# Python 3.12+
+
+# Web Framework
+fastapi==0.136.3
+uvicorn==0.48.0
+starlette==1.1.0
+python-multipart==0.0.29
+
+# Database
+SQLAlchemy==2.0.50
+asyncpg==0.31.0
+alembic==1.18.4
+
+# Task Queue
+celery==5.4.0
+redis==5.3.1
+kombu==5.6.2
+
+# Authentication
+python-jose==3.5.0
+passlib==1.7.4
+bcrypt==3.2.2
+PyJWT==2.13.0
+email-validator==2.3.0
+
+# AI SDK
+openai==2.38.0
+
+# Search
+duckduckgo_search==8.1.1
+
+# Templates
+Jinja2==3.1.6
+
+# HTTP Client
 httpx==0.28.1
-email-validator==2.2.0
-pytest==8.3.4
-pytest-asyncio==0.25.0
-pytest-cov==6.0.0
-factory-boy==3.3.1
+httpcore==1.0.9
+
+# Word Document
+python-docx==1.2.0
+
+# Settings
+pydantic-settings==2.14.1
+pydantic==2.13.4
+python-dotenv==1.2.2
+
+# Testing
+pytest==9.0.3
+pytest-asyncio==1.4.0
+fakeredis==2.35.1
+
+# Utilities
+click==8.4.1
+
+# PDF requires Node.js 22+ with Puppeteer + marked (separate from pip)
