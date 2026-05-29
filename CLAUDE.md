@@ -6,11 +6,18 @@
 
 ## 项目状态
 
-Phase 10 已完成，60 commits，89 tests (0 failures)，83 源文件。完整链路已打通：
+**Phase 11 已完成, Phase 12 Define 完成 (等待 Plan)。60+ commits, 89 tests (0 failures)。**
 
+完整链路（Phase 11 加固后）:
 ```
-GT采集 → GT审核 → 品牌GEO采集 → 10KPI+幻觉检测 → Action Plans → Content Package → 报告(.md/.docx/.pdf)
+GT采集(含S/A/B/C/D来源等级) → GT审核(证据+人工双重阻断) → 品牌GEO采集
+→ 10KPI(统一numerator/denominator/confidence) → 语义幻觉检测(9错误类型+needs_human_review)
+→ Action Theme聚合(最多10主题) → Content Package(风险分级+状态机) → 报告(.md/.docx/.pdf)
 ```
+
+**下一步:** Phase 12 Dashboard 工作台 Plan → Build (7页面: 品牌总览/GT审核/AI证据/幻觉风险/Action工作台/Content管理/趋势归因)
+
+**设计系统:** Data-Dense Dashboard, #1E40AF/#3B82F6/#F59E0B, Fira Code+Fira Sans, Jinja2+HTMX+Tailwind CDN+Chart.js+Heroicons
 
 ## 项目文档
 
