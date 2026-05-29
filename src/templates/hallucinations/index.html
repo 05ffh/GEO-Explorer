@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
+{% from "partials/components/priority_badge.html" import priority_badge %}
+{% block title %}{{ vm.brand.name }} — 幻觉风险{% endblock %}
+{% block content %}
+<h1 class="font-heading text-2xl font-bold text-text mb-5">{{ vm.brand.name }} — 幻觉风险</h1>
+<div class="flex items-center gap-3 mb-4">
+    <button class="px-4 py-1.5 text-sm rounded-lg bg-primary text-white cursor-pointer">Cluster 视图</button>
+    <button class="px-4 py-1.5 text-sm rounded-lg bg-slate-100 text-slate-600 cursor-pointer">详细列表</button>
+    <select class="ml-auto px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white cursor-pointer"><option value="">全部等级</option><option value="P0">P0</option><option value="P1">P1</option><option value="P2">P2</option></select>
+</div>
+{% if vm.clusters %}
+<div class="space-y-3">{% for c in vm.clusters %}{% endfor %}</div>
+{% else %}
+{{ empty_state("暂无幻觉风险", "触发采集并完成分析后，AI 幻觉检测结果将在此展示。", none, none) }}
+{% endif %}
+{% endblock %}

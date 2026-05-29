@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
+{% from "partials/components/risk_badge.html" import risk_badge %}
+{% from "partials/components/status_badge.html" import status_badge %}
+{% block title %}{{ vm.brand.name }} — Content 管理{% endblock %}
+{% block content %}
+<h1 class="font-heading text-2xl font-bold text-text mb-5">{{ vm.brand.name }} — Content 管理</h1>
+<div class="flex flex-wrap gap-3 mb-4">
+    <select class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white cursor-pointer"><option value="">全部风险等级</option><option value="high">高风险</option><option value="medium">中风险</option><option value="low">低风险</option></select>
+    <select class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white cursor-pointer"><option value="">全部状态</option></select>
+</div>
+{% if vm.packages %}
+<div class="space-y-2">{% for pkg in vm.packages %}{% endfor %}</div>
+{% else %}
+{{ empty_state("暂无 Content Package", "请先确认 Action Theme 并生成内容，Content Package 将在此管理和导出。", "/brands/" + vm.brand.id + "/actions", "前往 Action 工作台") }}
+{% endif %}
+{% endblock %}

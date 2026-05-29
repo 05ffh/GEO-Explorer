@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
+{% from "partials/components/priority_badge.html" import priority_badge %}
+{% block title %}{{ vm.brand.name }} — Action 工作台{% endblock %}
+{% block content %}
+<h1 class="font-heading text-2xl font-bold text-text mb-5">{{ vm.brand.name }} — Action 工作台</h1>
+<div class="flex items-center gap-3 mb-4">
+    <button class="px-4 py-1.5 text-sm rounded-lg bg-primary text-white cursor-pointer">Kanban 看板</button>
+    <button class="px-4 py-1.5 text-sm rounded-lg bg-slate-100 text-slate-600 cursor-pointer">列表视图</button>
+    <select class="ml-auto px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white cursor-pointer"><option value="">全部优先级</option><option value="P0">P0</option><option value="P1">P1</option></select>
+</div>
+{% if vm.themes %}
+<div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+    {% for status_col in ['detected', 'confirmed', 'content_generating', 'content_ready', 'approved'] %}
+    <div class="kanban-column bg-slate-50 rounded-lg p-3">
+        <h3 class="text-xs font-semibold text-slate-500 uppercase mb-2">{{ status_col }}</h3>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+{{ empty_state("暂无 Action Theme", "确认幻觉并生成 Action 后，优化任务将在此以 Kanban 形式展示。", none, none) }}
+{% endif %}
+{% endblock %}

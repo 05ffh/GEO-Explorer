@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
+{% block title %}{{ vm.brand.name }} — AI 证据{% endblock %}
+{% block content %}
+<h1 class="font-heading text-2xl font-bold text-text mb-5">{{ vm.brand.name }} — AI 回答证据</h1>
+<div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+    <div class="flex flex-wrap gap-3 mb-4">
+        <select class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white cursor-pointer"><option value="">全部平台</option></select>
+        <select class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white cursor-pointer"><option value="">全部维度</option></select>
+        <select class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white cursor-pointer"><option value="">全部状态</option></select>
+    </div>
+    {% if vm.items %}
+    <div class="space-y-3">{% for item in vm.items %}{% endfor %}</div>
+    {% else %}
+    {{ empty_state("暂无 AI 证据", "触发采集后，AI 回答及其与 KPI/幻觉/Action 的关联将在此展示。", none, none) }}
+    {% endif %}
+</div>
+{% endblock %}

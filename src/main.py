@@ -85,3 +85,89 @@ async def brand_dashboard(request: Request, brand_id: str,
         collection_time=vm["data_reliability"]["latest_snapshot_at"] or "",
         vm=vm,
     ))
+
+
+@app.get("/brands/{brand_id}/gt-review", response_class=HTMLResponse)
+async def gt_review_page(request: Request, brand_id: str,
+                         user: User = Depends(get_current_user),
+                         db: AsyncSession = Depends(get_db)):
+    """GT review page."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.gt_review import build_gt_review_vm
+    vm = await build_gt_review_vm(brand, user, db)
+    org_brands = await _get_org_brands(user, db)
+    return templates.TemplateResponse("gt_review/index.html", _page_context(
+        request, "gt-review", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name,
+        vm=vm,
+    ))
+
+
+@app.get("/brands/{brand_id}/evidence", response_class=HTMLResponse)
+async def evidence_page(request: Request, brand_id: str,
+                        user: User = Depends(get_current_user),
+                        db: AsyncSession = Depends(get_db)):
+    """AI evidence page."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    org_brands = await _get_org_brands(user, db)
+    return templates.TemplateResponse("evidence/index.html", _page_context(
+        request, "evidence", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name,
+        vm={"brand": {"id": str(brand.id), "name": brand.name}, "items": []},
+    ))
+
+
+@app.get("/brands/{brand_id}/hallucinations", response_class=HTMLResponse)
+async def hallucinations_page(request: Request, brand_id: str,
+                              user: User = Depends(get_current_user),
+                              db: AsyncSession = Depends(get_db)):
+    """Hallucination risk page."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    org_brands = await _get_org_brands(user, db)
+    return templates.TemplateResponse("hallucinations/index.html", _page_context(
+        request, "hallucinations", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name,
+        vm={"brand": {"id": str(brand.id), "name": brand.name}, "clusters": [], "total": 0},
+    ))
+
+
+@app.get("/brands/{brand_id}/actions", response_class=HTMLResponse)
+async def actions_page(request: Request, brand_id: str,
+                       user: User = Depends(get_current_user),
+                       db: AsyncSession = Depends(get_db)):
+    """Action workbench page."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    org_brands = await _get_org_brands(user, db)
+    return templates.TemplateResponse("actions/index.html", _page_context(
+        request, "actions", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name,
+        vm={"brand": {"id": str(brand.id), "name": brand.name}, "themes": []},
+    ))
+
+
+@app.get("/brands/{brand_id}/content", response_class=HTMLResponse)
+async def content_page(request: Request, brand_id: str,
+                       user: User = Depends(get_current_user),
+                       db: AsyncSession = Depends(get_db)):
+    """Content management page."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    org_brands = await _get_org_brands(user, db)
+    return templates.TemplateResponse("content/index.html", _page_context(
+        request, "content", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name,
+        vm={"brand": {"id": str(brand.id), "name": brand.name}, "packages": []},
+    ))
+
+
+@app.get("/brands/{brand_id}/trends", response_class=HTMLResponse)
+async def trends_page(request: Request, brand_id: str,
+                      user: User = Depends(get_current_user),
+                      db: AsyncSession = Depends(get_db)):
+    """Trends & attribution page."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    org_brands = await _get_org_brands(user, db)
+    return templates.TemplateResponse("trends/index.html", _page_context(
+        request, "trends", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name,
+        vm={"brand": {"id": str(brand.id), "name": brand.name}},
+    ))

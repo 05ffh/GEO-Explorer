@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
+{% from "partials/components/risk_badge.html" import risk_badge %}
+{% from "partials/components/status_badge.html" import status_badge %}
+{% from "partials/components/source_tier_badge.html" import source_tier_badge %}
+{% from "partials/components/permission_denied.html" import permission_denied %}
+
+{% block title %}{{ vm.brand.name }} — GT 审核{% endblock %}
+
+{% block content %}
+
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-5 gap-3">
+    <div>
+        <h1 class="font-heading text-2xl font-bold text-text">{{ vm.brand.name }} — GT 审核</h1>
+        <p class="text-sm text-slate-500 mt-0.5">审核 AI 采集的 Ground Truth 候选字段，确认后 Promote 为正式 GT</p>
+    </div>
+</div>
+
+{% if not vm.has_candidate %}
+{{ empty_state("暂无 GT Candidate", "当前品牌还没有 GT Candidate，请先触发 GT 自动采集。", none, none) }}
+{% else %}
+
+<!-- Progress Bar -->
+<div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+    <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">审核进度</h3>
+    <div class="flex items-center gap-4 mb-2">
+        <div class="flex-1 bg-slate-200 rounded-full h-2.5">
+            <div class="bg-primary-light h-2.5 rounded-full transition-all" style="width: {{ (vm.progress.reviewed / vm.progress.total * 100)|int if vm.progress.total else 0 }}%"></div>
+        </div>
+        <span class="text-sm font-medium text-text whitespace-nowrap">{{ vm.progress.reviewed }}/{{ vm.progress.total }}</span>
+    </div>
+    <div class="flex flex-wrap gap-3 text-xs text-slate-500">
+        <span>高风险完成: {{ vm.progress.high_risk_reviewed }}/{{ vm.progress.high_risk_total }}</span>
+        <span>Uncertain: {{ vm.progress.uncertain }}</span>
+        <span>冲突: {{ vm.progress.conflicts }}</span>
+    </div>
+</div>
+
+<!-- Filter Tabs -->
+<div class="flex flex-wrap gap-2 mb-4" id="gt-filter-tabs">
+    <button class="px-3 py-1.5 text-xs rounded-full bg-primary text-white cursor-pointer" onclick="filterFields('all')">全部 ({{ vm.progress.total }})</button>
+    <button class="px-3 py-1.5 text-xs rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer" onclick="filterFields('conflict')">冲突 ({{ vm.progress.conflicts }})</button>
+    <button class="px-3 py-1.5 text-xs rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer" onclick="filterFields('high_risk')">高风险 ({{ vm.progress.high_risk_total }})</button>
+    <button class="px-3 py-1.5 text-xs rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer" onclick="filterFields('unreviewed')">未审核</button>
+</div>
+
+<!-- Field List -->
+<div class="space-y-2" id="gt-field-list">
+    {% for field in vm.fields %}
+    <div class="bg-white rounded-lg border border-gray-200 {% if field.risk_level == 'high' %}risk-high{% elif field.risk_level == 'medium' %}risk-medium{% else %}risk-low{% endif %}"
+         data-risk="{{ field.risk_level }}" data-status="{{ field.status }}" data-conflict="{{ '1' if field.has_conflict else '0' }}">
+
+        <!-- Field Row (always visible) -->
+        <div class="flex items-center justify-between px-4 py-3 cursor-pointer" onclick="toggleFieldDetail(this)">
+            <div class="flex items-center gap-3 min-w-0 flex-1">
+                <span class="font-heading text-sm font-semibold text-text whitespace-nowrap">{{ field.name }}</span>
+                {{ risk_badge(field.risk_level) }}
+                {% if field.has_conflict %}
+                <span class="badge badge-p0">冲突</span>
+                {% endif %}
+                {% if field.best_tier %}
+                {{ source_tier_badge(field.best_tier) }}
+                {% endif %}
+                <span class="text-sm text-slate-500 truncate">{{ field.value[:80] }}</span>
+            </div>
+            <div class="flex items-center gap-2 flex-shrink-0 ml-2">
+                <span class="text-xs text-slate-400">{{ field.evidence_count }} 条证据</span>
+                {{ status_badge(field.status) }}
+                <svg class="w-4 h-4 text-slate-400 transition-transform field-chevron" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </div>
+        </div>
+
+        <!-- Field Detail Panel (expandable) -->
+        <div class="field-detail hidden border-t border-gray-100 px-4 py-3 bg-slate-50 rounded-b-lg">
+            <!-- Candidate value -->
+            <div class="mb-3">
+                <span class="text-xs text-slate-500 font-medium">候选值</span>
+                <p class="text-sm text-text mt-1">{{ field.value }}</p>
+            </div>
+
+            <!-- Active GT comparison -->
+            {% if vm.active_gt and field.name in vm.active_gt %}
+            <div class="mb-3 p-2 bg-blue-50 rounded text-sm">
+                <span class="text-xs text-blue-600 font-medium">当前 Active GT</span>
+                <p class="text-text mt-0.5">{{ vm.active_gt[field.name] }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Evidence list -->
+            <div class="mb-3">
+                <span class="text-xs text-slate-500 font-medium">证据来源 ({{ field.evidence_count }})</span>
+                <div class="mt-1.5 space-y-1.5">
+                    {% for ev in field.evidences %}
+                    <div class="bg-white rounded p-2 text-sm border border-gray-100 {% if ev.human_confirmed %}bg-green-50{% endif %}">
+                        <div class="flex items-center gap-2 mb-1">
+                            {{ source_tier_badge(ev.source_tier) }}
+                            <span class="font-medium text-text">{{ ev.source_name }}</span>
+                            {% if ev.human_confirmed %}<span class="badge badge-success text-xs">已确认</span>{% endif %}
+                            {% if ev.review_status == 'flagged' %}<span class="badge badge-p0 text-xs">已标记</span>{% endif %}
+                        </div>
+                        <p class="text-slate-600">{{ ev.excerpt }}</p>
+                        {% if ev.source_url %}<a href="{{ ev.source_url }}" target="_blank" class="text-xs text-primary-light hover:underline block mt-1">{{ ev.source_url[:80] }}</a>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Action buttons (if permitted) -->
+            {% if vm.permissions.can_review %}
+            <div class="flex gap-2">
+                <button class="px-3 py-1.5 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 cursor-pointer"
+                        hx-post="/api/gt-candidates/{{ vm.candidate_id }}/review" hx-swap="none">接受</button>
+                <button class="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 cursor-pointer"
+                        onclick="alert('编辑功能开发中')">编辑</button>
+                <button class="px-3 py-1.5 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 cursor-pointer"
+                        hx-post="/api/gt-candidates/{{ vm.candidate_id }}/review" hx-swap="none">删除</button>
+                <button class="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 cursor-pointer"
+                        hx-post="/api/gt-candidates/{{ vm.candidate_id }}/review" hx-swap="none">标记不确定</button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Promote Section -->
+<div class="mt-5 bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+    <div class="flex items-center justify-between">
+        <div>
+            <h3 class="text-sm font-semibold text-text">Promote 为正式 GT</h3>
+            {% if not vm.can_promote %}
+            <div class="mt-2 space-y-1">
+                {% for block in vm.promote_blocked %}
+                <p class="text-xs text-red-600">{{ block.field }}: {{ block.reason }}</p>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% if vm.permissions.can_promote %}
+        <button class="px-6 py-2 text-sm rounded-lg font-medium cursor-pointer {% if vm.can_promote %}bg-primary text-white hover:bg-primary/90{% else %}bg-slate-200 text-slate-400 cursor-not-allowed{% endif %}"
+                {% if vm.can_promote %}hx-post="/api/gt-candidates/{{ vm.candidate_id }}/promote"{% else %}disabled{% endif %}>
+            Promote
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleFieldDetail(row) {
+    var detail = row.parentElement.querySelector('.field-detail');
+    var chevron = row.querySelector('.field-chevron');
+    detail.classList.toggle('hidden');
+    chevron.style.transform = detail.classList.contains('hidden') ? '' : 'rotate(180deg)';
+}
+
+function filterFields(type) {
+    var fields = document.querySelectorAll('#gt-field-list > div');
+    fields.forEach(function(f) {
+        if (type === 'all') { f.style.display = ''; return; }
+        if (type === 'conflict') { f.style.display = f.dataset.conflict === '1' ? '' : 'none'; return; }
+        if (type === 'high_risk') { f.style.display = f.dataset.risk === 'high' ? '' : 'none'; return; }
+        if (type === 'unreviewed') { f.style.display = f.dataset.status === 'pending' ? '' : 'none'; return; }
+    });
+    // Update active tab
+    document.querySelectorAll('#gt-filter-tabs button').forEach(function(b, i) {
+        var types = ['all', 'conflict', 'high_risk', 'unreviewed'];
+        b.className = types[i] === type
+            ? 'px-3 py-1.5 text-xs rounded-full bg-primary text-white cursor-pointer'
+            : 'px-3 py-1.5 text-xs rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer';
+    });
+}
+</script>
+{% endblock %}
