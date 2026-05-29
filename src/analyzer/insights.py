@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
 
 logger = logging.getLogger(__name__)
+SEVERITY_ORDER = {"P0": 3, "P1": 2, "P2": 1}
 
 
 async def generate_insights(
@@ -21,7 +22,10 @@ async def generate_insights(
 
     run = (await db.execute(
         select(CollectionRun).where(CollectionRun.id == collection_run_id)
-    )).scalar_one()
+    )).scalar_one_or_none()
+    if not run:
+        logger.error("CollectionRun %s not found for insight generation", collection_run_id)
+        return {}
 
     metrics = (await db.execute(
         select(MetricsSnapshot).where(
@@ -35,13 +39,13 @@ async def generate_insights(
         )
     )).scalars().all()
 
-    # 加载所有相关的 QueryResult 用于 platform 查询
+    # 加载 QueryResult id+platform 用于幻觉的 platform 查询
     query_results = (await db.execute(
-        select(QueryResult).where(
+        select(QueryResult.id, QueryResult.platform).where(
             QueryResult.collection_run_id == collection_run_id,
         )
-    )).scalars().all()
-    qr_by_id = {str(qr.id): qr for qr in query_results}
+    )).all()
+    qr_by_id = {str(row.id): row for row in query_results}
 
     platform_stats = await _compute_platform_health(collection_run_id, db)
     brand_perf = _compute_brand_performance(metrics)
@@ -136,7 +140,6 @@ def _compute_key_findings(hallucinations, metrics, platform_stats, qr_by_id) -> 
     # 1. 跨平台幻觉: 同一 field_name 在多个平台出现
     field_platforms = defaultdict(list)
     for h in hallucinations:
-        # 通过 query_result_id 获取 platform
         qr = qr_by_id.get(str(h.query_result_id))
         platform = qr.platform if qr else "unknown"
         field_platforms[h.field_name].append((h, platform))
@@ -145,8 +148,7 @@ def _compute_key_findings(hallucinations, metrics, platform_stats, qr_by_id) -> 
         platforms_involved = list(set(p for _, p in items))
         n_platforms = len(platforms_involved)
         hallucinations_list = [h for h, _ in items]
-        severity_order = {"P0": 3, "P1": 2, "P2": 1}
-        max_sev = max(hallucinations_list, key=lambda h: severity_order.get(h.severity, 0))
+        max_sev = max(hallucinations_list, key=lambda h: SEVERITY_ORDER.get(h.severity, 0))
 
         if n_platforms >= 3:
             findings.append({

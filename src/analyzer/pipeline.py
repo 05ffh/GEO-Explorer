@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.metrics_snapshot import MetricsSnapshot
@@ -6,6 +7,8 @@ from src.analyzer.first_rec import compute_first_rec
 from src.analyzer.accuracy import compute_accuracy
 from src.analyzer.completeness import compute_completeness
 from src.analyzer.citation import compute_citation_rate
+
+logger = logging.getLogger(__name__)
 
 
 async def compute_and_save_metrics(
@@ -37,6 +40,6 @@ async def compute_and_save_metrics(
     try:
         await generate_insights(collection_run_id, brand_id, org_id, db)
     except Exception:
-        pass
+        logger.exception("Insight generation failed for collection %s", collection_run_id)
 
     return snapshot

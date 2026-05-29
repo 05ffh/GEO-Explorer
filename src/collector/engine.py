@@ -97,16 +97,16 @@ async def run_collection(
 
             if not response.error:
                 break
-            if "429" in (response.error or "") and attempt < max_retries:
+            if "Error code: 429" in (response.error or "") and attempt < max_retries:
                 retry_count += 1
                 rate_limited = True
-                final_error_code = response.error[:47]
+                final_error_code = response.error[:50]
                 wait = backoffs[min(attempt, len(backoffs) - 1)]
                 await asyncio.sleep(wait)
             else:
                 retry_count = attempt
                 if response.error:
-                    final_error_code = response.error[:47]
+                    final_error_code = response.error[:50]
                 break
 
         return response, platform_name, tmpl, {

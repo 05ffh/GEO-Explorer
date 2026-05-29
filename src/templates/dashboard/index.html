@@ -60,9 +60,9 @@
     </div>
     <div>
       <h4>品牌表现</h4>
-      <p>SOV: {{ "%.1f" % (latest_insight.brand_performance.sov * 100) }}%</p>
-      <p>准确率: {{ "%.1f" % (latest_insight.brand_performance.accuracy_rate * 100) }}%</p>
-      <p>引用率: {{ "%.1f" % (latest_insight.brand_performance.citation_rate * 100) }}%</p>
+      <p>SOV: {{ "%.1f" % (latest_insight.brand_performance.get('sov', 0) * 100) }}%</p>
+      <p>准确率: {{ "%.1f" % (latest_insight.brand_performance.get('accuracy_rate', 0) * 100) }}%</p>
+      <p>引用率: {{ "%.1f" % (latest_insight.brand_performance.get('citation_rate', 0) * 100) }}%</p>
       <p>可信度: <span class="severity-{{ latest_insight.confidence_level }}">{{ latest_insight.confidence_level }}</span></p>
     </div>
   </div>
