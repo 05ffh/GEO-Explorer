@@ -3,12 +3,7 @@ from sqlalchemy import select
 from src.models.query_result import QueryResult
 from src.models.ground_truth import GroundTruthVersion
 from src.analyzer.evaluator import evaluate_field, Verdict
-from src.schemas.ground_truth import GT_FIELD_LEVELS
-
-SCALAR_CHECK_FIELDS = [
-    "industry", "category", "positioning", "target_users", "market_position",
-]
-LIST_CHECK_FIELDS = ["core_scenarios", "differentiators", "tech_tags"]
+from src.schemas.ground_truth import GT_FIELD_LEVELS, GT_LIST_FIELDS
 
 
 async def compute_accuracy(
@@ -40,7 +35,7 @@ async def compute_accuracy(
     gt_json = gt.ground_truth_json
 
     evaluations = {}
-    for field in SCALAR_CHECK_FIELDS + LIST_CHECK_FIELDS:
+    for field in GT_FIELD_LEVELS:
         if field not in gt_json:
             continue
         ev = evaluate_field(field, gt_json[field], all_text)

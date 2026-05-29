@@ -26,7 +26,7 @@ def generate_content_brief(action_plan, ground_truth_json: dict) -> dict:
             "official_name": gt.get("official_name", ""),
             "industry": gt.get("industry", ""),
             "positioning": gt.get("positioning", ""),
-            "differentiators": gt.get("differentiators", []),
+            "differentiators": gt.get("key_differentiators", []),
         },
         "required_sections": _get_required_sections(action_plan.suggested_content_type),
         "forbidden_claims": gt.get("forbidden_claims", []),

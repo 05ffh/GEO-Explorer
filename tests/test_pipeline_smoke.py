@@ -25,12 +25,13 @@ GROUND_TRUTH = {
     "official_domains": ["xiangwang.com", "www.xiangwang.com"],
     "target_users": "飞猪平台商家",
     "core_scenarios": ["数据采集", "订单管理", "报表分析", "自动对账"],
-    "differentiators": ["AI驱动", "全自动化", "飞猪深度集成"],
-    "tech_tags": ["Python", "AI", "SaaS"],
-    "market_position": "飞猪生态头部服务商",
-    "trusted_sources": ["飞猪官网", "阿里云市场"],
+    "key_differentiators": ["AI驱动", "全自动化", "飞猪深度集成"],
+    "scenario_keywords": ["Python", "AI", "SaaS"],
+    "target_competitors": ["竞品A", "竞品B"],
+    "source_of_truth_by_field": {"official_name": "飞猪官网", "industry": "阿里云市场"},
     "forbidden_claims": ["市场第一", "唯一"],
-    "competitors": ["竞品A", "竞品B"],
+    "core_products": "飞猪商家数据运营平台",
+    "core_features": ["数据采集", "订单管理", "报表分析"],
 }
 
 # Simulated AI responses across 4 platforms (what MockAdapter returns)

@@ -5,19 +5,29 @@ GT_FIELD_LEVELS = {
     "category": "P0",
     "positioning": "P0",
     "official_domains": "P0",
-    "competitors": "P0",
+    "target_competitors": "P0",
+    "core_products": "P0",
     "target_users": "P1",
     "core_scenarios": "P1",
-    "differentiators": "P1",
-    "trusted_sources": "P1",
+    "key_differentiators": "P1",
+    "source_of_truth_by_field": "P1",
     "forbidden_claims": "P1",
-    "tech_tags": "P2",
-    "market_position": "P2",
+    "core_features": "P1",
+    "scenario_keywords": "P2",
+    "subcategory": "P2",
+    "best_fit_users": "P2",
+    "alternative_solutions": "P2",
+    "common_misconceptions": "P2",
+    "official_docs": "P2",
+    "official_channels": "P2",
+    "preferred_recommendation_reasons": "P2",
 }
 
 GT_LIST_FIELDS = {
-    "aliases", "core_scenarios", "differentiators", "tech_tags",
-    "trusted_sources", "forbidden_claims", "official_domains", "competitors",
+    "aliases", "core_scenarios", "key_differentiators", "scenario_keywords",
+    "official_domains", "target_competitors", "source_of_truth_by_field",
+    "forbidden_claims", "alternative_solutions", "core_features",
+    "official_docs", "official_channels",
 }
 
 GT_REQUIRED_FOR_COMPLETENESS = {
