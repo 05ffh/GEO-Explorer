@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -7,14 +7,24 @@ from src.database import get_db
 from src.config import settings
 from src.models.user import User
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    token = credentials.credentials
+    """Authenticate from Authorization header or 'geo_token' cookie."""
+    token = None
+    if credentials:
+        token = credentials.credentials
+    else:
+        token = request.cookies.get("geo_token")
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     try:
         payload = jwt.decode(
             token, settings.secret_key, algorithms=[settings.jwt_algorithm],

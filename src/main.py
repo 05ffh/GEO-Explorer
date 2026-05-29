@@ -34,9 +34,11 @@ async def _get_org_brands(user: User, db: AsyncSession):
 def _page_context(request: Request, current_page: str, brands: list,
                   current_brand_id: str = "", current_brand_name: str = "",
                   collection_time: str = "", **extra) -> dict:
-    """Build template context with all required sidebar/nav variables."""
+    """Build template context with all required sidebar/nav variables.
+
+    Note: does NOT include 'request' — Starlette 1.1+ adds it via TemplateResponse.
+    """
     return {
-        "request": request,
         "current_page": current_page,
         "brands": brands,
         "current_brand_id": current_brand_id,
@@ -45,6 +47,18 @@ def _page_context(request: Request, current_page: str, brands: list,
         "KPI_DISPLAY_NAMES": KPI_DISPLAY_NAMES,
         **extra,
     }
+
+
+def _render(request: Request, name: str, context: dict | None = None,
+            status_code: int = 200) -> HTMLResponse:
+    """Render a Jinja2 template. Starlette 1.1+ signature: (request, name, context)."""
+    return templates.TemplateResponse(request, name, context or {}, status_code=status_code)
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """Login page — no auth required."""
+    return _render(request, "auth/login.html")
 
 
 @app.get("/health")
@@ -78,12 +92,12 @@ async def index(request: Request, user: User = Depends(get_current_user),
     org_brands = await _get_org_brands(user, db)
     if org_brands:
         first = org_brands[0]
-        return templates.TemplateResponse("dashboard/index.html", _page_context(
+        return _render(request, "dashboard/index.html", _page_context(
             request, "dashboard", org_brands,
             current_brand_id=first["id"], current_brand_name=first["name"],
             vm=_empty_dashboard_vm(first["id"], first["name"]),
         ))
-    return templates.TemplateResponse("dashboard/index.html", _page_context(
+    return _render(request, "dashboard/index.html", _page_context(
         request, "dashboard", [],
         vm=_empty_dashboard_vm(),
     ))
@@ -98,7 +112,7 @@ async def brand_dashboard(request: Request, brand_id: str,
     from src.view_models.dashboard import build_dashboard_vm
     vm = await build_dashboard_vm(brand, user, db)
     org_brands = await _get_org_brands(user, db)
-    return templates.TemplateResponse("dashboard/index.html", _page_context(
+    return _render(request, "dashboard/index.html", _page_context(
         request, "dashboard", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
         collection_time=vm["data_reliability"]["latest_snapshot_at"] or "",
@@ -115,7 +129,7 @@ async def gt_review_page(request: Request, brand_id: str,
     from src.view_models.gt_review import build_gt_review_vm
     vm = await build_gt_review_vm(brand, user, db)
     org_brands = await _get_org_brands(user, db)
-    return templates.TemplateResponse("gt_review/index.html", _page_context(
+    return _render(request, "gt_review/index.html", _page_context(
         request, "gt-review", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
         vm=vm,
@@ -131,7 +145,7 @@ async def evidence_page(request: Request, brand_id: str,
     from src.view_models.evidence import build_evidence_vm
     vm = await build_evidence_vm(brand, {}, user, db)
     org_brands = await _get_org_brands(user, db)
-    return templates.TemplateResponse("evidence/index.html", _page_context(
+    return _render(request, "evidence/index.html", _page_context(
         request, "evidence", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
         vm=vm,
@@ -147,7 +161,7 @@ async def hallucinations_page(request: Request, brand_id: str,
     from src.view_models.hallucination import build_hallucination_vm
     vm = await build_hallucination_vm(brand, {}, user, db)
     org_brands = await _get_org_brands(user, db)
-    return templates.TemplateResponse("hallucinations/index.html", _page_context(
+    return _render(request, "hallucinations/index.html", _page_context(
         request, "hallucinations", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
         vm=vm,
@@ -163,7 +177,7 @@ async def actions_page(request: Request, brand_id: str,
     from src.view_models.action import build_action_vm
     vm = await build_action_vm(brand, {}, user, db)
     org_brands = await _get_org_brands(user, db)
-    return templates.TemplateResponse("actions/index.html", _page_context(
+    return _render(request, "actions/index.html", _page_context(
         request, "actions", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
         vm=vm,
@@ -179,7 +193,7 @@ async def content_page(request: Request, brand_id: str,
     from src.view_models.content import build_content_vm
     vm = await build_content_vm(brand, user, db)
     org_brands = await _get_org_brands(user, db)
-    return templates.TemplateResponse("content/index.html", _page_context(
+    return _render(request, "content/index.html", _page_context(
         request, "content", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
         vm=vm,
@@ -195,7 +209,7 @@ async def trends_page(request: Request, brand_id: str,
     from src.view_models.trends import build_trends_vm
     vm = await build_trends_vm(brand, "month", user, db)
     org_brands = await _get_org_brands(user, db)
-    return templates.TemplateResponse("trends/index.html", _page_context(
+    return _render(request, "trends/index.html", _page_context(
         request, "trends", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
         vm=vm,

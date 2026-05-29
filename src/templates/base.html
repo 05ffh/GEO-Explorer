@@ -97,7 +97,14 @@
 
     <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
 
-    <!-- HTMX global error handling + Chart.js lifecycle -->
+    <!-- HTMX auth + error handling + Chart.js lifecycle -->
+    <script>
+    // Inject auth token into all HTMX requests
+    document.body.addEventListener('htmx:configRequest', function(evt) {
+        var token = localStorage.getItem('geo_token');
+        if (token) { evt.detail.headers['Authorization'] = 'Bearer ' + token; }
+    });
+    </script>
     <script>
     document.body.addEventListener('htmx:responseError', function(evt) {
         var toast = document.createElement('div');
