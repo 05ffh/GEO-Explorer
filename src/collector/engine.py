@@ -52,7 +52,7 @@ async def run_collection(
         prompt_version_id=active_prompt.id if active_prompt else None,
         ground_truth_version_id=active_gt.id if active_gt else None,
         trigger_type=trigger_type,
-        status="running",
+        collection_status="running",
         started_at=datetime.utcnow(),
         total_queries=len(PLATFORMS) * len(templates),
     )
@@ -123,11 +123,11 @@ async def run_collection(
     failure_count = run.total_queries - success_count
     run.success_count = success_count
     run.failure_count = failure_count
-    run.status = (
+    run.collection_status = (
         "completed" if failure_count == 0
         else "failed" if failure_count == run.total_queries
         else "partial"
     )
-    run.completed_at = datetime.utcnow()
+    run.collection_completed_at = datetime.utcnow()
     await db.commit()
     return run

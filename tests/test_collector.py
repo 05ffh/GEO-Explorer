@@ -52,7 +52,7 @@ async def test_collection_creates_full_lineage(db_session, monkeypatch):
     await db_session.refresh(run)
 
     # Verify CollectionRun
-    assert run.status == "completed"
+    assert run.collection_status == "completed"
     assert run.total_queries == 2  # 2 platforms × 1 template
     assert run.success_count == 2
     assert run.failure_count == 0

@@ -10,6 +10,7 @@ class HallucinationResult(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "hallucination_results"
     brand_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("brands.id"), nullable=False, index=True)
     query_result_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("query_results.id"), nullable=False, index=True)
+    collection_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("collection_runs.id"), nullable=True, index=True)
     ground_truth_version_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("ground_truth_versions.id"), nullable=True)
     field_name: Mapped[str] = mapped_column(String(100), nullable=False)
     field_level: Mapped[str] = mapped_column(String(10), nullable=False)

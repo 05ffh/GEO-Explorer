@@ -30,4 +30,6 @@ class QueryResult(Base, UUIDMixin):
     error_message: Mapped[str] = mapped_column(Text, default="")
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    rate_limited: Mapped[bool] = mapped_column(default=False)
+    final_error_code: Mapped[str] = mapped_column(String(50), default="")
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

@@ -13,6 +13,7 @@ from src.models.hallucination import HallucinationResult
 from src.models.action_plan import ActionPlan, VALID_TRANSITIONS
 from src.models.content_library import ContentLibrary
 from src.models.competitor_set import CompetitorSet
+from src.models.insight_summary import InsightSummary
 
 __all__ = [
     "Base", "TimestampMixin", "UUIDMixin",
@@ -23,5 +24,5 @@ __all__ = [
     "QueryResult", "ApiUsage",
     "MetricsSnapshot", "HallucinationResult",
     "ActionPlan", "VALID_TRANSITIONS",
-    "ContentLibrary", "CompetitorSet",
+    "ContentLibrary", "CompetitorSet", "InsightSummary",
 ]

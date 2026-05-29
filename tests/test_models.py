@@ -62,7 +62,7 @@ async def test_collection_lineage(db_session):
     await db_session.commit()
 
     run = CollectionRun(organization_id=org.id, brand_id=brand.id, trigger_type="manual",
-                        total_queries=2, status="completed")
+                        total_queries=2, collection_status="completed")
     db_session.add(run)
     await db_session.commit()
     assert run.id is not None
