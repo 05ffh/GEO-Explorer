@@ -1,62 +1,108 @@
 # ============================================================
-# GEO Explorer — .gitignore
-# ============================================================
-# Never committed: secrets, virtualenv, runtime data, reports
+# GEO Explorer — .gitignore (GitHub standard)
+# https://github.com/github/gitignore/blob/main/Python.gitignore
 # ============================================================
 
-# === Python cache (never sync) ===
+# === Byte-compiled / optimized / DLL files ===
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
 *.egg-info/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+.eggs/
+dist/
+build/
+*.egg
 
-# === Virtual environment (never sync — each machine builds its own) ===
+# === Virtual Environment ===
 .venv/
 venv/
 env/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
 
-# === Secrets & API Keys (never sync — each team member has their own) ===
+# === Secrets & API Keys ===
 .env
 *.pem
 *.key
 credentials.json
+secrets/
 
-# === Local database data (never sync via git) ===
+# === Environment & Config ===
+.env.local
+.env.*.local
+*.env
+
+# === Databases & Runtime Data ===
 pgdata/
 dump.rdb
 *.dump
+*.sql
+*.sqlite
+*.db
 
-# === IDE / Editor (never sync) ===
-.codegraph/
+# === Testing & Coverage ===
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.coverage
+*.cover
+
+# === IDE & Editor ===
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
+.project
+.pydevproject
+.settings/
 
-# === Runtime outputs (never sync — regenerated on each machine) ===
+# === CodeGraph ===
+.codegraph/
+
+# === Runtime Outputs ===
 reports/*
 !reports/GEO_Explorer_*.md
 !reports/GEO_Explorer_*.pdf
+logs/
+*.log
 
-# === OS files (never sync) ===
+# === OS Files ===
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 desktop.ini
 
+# === Docker ===
+docker-compose.override.yml
+
+# === Jupyter Notebook ===
+.ipynb_checkpoints/
+*.ipynb
+
 # ============================================================
-# Everything else IS synced via git:
-#   src/          — all source code (92 .py + 21 .html)
-#   tests/        — all tests (112 tests)
-#   alembic/      — database migrations
-#   docs/         — design specs + implementation plans
-#   deploy/       — systemd service files
-#   requirements.txt  — dependency list
-#   setup.sh      — one-click setup script
-#   SYNC_GUIDE.md — what syncs and what doesn't
-#   CLAUDE.md     — project instructions
-#   .env.example  — template for API keys (no real keys)
-#   .gitignore    — this file
+# SYNCED via Git (everything NOT listed above):
+#   src/             — all source code
+#   tests/           — all tests
+#   alembic/         — database migrations
+#   docs/            — design specs + implementation plans
+#   deploy/          — systemd service files
+#   requirements.txt — Python dependencies
+#   setup.sh         — one-click setup script
+#   README.md        — project overview
+#   SYNC_GUIDE.md    — team collaboration guide
+#   CLAUDE.md        — project instructions for Claude Code
+#   .env.example     — API key template (safe, no real keys)
+#   .gitignore       — this file
+#   docker-compose.yml
+#   Dockerfile
 # ============================================================
