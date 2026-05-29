@@ -49,6 +49,37 @@ class Settings(BaseSettings):
         "wenxin": {"max_retries": 2, "backoff_seconds": [2, 4]},
     }
 
+    # --- 搜索配置 ---
+    google_search_api_key: str = ""
+    google_search_cx: str = ""
+    brave_search_api_key: str = ""
+
+    # --- Action 触发阈值 ---
+    action_thresholds: dict = {
+        "citation_rate": 0.05,
+        "accuracy_rate": 0.60,
+        "completeness_rate": 0.50,
+        "first_rec_rate": 0.10,
+        "differentiation_rate": 0.30,
+        "scenario_recall_rate": 0.20,
+    }
+
+    # --- GT 必填字段 ---
+    gt_required_fields: list = [
+        "official_name", "aliases", "industry", "category",
+        "positioning", "core_products", "target_users",
+        "core_scenarios", "key_differentiators",
+        "official_domains", "source_of_truth_by_field",
+    ]
+
+    # --- GT 高风险字段 ---
+    gt_high_risk_fields: list = [
+        "official_name", "category", "positioning",
+        "target_competitors", "forbidden_claims",
+        "proof_points", "pricing", "certifications",
+        "customers", "awards", "funding", "legal_sensitive_claims",
+    ]
+
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
 
