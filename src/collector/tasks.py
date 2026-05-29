@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.pool import NullPool
 from sqlalchemy import select
 from src.celery_app import app
 from src.config import settings
@@ -8,7 +9,7 @@ from src.collector.engine import run_collection
 from src.collector.gt_collector import collect_gt_candidate
 from src.models.brand import Brand
 
-engine = create_async_engine(settings.database_url)
+engine = create_async_engine(settings.database_url, poolclass=NullPool)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 
