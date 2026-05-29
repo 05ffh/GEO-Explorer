@@ -68,3 +68,20 @@ async def index(request: Request, user: User = Depends(get_current_user),
         request, "dashboard", [],
         vm={"has_data": False, "brand": {"id": "", "name": "", "industry": ""}},
     ))
+
+
+@app.get("/brands/{brand_id}", response_class=HTMLResponse)
+async def brand_dashboard(request: Request, brand_id: str,
+                          user: User = Depends(get_current_user),
+                          db: AsyncSession = Depends(get_db)):
+    """Brand overview dashboard page."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.dashboard import build_dashboard_vm
+    vm = await build_dashboard_vm(brand, user, db)
+    org_brands = await _get_org_brands(user, db)
+    return templates.TemplateResponse("dashboard/index.html", _page_context(
+        request, "dashboard", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name,
+        collection_time=vm["data_reliability"]["latest_snapshot_at"] or "",
+        vm=vm,
+    ))

@@ -1,93 +1,178 @@
 {% extends "base.html" %}
+{% from "partials/components/kpi_card.html" import kpi_card %}
+{% from "partials/components/empty_state.html" import empty_state %}
+{% from "partials/components/stale_data_banner.html" import stale_data_banner %}
+{% from "partials/components/partial_data_banner.html" import partial_data_banner %}
+{% from "partials/components/priority_badge.html" import priority_badge %}
+
+{% block title %}{{ vm.brand.name }} — 品牌总览{% endblock %}
+
 {% block content %}
-<h1>品牌 AI 可见度概览</h1>
-<div class="metric-grid" style="margin-top:16px;">
-    <div class="card metric-card">
-        <div class="value">{{ metrics.sov|default(0) }}</div>
-        <div class="label">声量份额 (SOV)</div>
-        <div class="sample">品牌被AI提及的比例</div>
-    </div>
-    <div class="card metric-card">
-        <div class="value">{{ metrics.first_rec_rate|default(0) }}</div>
-        <div class="label">首选推荐率</div>
-        <div class="sample">AI优先推荐的比例</div>
-    </div>
-    <div class="card metric-card">
-        <div class="value">{{ metrics.accuracy_rate|default(0) }}</div>
-        <div class="label">准确率</div>
-        <div class="sample">AI描述与事实一致的比例</div>
-    </div>
-    <div class="card metric-card">
-        <div class="value">{{ metrics.completeness_rate|default(0) }}</div>
-        <div class="label">完整度</div>
-        <div class="sample">关键字段被覆盖的比例</div>
-    </div>
-    <div class="card metric-card">
-        <div class="value">{{ metrics.citation_rate|default(0) }}</div>
-        <div class="label">引用率</div>
-        <div class="sample">品牌与官网被引用的比例</div>
-    </div>
-</div>
+{% if not vm.has_data %}
 
-<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px;">
-    <div class="card">
-        <h3>待处理</h3>
-        <p>待处理行动计划: <strong>{{ pending_actions|default(0) }}</strong></p>
-        <p>未审核P0幻觉: <strong style="color:#c00;">{{ unreviewed_p0|default(0) }}</strong></p>
-    </div>
-    <div class="card">
-        <h3>品牌列表</h3>
-        <p>监测品牌数: <strong>{{ total_brands|default(0) }}</strong></p>
-    </div>
-</div>
-
-{% if latest_insight %}
-<div class="card" style="margin-top:16px;">
-  <h3>最近采集摘要 — {{ latest_insight.generated_at[:10] }}</h3>
-
-  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top:12px;">
-    <div>
-      <h4>平台状态</h4>
-      {% for platform, stats in latest_insight.platform_health.items() %}
-      <div style="padding:4px 0; border-bottom:1px solid #eee;">
-        <strong>{{ platform }}</strong>: {{ stats.success }}/{{ stats.total }}
-        ({{ "%.0f" % (stats.success_rate * 100) }}%, {{ "%.0f" % stats.avg_latency_ms }}ms)
-        {% if stats.rate_limited_count > 0 %}
-        <span style="color:#c66;">限流 {{ stats.rate_limited_count }} 次</span>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-    <div>
-      <h4>品牌表现</h4>
-      <p>SOV: {{ "%.1f" % (latest_insight.brand_performance.get('sov', 0) * 100) }}%</p>
-      <p>准确率: {{ "%.1f" % (latest_insight.brand_performance.get('accuracy_rate', 0) * 100) }}%</p>
-      <p>引用率: {{ "%.1f" % (latest_insight.brand_performance.get('citation_rate', 0) * 100) }}%</p>
-      <p>可信度: <span class="severity-{{ latest_insight.confidence_level }}">{{ latest_insight.confidence_level }}</span></p>
-    </div>
-  </div>
-
-  {% if latest_insight.key_findings %}
-  <div style="margin-top:12px;">
-    <h4>关键发现</h4>
-    {% for finding in latest_insight.key_findings %}
-    <div style="padding:8px; margin:4px 0; background:#f9f9f9; border-left:3px solid {% if finding.severity == 'P0' %}#c00{% elif finding.severity == 'P1' %}#e90{% else %}#999{% endif %};">
-      <strong>{{ finding.title }}</strong> [{{ finding.confidence }}]
-      <br><small>{{ finding.interpretation }}</small>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  <div style="margin-top:12px; padding:8px; background:#f5f5f5; border-radius:4px;">
-    <h4>数据可信度</h4>
-    <p>采集: {{ latest_insight.data_reliability.success_count }}/{{ latest_insight.data_reliability.total_queries }}
-    | KPI可用: {{ "是" if latest_insight.data_reliability.kpi_usable else "否" }}
-    | 跨平台对比: {{ "是" if latest_insight.data_reliability.cross_platform_usable else "否" }}
-    {% if latest_insight.data_reliability.p0_hallucinations %}
-    | <span style="color:#c00;">P0幻觉: {{ latest_insight.data_reliability.p0_hallucinations }} 条</span>
-    {% endif %}</p>
-  </div>
+{{ empty_state("暂无采集数据", "请先触发采集以获取品牌 AI 可见度数据", none, none) }}
+{% if vm.permissions.can_trigger_collection %}
+<div class="text-center mt-2">
+    <button class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 cursor-pointer"
+            hx-post="/api/dashboard/brands/{{ vm.brand.id }}/reports/generate" hx-swap="none">
+        触发采集</button>
 </div>
 {% endif %}
+
+{% else %}
+
+<!-- Page Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-5 gap-3">
+    <div>
+        <h1 class="font-heading text-2xl font-bold text-text">{{ vm.brand.name }}</h1>
+        <p class="text-sm text-slate-500 mt-0.5">
+            行业: {{ vm.brand.industry }}
+            {% if vm.data_reliability.latest_snapshot_at %}
+            <span class="ml-3">数据时间: {{ vm.data_reliability.latest_snapshot_at[:10] }}</span>
+            {% endif %}
+        </p>
+    </div>
+    <div class="flex gap-2 flex-shrink-0">
+        {% if vm.permissions.can_trigger_collection %}
+        <button class="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200 cursor-pointer"
+                hx-post="/api/dashboard/brands/{{ vm.brand.id }}/reports/generate" hx-swap="none">
+            生成报告</button>
+        <button class="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer"
+                hx-post="/api/brands/{{ vm.brand.id }}/collection-runs" hx-swap="none">
+            触发采集</button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Stale Data Warning -->
+{% if vm.data_reliability.is_stale %}
+{{ stale_data_banner(vm.brand.id) }}
+{% endif %}
+
+<!-- Partial Data Warning -->
+{% if vm.data_reliability.is_partial %}
+{{ partial_data_banner(vm.data_reliability.platform_success_rate) }}
+{% endif %}
+
+<!-- Blocking Issues -->
+{% if vm.blocking_issues %}
+<div class="mb-5 space-y-1.5">
+    {% for issue in vm.blocking_issues %}
+    <a href="{{ issue.link }}" class="flex items-center gap-2 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 hover:bg-amber-100 transition-colors duration-200 no-underline cursor-pointer" hx-boost="true">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-2.694-.833-3.464 0L3.34 16c-.77.833.192 2.5 1.732 2.5z"/></svg>
+        {{ issue.message }} →
+    </a>
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Row 1: Health Score + Data Reliability -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">AI 认知健康分</h3>
+        <div class="flex items-center gap-4">
+            <div class="relative w-20 h-20">
+                <canvas id="health-ring" width="80" height="80"></canvas>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <span class="font-heading text-lg font-bold text-text">{{ vm.health_score }}</span>
+                </div>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-text">{{ vm.health_label }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 lg:col-span-2">
+        <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">数据可信度</h3>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+            <div><div class="text-lg font-bold text-text">{{ '激活' if vm.data_reliability.active_gt else '缺失' }}</div><div class="text-xs text-slate-500 mt-0.5">GT 状态</div></div>
+            <div><div class="text-lg font-bold text-text">{{ vm.data_reliability.gt_coverage }}%</div><div class="text-xs text-slate-500 mt-0.5">GT 覆盖率</div></div>
+            <div><div class="text-lg font-bold {% if vm.data_reliability.pending_candidates > 0 %}text-amber-600{% else %}text-text{% endif %}">{{ vm.data_reliability.pending_candidates }}</div><div class="text-xs text-slate-500 mt-0.5">待审核</div></div>
+            <div><div class="text-lg font-bold text-text">{{ vm.data_reliability.platform_success_rate }}%</div><div class="text-xs text-slate-500 mt-0.5">采集成功率</div></div>
+            <div><div class="text-lg font-bold text-text">{{ vm.data_reliability.latest_snapshot_at[:10] if vm.data_reliability.latest_snapshot_at else 'N/A' }}</div><div class="text-xs text-slate-500 mt-0.5">最新快照</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 2-3: 10 KPI Cards (2 rows x 5 cols) -->
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
+    {% for card in vm.kpi_cards %}
+    {{ kpi_card(card) }}
+    {% endfor %}
+</div>
+<div id="kpi-detail-panel" class="mb-4"></div>
+
+<!-- Row 4: Top Risks + Priority Actions -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide">当前最大风险</h3>
+            <a href="/brands/{{ vm.brand.id }}/hallucinations" class="text-xs text-primary-light hover:underline cursor-pointer" hx-boost="true">查看全部</a>
+        </div>
+        <div class="flex gap-3">
+            <div class="flex-1 bg-red-50 rounded-lg p-3 text-center">
+                <div class="text-2xl font-bold text-red-700">{{ vm.top_risks.p0_hallucinations }}</div>
+                <div class="text-xs text-red-600 mt-0.5">P0 幻觉</div>
+            </div>
+            <div class="flex-1 bg-amber-50 rounded-lg p-3 text-center">
+                <div class="text-2xl font-bold text-amber-700">{{ vm.top_risks.p1_hallucinations }}</div>
+                <div class="text-xs text-amber-600 mt-0.5">P1 幻觉</div>
+            </div>
+            <div class="flex-1 bg-red-50 rounded-lg p-3 text-center">
+                <div class="text-2xl font-bold text-red-700">{{ vm.top_risks.high_risk_content }}</div>
+                <div class="text-xs text-red-600 mt-0.5">高风险内容</div>
+            </div>
+        </div>
+    </div>
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide">最优先行动</h3>
+            <a href="/brands/{{ vm.brand.id }}/actions" class="text-xs text-primary-light hover:underline cursor-pointer" hx-boost="true">Action 工作台</a>
+        </div>
+        {% if vm.priority_actions %}
+        <div class="space-y-2">
+            {% for theme in vm.priority_actions %}
+            <a href="/brands/{{ vm.brand.id }}/actions" class="block px-4 py-3 rounded-lg border border-gray-200 hover:shadow-sm transition-shadow duration-200 cursor-pointer no-underline" hx-boost="true">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-medium text-text">{{ theme.title }}</span>
+                    {{ priority_badge(theme.priority) }}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="text-sm text-slate-400">暂无待处理的 Action Theme</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Row 5: Recent Changes -->
+{% if vm.recent_changes %}
+<div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+    <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">最近变化 (vs 上轮)</h3>
+    <div class="flex flex-wrap gap-4 text-sm">
+        {% for key, change in vm.recent_changes.items() %}
+        <span>{{ change.label }}: <strong class="{% if change.direction == 'up' %}text-green-600{% else %}text-red-600{% endif %}">{{ '+' if change.direction == 'up' else '' }}{{ change.delta }}%</strong></span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    var canvas = document.getElementById('health-ring');
+    if (!canvas) return;
+    var score = {{ vm.health_score }};
+    var color = score >= 70 ? '#22c55e' : score >= 40 ? '#f59e0b' : '#ef4444';
+    window.geoCharts['health-ring'] = new Chart(canvas, {
+        type: 'doughnut',
+        data: { datasets: [{ data: [score, 100 - score], backgroundColor: [color, '#e2e8f0'], borderWidth: 0, circumference: 270, rotation: 225 }] },
+        options: { cutout: '75%', responsive: false, plugins: { legend: { display: false }, tooltip: { enabled: false } } },
+    });
+})();
+</script>
 {% endblock %}

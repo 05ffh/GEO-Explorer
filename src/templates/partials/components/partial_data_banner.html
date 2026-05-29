@@ -1,0 +1,6 @@
+{# GEO Explorer — Partial Data Warning Banner #}
+{% macro partial_data_banner(success_rate) -%}
+<div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-4 text-sm text-amber-700">
+    本轮采集成功率 {{ success_rate }}%，KPI 置信度可能受影响，请谨慎解读。
+</div>
+{%- endmacro %}
