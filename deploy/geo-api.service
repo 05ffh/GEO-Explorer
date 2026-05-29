@@ -1,0 +1,16 @@
+[Unit]
+Description=GEO Explorer API Server
+After=network.target geo-redis.service
+Requires=geo-redis.service
+
+[Service]
+Type=simple
+User=ffh
+WorkingDirectory=/home/ffh/geo-explorer
+Environment=PATH=/home/ffh/geo-explorer/.venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/ffh/geo-explorer/.venv/bin/python -m uvicorn src.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

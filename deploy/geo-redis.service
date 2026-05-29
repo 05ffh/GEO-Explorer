@@ -1,0 +1,14 @@
+[Unit]
+Description=GEO Explorer Redis Server
+After=network.target
+
+[Service]
+Type=simple
+User=ffh
+ExecStart=/usr/local/bin/redis-server --port 6379 --daemonize no --save "" --appendonly no
+ExecStop=/usr/local/bin/redis-cli shutdown
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
