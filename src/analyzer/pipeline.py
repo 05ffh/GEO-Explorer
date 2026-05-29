@@ -6,6 +6,7 @@ from src.models.metrics_snapshot import MetricsSnapshot
 from src.models.ground_truth import GroundTruthVersion
 from src.models.query_result import QueryResult
 from src.models.action_plan import ActionPlan
+from src.models.brand import Brand
 from src.analyzer.sov import compute_sov
 from src.analyzer.first_rec import compute_first_rec
 from src.analyzer.accuracy import compute_accuracy
@@ -90,6 +91,16 @@ async def compute_and_save_metrics(
         await _generate_content_packages(brand_id, org_id, db)
     except Exception:
         logger.exception("Content package generation failed for collection %s", collection_run_id)
+
+    # Export Content Packages as deliverable files
+    try:
+        from src.reports.content_export import export_content_packages
+        brand = (await db.execute(select(Brand).where(Brand.id == brand_id))).scalar_one_or_none()
+        bname = brand.name if brand else "Unknown"
+        await export_content_packages(bname, brand_id, db)
+        logger.info("Content packages exported for brand %s", bname)
+    except Exception:
+        logger.exception("Content package export failed for collection %s", collection_run_id)
 
     return snapshot
 
