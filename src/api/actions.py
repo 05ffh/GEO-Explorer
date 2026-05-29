@@ -7,6 +7,9 @@ from src.api.deps import get_current_user, get_org_brand_or_404
 from src.models.user import User
 from src.models.action_plan import ActionPlan
 from src.actions.engine import update_action_status, generate_action_plans
+from src.actions.executor import generate_content_package
+from src.actions.content_package import export_content_package
+from src.models.content_package import ContentPackage
 
 router = APIRouter(tags=["actions"])
 
@@ -75,3 +78,50 @@ async def generate_actions(
     await get_org_brand_or_404(brand_id, user, db)
     plans = await generate_action_plans(brand_id, user.organization_id, db)
     return {"generated": len(plans)}
+
+
+@router.post("/api/actions/{action_id}/content-package")
+async def create_content_package(
+    action_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate a Content Package from an action plan using active GT."""
+    try:
+        result = await generate_content_package(action_id, db)
+        return {"status": "generated", "content_package": result}
+    except ValueError as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/api/content-packages/{package_id}")
+async def get_content_package(
+    package_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a Content Package by ID with export format."""
+    pkg = (await db.execute(
+        select(ContentPackage).where(ContentPackage.id == package_id)
+    )).scalar_one_or_none()
+    if not pkg:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Content package not found")
+    return export_content_package(pkg)
+
+
+@router.get("/api/brands/{brand_id}/content-packages")
+async def list_content_packages(
+    brand_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List content packages for a brand."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    packages = (await db.execute(
+        select(ContentPackage)
+        .where(ContentPackage.brand_id == brand.id)
+        .order_by(ContentPackage.created_at.desc())
+    )).scalars().all()
+    return {"items": packages}
