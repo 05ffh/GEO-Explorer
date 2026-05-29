@@ -8,6 +8,7 @@ from src.models.brand import Brand
 from src.models.metrics_snapshot import MetricsSnapshot
 from src.models.action_plan import ActionPlan
 from src.models.hallucination import HallucinationResult
+from src.models.insight_summary import InsightSummary
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -57,6 +58,26 @@ async def dashboard_overview(
         )
     )).scalar()
 
+    # Latest insight summary
+    latest_insight = None
+    if brand_count:
+        insight_q = (await db.execute(
+            select(InsightSummary).where(
+                InsightSummary.organization_id == org_id,
+            ).order_by(desc(InsightSummary.generated_at)).limit(1)
+        )).scalar_one_or_none()
+        if insight_q:
+            latest_insight = {
+                "collection_run_id": str(insight_q.collection_run_id),
+                "brand_id": str(insight_q.brand_id),
+                "platform_health": insight_q.platform_health_json,
+                "brand_performance": insight_q.brand_performance_json,
+                "key_findings": insight_q.key_findings_json,
+                "data_reliability": insight_q.data_reliability_json,
+                "confidence_level": insight_q.confidence_level,
+                "generated_at": insight_q.generated_at.isoformat(),
+            }
+
     return {
         "total_brands": brand_count,
         "average_metrics": {
@@ -68,4 +89,5 @@ async def dashboard_overview(
         },
         "pending_action_plans": pending_actions,
         "unreviewed_p0_hallucinations": recent_p0,
+        "latest_insight": latest_insight,
     }

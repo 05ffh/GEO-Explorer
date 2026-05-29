@@ -40,4 +40,54 @@
         <p>监测品牌数: <strong>{{ total_brands|default(0) }}</strong></p>
     </div>
 </div>
+
+{% if latest_insight %}
+<div class="card" style="margin-top:16px;">
+  <h3>最近采集摘要 — {{ latest_insight.generated_at[:10] }}</h3>
+
+  <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top:12px;">
+    <div>
+      <h4>平台状态</h4>
+      {% for platform, stats in latest_insight.platform_health.items() %}
+      <div style="padding:4px 0; border-bottom:1px solid #eee;">
+        <strong>{{ platform }}</strong>: {{ stats.success }}/{{ stats.total }}
+        ({{ "%.0f" % (stats.success_rate * 100) }}%, {{ "%.0f" % stats.avg_latency_ms }}ms)
+        {% if stats.rate_limited_count > 0 %}
+        <span style="color:#c66;">限流 {{ stats.rate_limited_count }} 次</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <div>
+      <h4>品牌表现</h4>
+      <p>SOV: {{ "%.1f" % (latest_insight.brand_performance.sov * 100) }}%</p>
+      <p>准确率: {{ "%.1f" % (latest_insight.brand_performance.accuracy_rate * 100) }}%</p>
+      <p>引用率: {{ "%.1f" % (latest_insight.brand_performance.citation_rate * 100) }}%</p>
+      <p>可信度: <span class="severity-{{ latest_insight.confidence_level }}">{{ latest_insight.confidence_level }}</span></p>
+    </div>
+  </div>
+
+  {% if latest_insight.key_findings %}
+  <div style="margin-top:12px;">
+    <h4>关键发现</h4>
+    {% for finding in latest_insight.key_findings %}
+    <div style="padding:8px; margin:4px 0; background:#f9f9f9; border-left:3px solid {% if finding.severity == 'P0' %}#c00{% elif finding.severity == 'P1' %}#e90{% else %}#999{% endif %};">
+      <strong>{{ finding.title }}</strong> [{{ finding.confidence }}]
+      <br><small>{{ finding.interpretation }}</small>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div style="margin-top:12px; padding:8px; background:#f5f5f5; border-radius:4px;">
+    <h4>数据可信度</h4>
+    <p>采集: {{ latest_insight.data_reliability.success_count }}/{{ latest_insight.data_reliability.total_queries }}
+    | KPI可用: {{ "是" if latest_insight.data_reliability.kpi_usable else "否" }}
+    | 跨平台对比: {{ "是" if latest_insight.data_reliability.cross_platform_usable else "否" }}
+    {% if latest_insight.data_reliability.p0_hallucinations %}
+    | <span style="color:#c00;">P0幻觉: {{ latest_insight.data_reliability.p0_hallucinations }} 条</span>
+    {% endif %}</p>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
