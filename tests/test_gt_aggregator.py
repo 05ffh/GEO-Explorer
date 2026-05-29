@@ -29,11 +29,11 @@ def test_confidence_high_requires_official_source():
 
 def test_confidence_medium_with_two_ai_agreeing():
     sources = [
-        {"source_type": "ai_platform", "source_quality": "medium", "value": "SaaS/旅游科技"},
-        {"source_type": "ai_platform", "source_quality": "medium", "value": "SaaS/旅游科技"},
+        {"source_type": "ai_platform", "source_tier": "C", "value": "SaaS/旅游科技"},
+        {"source_type": "ai_platform", "source_tier": "C", "value": "SaaS/旅游科技"},
     ]
     conf = compute_field_confidence(sources)
-    assert conf == "medium"
+    assert conf == "low"  # Two C-tier sources without S/A support = low
 
 
 def test_confidence_uncertain_with_conflict():

@@ -52,6 +52,11 @@ async def collect_gt_candidate(
         status="pending_review",
     )
     db.add(candidate)
+    await db.flush()
+
+    # Persist evidence records with source tiers
+    _persist_evidence(candidate, field_results, ai_results, search_results, db)
+
     await db.commit()
     return candidate
 
@@ -73,6 +78,7 @@ async def _collect_from_ai_platforms(company: str) -> list[dict]:
                     "answer": response.answer_text,
                     "source_type": "ai_platform",
                     "source_quality": "medium",
+                    "source_tier": "C",
                     "target_fields": fields,
                 })
         except Exception as e:
@@ -104,6 +110,44 @@ async def _collect_from_search(company: str) -> list[dict]:
             except Exception as e:
                 logger.warning("Search failed for %s/%s: %s", backend.name, q, e)
     return results
+
+
+def _persist_evidence(candidate, field_results, ai_results, search_results, db) -> None:
+    """Persist evidence sources to gt_evidences table with source tiers."""
+    from src.models.gt_evidence import GroundTruthEvidence
+    from src.analyzer.gt_confidence import compute_field_confidence
+
+    # Collect all sources per field from field_results
+    for field_name, result in field_results.items():
+        sources = result.get("sources", [])
+        if not sources:
+            # Fallback: create from field_results directly
+            sources = [{
+                "value": result.get("value", ""),
+                "source_type": "ai_platform",
+                "source_tier": "C",
+                "platform": "aggregated",
+            }]
+
+        for src in sources:
+            evidence = GroundTruthEvidence(
+                candidate_id=candidate.id,
+                field_name=field_name,
+                value=src.get("value", "")[:500],
+                source_type=src.get("source_type", "unknown"),
+                source_name=src.get("platform", ""),
+                source_url=src.get("url", ""),
+                excerpt=src.get("snippet", src.get("excerpt", "")),
+                source_tier=src.get("source_tier", "C"),
+                source_quality=_tier_to_quality(src.get("source_tier", "C")),
+                confidence=src.get("confidence", "low"),
+            )
+            db.add(evidence)
+
+
+def _tier_to_quality(tier: str) -> str:
+    mapping = {"S": "high", "A": "high", "B": "medium", "C": "low", "D": "very_low"}
+    return mapping.get(tier, "low")
 
 
 def _compute_overall(field_results: dict) -> str:

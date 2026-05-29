@@ -108,6 +108,14 @@ async def promote_candidate_to_active(
     if not _check_high_risk_completion(candidate):
         raise HTTPException(status_code=400, detail="High-risk fields must be reviewed before promotion")
 
+    # Evidence sufficiency check for high-risk fields
+    evidence_issues = await _check_evidence_sufficiency(candidate, db)
+    if evidence_issues:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Evidence insufficient for high-risk fields: {evidence_issues}",
+        )
+
     # Deactivate existing active GT version
     existing = (await db.execute(
         select(GroundTruthVersion).where(
@@ -161,6 +169,38 @@ def _check_high_risk_completion(candidate: GroundTruthCandidate) -> bool:
         if isinstance(val, str) and val.startswith("[UNCERTAIN]"):
             return False
     return True
+
+
+async def _check_evidence_sufficiency(candidate, db) -> list[str]:
+    """Check that high-risk fields have sufficient evidence tier and count."""
+    from src.models.gt_evidence import GroundTruthEvidence
+    from src.schemas.ground_truth import HIGH_RISK_FIELD_TIER_REQUIREMENTS, SOURCE_TIERS, FIELD_EVIDENCE_REQUIREMENTS
+    from sqlalchemy import select as sa_select
+
+    evidence_rows = (await db.execute(
+        sa_select(GroundTruthEvidence).where(GroundTruthEvidence.candidate_id == candidate.id)
+    )).scalars().all()
+
+    issues = []
+    for field in settings.gt_high_risk_fields:
+        if field not in candidate.candidate_json:
+            continue
+
+        req = HIGH_RISK_FIELD_TIER_REQUIREMENTS.get(field) or \
+              FIELD_EVIDENCE_REQUIREMENTS.get(field, {}).get("min_tier", "B")
+        min_sources = FIELD_EVIDENCE_REQUIREMENTS.get(field, {}).get("min_sources", 1)
+
+        field_ev = [e for e in evidence_rows if e.field_name == field]
+        req_score = SOURCE_TIERS.get(req, {}).get("score", 0.4)
+        sufficient = [e for e in field_ev
+                      if SOURCE_TIERS.get(e.source_tier, {}).get("score", 0) >= req_score]
+
+        if len(field_ev) < min_sources:
+            issues.append(f"{field}: need {min_sources}+ sources (has {len(field_ev)})")
+        elif not sufficient and req_score > 0.3:
+            issues.append(f"{field}: needs {req}-tier evidence (best: {max((e.source_tier for e in field_ev), default='none')})")
+
+    return issues
 
 
 def _check_required_fields(candidate: GroundTruthCandidate) -> dict:

@@ -85,6 +85,17 @@ async def test_review_and_promote_flow(db_session):
     db_session.add(candidate)
     await db_session.commit()
 
+    # Add evidence for high-risk fields to satisfy promote checks
+    from src.models.gt_evidence import GroundTruthEvidence
+    for field in ["official_name", "positioning", "category"]:
+        db_session.add(GroundTruthEvidence(
+            candidate_id=candidate.id, field_name=field,
+            value=candidate.candidate_json.get(field, ""),
+            source_type="official", source_name="官网", source_url="https://test.com",
+            source_tier="S", source_quality="high", confidence="high",
+        ))
+    await db_session.commit()
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         field_reviews = [

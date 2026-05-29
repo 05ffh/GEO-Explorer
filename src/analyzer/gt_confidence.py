@@ -1,17 +1,33 @@
-def compute_field_confidence(sources: list[dict]) -> str:
-    official_sources = [s for s in sources if s.get("source_quality") == "high"]
-    ai_sources = [s for s in sources if s.get("source_type") == "ai_platform"]
+from src.schemas.ground_truth import SOURCE_TIERS
 
-    values = [s.get("value", "")[:100] for s in sources if s.get("value")]
-    unique_values = set(values)
-    has_conflict = len(unique_values) > 1
 
-    if official_sources and len(set(s.get("value", "")[:100] for s in ai_sources + official_sources)) <= 1:
-        return "high"
-    if len(ai_sources) >= 2 and not has_conflict:
-        return "medium"
-    if len(sources) == 1 and sources[0].get("source_quality") in ("low", "very_low"):
+def compute_field_confidence(sources: list[dict], field_name: str = "") -> str:
+    """Tier-weighted confidence scoring using S/A/B/C/D source tiers.
+
+    S-tier sources carry the most weight. Conflict detection is
+    field-type-aware through gt_conflict_detector.
+    """
+    if not sources:
         return "low"
-    if has_conflict:
+
+    tiers = [s.get("source_tier", "C") for s in sources]
+    scores = [SOURCE_TIERS.get(t, {}).get("score", 0.2) for t in tiers]
+    avg_score = sum(scores) / len(scores)
+
+    has_s = any(t == "S" for t in tiers)
+    has_a_or_s = any(t in ("S", "A") for t in tiers)
+
+    from src.analyzer.gt_conflict_detector import detect_field_conflict
+    conflict = detect_field_conflict(field_name, sources)
+
+    if has_s and not conflict["has_conflict"] and avg_score >= 0.8:
+        return "high"
+    if has_a_or_s and not conflict["has_conflict"] and avg_score >= 0.5:
+        return "medium"
+    if avg_score >= 0.3 and not conflict["has_conflict"]:
+        return "low"
+    if len(sources) >= 2 and not conflict["has_conflict"]:
+        return "low"
+    if conflict["has_conflict"]:
         return "uncertain"
     return "low"
