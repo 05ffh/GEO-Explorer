@@ -14,7 +14,7 @@ GT: {active_gt_json}
 
 
 async def generate_content_package(
-    action_plan_id: str, db: AsyncSession,
+    action_plan_id: str, org_id: str, db: AsyncSession,
 ) -> dict:
     """Generate Content Package from an ActionPlan using active GT.
 
@@ -22,7 +22,10 @@ async def generate_content_package(
     Returns dict ready for user review.
     """
     action_plan = (await db.execute(
-        select(ActionPlan).where(ActionPlan.id == action_plan_id)
+        select(ActionPlan).where(
+            ActionPlan.id == action_plan_id,
+            ActionPlan.organization_id == org_id,
+        )
     )).scalar_one_or_none()
     if not action_plan:
         raise ValueError("Action plan not found")

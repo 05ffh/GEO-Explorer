@@ -111,4 +111,6 @@ async def trigger_gt_collection(
         candidate = await collect_gt_candidate(str(brand.id), str(user.organization_id), db)
         return {"status": "collected", "candidate_id": str(candidate.id), "confidence": candidate.overall_confidence}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"GT collection failed: {e}")
+        import logging
+        logging.getLogger(__name__).error("GT collection failed for brand %s: %s", brand_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="GT collection failed")

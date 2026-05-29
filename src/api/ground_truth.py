@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,7 +17,7 @@ router = APIRouter(prefix="/api", tags=["ground_truth"])
 
 class FieldReview(BaseModel):
     field_name: str
-    action: str  # accept | edit | delete | uncertain
+    action: Literal["accept", "edit", "delete", "uncertain"]
     new_value: str | None = None
 
 
@@ -51,7 +53,10 @@ async def review_gt_candidate(
     db: AsyncSession = Depends(get_db),
 ):
     candidate = (await db.execute(
-        select(GroundTruthCandidate).where(GroundTruthCandidate.id == candidate_id)
+        select(GroundTruthCandidate).where(
+            GroundTruthCandidate.id == candidate_id,
+            GroundTruthCandidate.organization_id == user.organization_id,
+        )
     )).scalar_one_or_none()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
@@ -85,7 +90,10 @@ async def promote_candidate_to_active(
     db: AsyncSession = Depends(get_db),
 ):
     candidate = (await db.execute(
-        select(GroundTruthCandidate).where(GroundTruthCandidate.id == candidate_id)
+        select(GroundTruthCandidate).where(
+            GroundTruthCandidate.id == candidate_id,
+            GroundTruthCandidate.organization_id == user.organization_id,
+        )
     )).scalar_one_or_none()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")

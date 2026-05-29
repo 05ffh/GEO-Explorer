@@ -56,7 +56,10 @@ async def update_action(
         action = await update_action_status(action_id, body.status, db)
     else:
         action = (await db.execute(
-            select(ActionPlan).where(ActionPlan.id == action_id)
+            select(ActionPlan).where(
+                ActionPlan.id == action_id,
+                ActionPlan.organization_id == user.organization_id,
+            )
         )).scalar_one_or_none()
         if not action:
             return {"detail": "Not found"}, 404
@@ -88,7 +91,7 @@ async def create_content_package(
 ):
     """Generate a Content Package from an action plan using active GT."""
     try:
-        result = await generate_content_package(action_id, db)
+        result = await generate_content_package(action_id, str(user.organization_id), db)
         return {"status": "generated", "content_package": result}
     except ValueError as e:
         from fastapi import HTTPException
@@ -103,7 +106,10 @@ async def get_content_package(
 ):
     """Get a Content Package by ID with export format."""
     pkg = (await db.execute(
-        select(ContentPackage).where(ContentPackage.id == package_id)
+        select(ContentPackage).where(
+            ContentPackage.id == package_id,
+            ContentPackage.organization_id == user.organization_id,
+        )
     )).scalar_one_or_none()
     if not pkg:
         from fastapi import HTTPException
