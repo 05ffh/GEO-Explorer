@@ -22,11 +22,21 @@ class FieldEvaluation:
 
 
 def _tokenize(text: str) -> set[str]:
-    """Extract meaningful tokens from Chinese text."""
-    # Split on punctuation and whitespace
+    """Extract tokens using punctuation-splitting + character n-grams for Chinese."""
     import re
-    tokens = re.split(r'[，。、；：！？\s\n\(\)（）\[\]【】""''/]+', text.lower())
-    return {t.strip() for t in tokens if len(t.strip()) >= 2}
+    text = text.lower()
+    phrases = re.split(r'[，。、；：！？\s\n\(\)（）\[\]【】""''/，,!?;:\-]+', text)
+    phrases = [p.strip() for p in phrases if len(p.strip()) >= 2]
+    tokens = set()
+    for phrase in phrases:
+        tokens.add(phrase)
+        if len(phrase) >= 2:
+            for i in range(len(phrase) - 1):
+                tokens.add(phrase[i:i+2])
+        if len(phrase) >= 3:
+            for i in range(len(phrase) - 2):
+                tokens.add(phrase[i:i+3])
+    return tokens
 
 
 def evaluate_field(field: str, gt_value, ai_text: str) -> FieldEvaluation:

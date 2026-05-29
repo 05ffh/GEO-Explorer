@@ -11,6 +11,7 @@ from src.models.hallucination import HallucinationResult
 from src.models.insight_summary import InsightSummary
 from src.models.gt_candidate import GroundTruthCandidate
 from src.models.content_package import ContentPackage
+from src.schemas.ground_truth import KPI_DISPLAY_NAMES
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -119,20 +120,30 @@ async def dashboard_overview(
         )
     )).scalar()
 
+    raw_metrics = {
+        "sov": round(avg_sov, 4),
+        "first_rec_rate": round(avg_first_rec, 4),
+        "accuracy_rate": round(avg_accuracy, 4),
+        "completeness_rate": round(avg_completeness, 4),
+        "citation_rate": round(avg_citation, 4),
+        "scenario_recall": round(avg_scenario_recall, 4),
+        "semantic_stability": round(avg_semantic_stability, 4),
+        "differentiation": round(avg_differentiation, 4),
+        "cross_platform_consistency": round(avg_cross_platform_consistency, 4),
+        "recommendation_quality": round(avg_recommendation_quality, 4),
+    }
+    # Add Chinese display names
+    metrics_display = {
+        "指标": [
+            {"key": k, "name": KPI_DISPLAY_NAMES.get(k, k), "value": v}
+            for k, v in raw_metrics.items()
+        ]
+    }
+
     return {
         "total_brands": brand_count,
-        "average_metrics": {
-            "sov": round(avg_sov, 4),
-            "first_rec_rate": round(avg_first_rec, 4),
-            "accuracy_rate": round(avg_accuracy, 4),
-            "completeness_rate": round(avg_completeness, 4),
-            "citation_rate": round(avg_citation, 4),
-            "scenario_recall": round(avg_scenario_recall, 4),
-            "semantic_stability": round(avg_semantic_stability, 4),
-            "differentiation": round(avg_differentiation, 4),
-            "cross_platform_consistency": round(avg_cross_platform_consistency, 4),
-            "recommendation_quality": round(avg_recommendation_quality, 4),
-        },
+        "average_metrics": raw_metrics,
+        "metrics_display": metrics_display,
         "pending_action_plans": pending_actions,
         "unreviewed_p0_hallucinations": recent_p0,
         "pending_gt_candidates": pending_candidates,
