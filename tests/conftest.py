@@ -6,7 +6,7 @@ from src.config import settings
 from src.models.base import Base
 
 TRUNCATE_ALL = (
-    "TRUNCATE TABLE content_packages, gt_reviews, gt_evidences, gt_candidates, "
+    "TRUNCATE TABLE action_themes, content_packages, gt_reviews, gt_evidences, gt_candidates, "
     "insight_summaries, hallucination_results, api_usage_logs, query_results, "
     "metrics_snapshots, action_plans, content_library, collection_runs, "
     "competitor_sets, ground_truth_versions, prompt_versions, query_templates, "

@@ -17,7 +17,8 @@ from src.models.insight_summary import InsightSummary
 from src.models.gt_candidate import GroundTruthCandidate
 from src.models.gt_evidence import GroundTruthEvidence
 from src.models.gt_review import GroundTruthReview
-from src.models.content_package import ContentPackage
+from src.models.content_package import ContentPackage, CONTENT_PACKAGE_TRANSITIONS
+from src.models.action_theme import ActionTheme, THEME_TRANSITIONS
 
 __all__ = [
     "Base", "TimestampMixin", "UUIDMixin",
@@ -30,5 +31,6 @@ __all__ = [
     "ActionPlan", "VALID_TRANSITIONS",
     "ContentLibrary", "CompetitorSet", "InsightSummary",
     "GroundTruthCandidate", "GroundTruthEvidence", "GroundTruthReview",
-    "ContentPackage",
+    "ContentPackage", "CONTENT_PACKAGE_TRANSITIONS",
+    "ActionTheme", "THEME_TRANSITIONS",
 ]

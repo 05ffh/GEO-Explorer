@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, DateTime, Text
+from sqlalchemy import String, ForeignKey, DateTime, Boolean, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from src.models.base import Base, UUIDMixin
 
@@ -14,6 +14,9 @@ class GroundTruthEvidence(Base, UUIDMixin):
     source_name: Mapped[str] = mapped_column(String(255), default="")
     source_url: Mapped[str] = mapped_column(Text, default="")
     excerpt: Mapped[str] = mapped_column(Text, default="")
+    source_tier: Mapped[str] = mapped_column(String(10), default="C")  # S/A/B/C/D
     source_quality: Mapped[str] = mapped_column(String(20), default="low")
     confidence: Mapped[str] = mapped_column(String(20), default="low")
+    human_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
+    review_status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/reviewed/flagged
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.utcnow())
