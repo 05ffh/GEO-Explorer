@@ -183,6 +183,10 @@ async def _run_hallucination_detection(
                 len(all_hallucinations), len(incorrect_hallucinations),
                 len(incorrect_hallucinations))
 
+    if incorrect_hallucinations:
+        await _cluster_action_themes(brand_id, org_id, collection_run_id,
+                                     all_hallucinations, incorrect_hallucinations, db)
+
 
 async def _generate_content_packages(
     brand_id: str, org_id: str, db: AsyncSession,
@@ -297,6 +301,22 @@ async def _generate_content_packages(
                 ).limit(1)
             )).scalar_one_or_none()
 
+            # Determine risk level from source fields
+            from src.schemas.ground_truth import FIELD_RISK_LEVELS
+            risk = "low"
+            for field in theme_def["fields"]:
+                for level, fields in FIELD_RISK_LEVELS.items():
+                    if field in fields and level == "high":
+                        risk = "high"
+                        break
+                if risk == "high":
+                    break
+                for level, fields in FIELD_RISK_LEVELS.items():
+                    if field in fields and level == "medium" and risk == "low":
+                        risk = "medium"
+
+            initial_status = "needs_review" if risk in ("high", "medium") else "fact_checked"
+
             pkg = ContentPackage(
                 action_plan_id=rep_plan.id if rep_plan else None,
                 organization_id=org_id,
@@ -311,7 +331,8 @@ async def _generate_content_packages(
                     {"item": "内容经人工审核确认", "checked": False},
                 ],
                 fact_check_report=fact_report,
-                status="draft",
+                risk_level=risk,
+                status=initial_status,
             )
             db.add(pkg)
             generated += 1
@@ -329,3 +350,52 @@ async def _generate_content_packages(
     ))
     await db.commit()
     logger.info("Content packages generated: %d themes", generated)
+
+
+async def _cluster_action_themes(brand_id, org_id, collection_run_id,
+                                  all_hallucinations, incorrect_hallucinations, db):
+    """Cluster action plans into ActionThemes by field + error_type + severity."""
+    from src.models.action_theme import ActionTheme
+    from collections import defaultdict
+
+    # Group by (field, severity)
+    clusters = defaultdict(list)
+    for h in incorrect_hallucinations:
+        key = (h.field_name, h.severity)
+        clusters[key].append(h)
+
+    # Create one theme per cluster, limit to 10 themes
+    theme_count = 0
+    for (field_name, severity), hall_group in sorted(clusters.items(),
+                                                       key=lambda x: len(x[1]), reverse=True):
+        if theme_count >= 10:
+            break
+
+        platforms = list(set(h.query_result.platform if hasattr(h, 'query_result') else "unknown"
+                             for h in hall_group))
+        claims = [h.ai_claim[:200] for h in hall_group[:3]]
+        h_ids = [str(h.id) for h in hall_group]
+
+        theme = ActionTheme(
+            organization_id=org_id, brand_id=brand_id,
+            collection_run_id=collection_run_id,
+            title=f"{'P0' if severity == 'P0' else 'P1' if severity == 'P1' else 'P2'} {field_name} 优化",
+            priority=severity,
+            issue_type="incorrect_claim",
+            affected_fields=[field_name],
+            affected_platforms=platforms,
+            hallucination_result_ids=h_ids,
+            action_plan_ids=[],
+            evidence_summary={"field": field_name, "error_count": len(hall_group)},
+            typical_ai_claims=claims,
+            recommended_content_types=["FAQ", "Organization"],
+            expected_kpi_impact={"accuracy_rate": "+10%"},
+            effort_level="medium" if len(hall_group) < 50 else "high",
+            status="detected",
+        )
+        db.add(theme)
+        theme_count += 1
+
+    await db.commit()
+    logger.info("Action themes clustered: %d themes from %d action plans",
+                theme_count, len(incorrect_hallucinations))
