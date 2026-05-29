@@ -1,0 +1,9 @@
+[
+  {
+    "url": "https://starbucks.com.cn",
+    "name": "星巴克（Starbucks）",
+    "@type": "Organization",
+    "@context": "https://schema.org",
+    "description": "全球领先的咖啡连锁品牌，以'第三空间'体验为核心定位，提供标准化高品质咖啡饮品与休闲社交场所"
+  }
+]

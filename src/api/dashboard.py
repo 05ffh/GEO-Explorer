@@ -160,36 +160,19 @@ async def generate_brand_reports(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Generate diagnostic and optimization reports for a brand."""
+    """Generate complete report package for a brand."""
     brand = await get_org_brand_or_404(brand_id, user, db)
-
-    # Find latest completed collection run
     run = (await db.execute(
         select(MetricsSnapshot.collection_run_id)
         .where(MetricsSnapshot.brand_id == brand.id)
-        .order_by(desc(MetricsSnapshot.created_at))
-        .limit(1)
+        .order_by(desc(MetricsSnapshot.created_at)).limit(1)
     )).scalar_one_or_none()
-
     if not run:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="No completed collection found for this brand")
-
-    rid = str(run)
-    from src.reports.diagnostic import generate_diagnostic_report
-    from src.reports.action_plan import generate_optimization_plan
-
-    md_path = await generate_diagnostic_report(brand.name, rid, str(brand.id), db)
-    result = await generate_optimization_plan(brand.name, rid, str(brand.id), db)
-
-    return {
-        "diagnostic_md": md_path,
-        "optimization_md": result["markdown"],
-        "optimization_pdf": result["pdf"],
-        "action_count": result["action_count"],
-        "p0_count": result["p0_count"],
-        "p1_count": result["p1_count"],
-    }
+        raise HTTPException(status_code=404, detail="No completed collection found")
+    from src.reports import deliver_all_reports
+    result = await deliver_all_reports(brand.name, str(brand.id), str(run), db)
+    return result
 
 
 @router.get("/reports/{filename}")

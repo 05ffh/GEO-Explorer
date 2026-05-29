@@ -74,34 +74,15 @@ async def compute_and_save_metrics(
     except Exception:
         logger.exception("Insight generation failed for collection %s", collection_run_id)
 
-    # Auto-generate reports (3 formats: .md + .pdf + .docx)
+    # Unified report delivery (diagnostic + optimization 3-format + content pieces)
     try:
-        from src.reports.diagnostic import generate_diagnostic_report
-        from src.reports.action_plan import generate_optimization_plan
-        from src.models.brand import Brand
-        brand = (await db.execute(select(Brand).where(Brand.id == brand_id))).scalar_one_or_none()
-        brand_name = brand.name if brand else "Unknown"
-        await generate_diagnostic_report(brand_name, collection_run_id, brand_id, db)
-        await generate_optimization_plan(brand_name, collection_run_id, brand_id, db)
-        logger.info("Reports generated for collection %s", collection_run_id)
-    except Exception:
-        logger.exception("Report generation failed for collection %s", collection_run_id)
-
-    # Auto-generate Content Packages from top P0 action plans
-    try:
-        await _generate_content_packages(brand_id, org_id, db)
-    except Exception:
-        logger.exception("Content package generation failed for collection %s", collection_run_id)
-
-    # Export Content Packages as deliverable files
-    try:
-        from src.reports.content_export import export_content_packages
+        from src.reports import deliver_all_reports
         brand = (await db.execute(select(Brand).where(Brand.id == brand_id))).scalar_one_or_none()
         bname = brand.name if brand else "Unknown"
-        await export_content_packages(bname, brand_id, db)
-        logger.info("Content packages exported for brand %s", bname)
+        result = await deliver_all_reports(bname, brand_id, collection_run_id, db)
+        logger.info("Reports delivered to %s", result.get("dir"))
     except Exception:
-        logger.exception("Content package export failed for collection %s", collection_run_id)
+        logger.exception("Report delivery failed for collection %s", collection_run_id)
 
     return snapshot
 
