@@ -32,4 +32,11 @@ async def compute_and_save_metrics(
     )
     db.add(snapshot)
     await db.commit()
+
+    from src.analyzer.insights import generate_insights
+    try:
+        await generate_insights(collection_run_id, brand_id, org_id, db)
+    except Exception:
+        pass
+
     return snapshot
