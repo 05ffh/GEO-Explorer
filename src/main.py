@@ -52,6 +52,25 @@ async def health():
     return {"status": "ok"}
 
 
+def _empty_dashboard_vm(brand_id: str = "", brand_name: str = "", industry: str = "") -> dict:
+    """Minimal VM for empty/no-data dashboard state with all required keys."""
+    return {
+        "has_data": False,
+        "brand": {"id": brand_id, "name": brand_name, "industry": industry},
+        "kpi_cards": [],
+        "health_score": 0, "health_label": "",
+        "blocking_issues": [],
+        "data_reliability": {"active_gt": False, "gt_coverage": 0, "pending_candidates": 0,
+                              "latest_snapshot_at": None, "is_stale": False, "is_partial": False,
+                              "platform_success_rate": 0, "collection_run_id": None},
+        "top_risks": {"p0_hallucinations": 0, "p1_hallucinations": 0, "high_risk_content": 0},
+        "priority_actions": [], "recent_changes": {},
+        "permissions": {"can_trigger_collection": False, "can_review_gt": False,
+                        "can_confirm_hallucination": False, "can_generate_content": False,
+                        "can_approve_high_risk": False},
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request, user: User = Depends(get_current_user),
                 db: AsyncSession = Depends(get_db)):
@@ -62,11 +81,11 @@ async def index(request: Request, user: User = Depends(get_current_user),
         return templates.TemplateResponse("dashboard/index.html", _page_context(
             request, "dashboard", org_brands,
             current_brand_id=first["id"], current_brand_name=first["name"],
-            vm={"has_data": False, "brand": {"id": first["id"], "name": first["name"], "industry": ""}},
+            vm=_empty_dashboard_vm(first["id"], first["name"]),
         ))
     return templates.TemplateResponse("dashboard/index.html", _page_context(
         request, "dashboard", [],
-        vm={"has_data": False, "brand": {"id": "", "name": "", "industry": ""}},
+        vm=_empty_dashboard_vm(),
     ))
 
 
@@ -109,11 +128,13 @@ async def evidence_page(request: Request, brand_id: str,
                         db: AsyncSession = Depends(get_db)):
     """AI evidence page."""
     brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.evidence import build_evidence_vm
+    vm = await build_evidence_vm(brand, {}, user, db)
     org_brands = await _get_org_brands(user, db)
     return templates.TemplateResponse("evidence/index.html", _page_context(
         request, "evidence", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
-        vm={"brand": {"id": str(brand.id), "name": brand.name}, "items": []},
+        vm=vm,
     ))
 
 
@@ -123,11 +144,13 @@ async def hallucinations_page(request: Request, brand_id: str,
                               db: AsyncSession = Depends(get_db)):
     """Hallucination risk page."""
     brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.hallucination import build_hallucination_vm
+    vm = await build_hallucination_vm(brand, {}, user, db)
     org_brands = await _get_org_brands(user, db)
     return templates.TemplateResponse("hallucinations/index.html", _page_context(
         request, "hallucinations", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
-        vm={"brand": {"id": str(brand.id), "name": brand.name}, "clusters": [], "total": 0},
+        vm=vm,
     ))
 
 
@@ -137,11 +160,13 @@ async def actions_page(request: Request, brand_id: str,
                        db: AsyncSession = Depends(get_db)):
     """Action workbench page."""
     brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.action import build_action_vm
+    vm = await build_action_vm(brand, {}, user, db)
     org_brands = await _get_org_brands(user, db)
     return templates.TemplateResponse("actions/index.html", _page_context(
         request, "actions", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
-        vm={"brand": {"id": str(brand.id), "name": brand.name}, "themes": []},
+        vm=vm,
     ))
 
 
@@ -151,11 +176,13 @@ async def content_page(request: Request, brand_id: str,
                        db: AsyncSession = Depends(get_db)):
     """Content management page."""
     brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.content import build_content_vm
+    vm = await build_content_vm(brand, user, db)
     org_brands = await _get_org_brands(user, db)
     return templates.TemplateResponse("content/index.html", _page_context(
         request, "content", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
-        vm={"brand": {"id": str(brand.id), "name": brand.name}, "packages": []},
+        vm=vm,
     ))
 
 
@@ -165,9 +192,11 @@ async def trends_page(request: Request, brand_id: str,
                       db: AsyncSession = Depends(get_db)):
     """Trends & attribution page."""
     brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.trends import build_trends_vm
+    vm = await build_trends_vm(brand, "month", user, db)
     org_brands = await _get_org_brands(user, db)
     return templates.TemplateResponse("trends/index.html", _page_context(
         request, "trends", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
-        vm={"brand": {"id": str(brand.id), "name": brand.name}},
+        vm=vm,
     ))

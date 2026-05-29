@@ -1,8 +1,7 @@
-{# GEO Explorer — KPI Metric Card (clickable, HTMX expands detail panel) #}
+{# GEO Explorer — KPI Metric Card #}
+{# KPI detail expansion endpoint TBD — implement in Phase 12.1 #}
 {% macro kpi_card(card) -%}
-<div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow duration-200"
-     hx-get="/api/brands/{{ card.brand_id }}/kpi-card/{{ card.key }}"
-     hx-target="#kpi-detail-panel" hx-swap="innerHTML">
+<div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow duration-200">
     <div class="text-xs text-slate-400 font-medium uppercase tracking-wide">{{ card.label }}</div>
     <div class="mt-1.5 font-heading text-2xl font-bold text-text">{{ card.display_value }}</div>
     {% if card.numerator is not none and card.denominator is not none %}
