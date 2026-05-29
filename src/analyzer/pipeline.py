@@ -7,6 +7,11 @@ from src.analyzer.first_rec import compute_first_rec
 from src.analyzer.accuracy import compute_accuracy
 from src.analyzer.completeness import compute_completeness
 from src.analyzer.citation import compute_citation_rate
+from src.analyzer.scenario_recall import compute_scenario_recall
+from src.analyzer.semantic_stability import compute_semantic_stability
+from src.analyzer.differentiation import compute_differentiation
+from src.analyzer.cross_platform_consistency import compute_cross_platform_consistency
+from src.analyzer.recommendation_quality import compute_recommendation_quality
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +25,12 @@ async def compute_and_save_metrics(
     comp = await compute_completeness(brand_id, collection_run_id, db)
     cit = await compute_citation_rate(brand_id, collection_run_id, db)
 
+    sr = await compute_scenario_recall(brand_id, collection_run_id, db)
+    ss = await compute_semantic_stability(brand_id, collection_run_id, db)
+    df = await compute_differentiation(brand_id, collection_run_id, db)
+    cpc = await compute_cross_platform_consistency(brand_id, collection_run_id, db)
+    rq = await compute_recommendation_quality(brand_id, collection_run_id, db)
+
     snapshot = MetricsSnapshot(
         brand_id=brand_id, organization_id=org_id,
         collection_run_id=collection_run_id,
@@ -31,7 +42,16 @@ async def compute_and_save_metrics(
         citation_rate=cit["citation_rate"],
         sample_size=sov["sample_size"],
         failure_rate=sov["failure_rate"],
-        details={"sov": sov, "frr": frr, "accuracy": acc, "completeness": comp, "citation": cit},
+        details={
+            "sov": sov, "frr": frr, "accuracy": acc, "completeness": comp, "citation": cit,
+            "extended_kpis": {
+                "scenario_recall": sr,
+                "semantic_stability": ss,
+                "differentiation": df,
+                "cross_platform_consistency": cpc,
+                "recommendation_quality": rq,
+            },
+        },
     )
     db.add(snapshot)
     await db.commit()
