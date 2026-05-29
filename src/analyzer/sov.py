@@ -29,6 +29,9 @@ async def compute_sov(
         "mentioned": mentioned,
         "total_valid": len(valid),
         "total_attempted": len(results),
+        "numerator": mentioned,
+        "denominator": len(valid),
         "sample_size": len(valid),
+        "confidence": "high" if len(valid) >= 20 else "medium" if len(valid) >= 10 else "low",
         "failure_rate": round(failed / len(results), 4) if results else 0.0,
     }

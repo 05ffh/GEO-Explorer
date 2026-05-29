@@ -57,6 +57,7 @@ async def compute_and_save_metrics(
                 "cross_platform_consistency": cpc,
                 "recommendation_quality": rq,
             },
+            "kpi_cards": _build_kpi_cards(sov, frr, acc, comp, cit, sr, ss, df, cpc, rq),
         },
     )
     db.add(snapshot)
@@ -85,6 +86,29 @@ async def compute_and_save_metrics(
         logger.exception("Report delivery failed for collection %s", collection_run_id)
 
     return snapshot
+
+
+def _build_kpi_cards(sov, frr, acc, comp, cit, sr, ss, df, cpc, rq) -> list[dict]:
+    """Build KPI explainability cards with numerator/denominator/confidence."""
+    from src.schemas.ground_truth import KPI_DISPLAY_NAMES
+    kpi_data = [
+        ("sov", sov), ("first_rec_rate", frr), ("accuracy_rate", acc),
+        ("completeness_rate", comp), ("citation_rate", cit),
+        ("scenario_recall", sr), ("semantic_stability", ss),
+        ("differentiation", df), ("cross_platform_consistency", cpc),
+        ("recommendation_quality", rq),
+    ]
+    cards = []
+    for key, data in kpi_data:
+        name = KPI_DISPLAY_NAMES.get(key, key)
+        value = data.get("sov") or data.get("first_rec_rate") or data.get("accuracy_rate") or \
+                data.get("completeness_rate") or data.get("citation_rate") or data.get("value", 0)
+        cards.append({
+            "key": key, "name_cn": name, "value": value,
+            "numerator": data.get("numerator", 0), "denominator": data.get("denominator", 0),
+            "sample_size": data.get("sample_size", 0), "confidence": data.get("confidence", "low"),
+        })
+    return cards
 
 
 async def _run_hallucination_detection(

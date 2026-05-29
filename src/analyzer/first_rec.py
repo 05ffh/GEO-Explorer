@@ -47,7 +47,10 @@ async def compute_first_rec(
 
     return {
         "first_rec_rate": round(first_count / len(valid), 4) if valid else 0.0,
+        "numerator": first_count,
+        "denominator": len(valid),
         "first_count": first_count,
         "total_rec_answers": len(valid),
         "sample_size": len(valid),
+        "confidence": "high" if len(valid) >= 15 else "medium" if len(valid) >= 8 else "low",
     }

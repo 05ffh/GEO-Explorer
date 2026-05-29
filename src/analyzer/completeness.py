@@ -51,6 +51,9 @@ async def compute_completeness(
         "completeness_rate": round(complete / len(required), 4),
         "complete_fields": complete,
         "required_fields": len(required),
+        "numerator": complete,
+        "denominator": len(required),
         "sample_size": len(valid),
+        "confidence": "high" if len(valid) >= 15 else "medium" if len(valid) >= 8 else "low",
         "details": details,
     }

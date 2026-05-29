@@ -43,5 +43,8 @@ async def compute_citation_rate(
         "citation_rate": round(cited / mentioned, 4) if mentioned else 0.0,
         "cited_contexts": cited,
         "mentioned_contexts": mentioned,
+        "numerator": cited,
+        "denominator": mentioned,
         "sample_size": len(valid),
+        "confidence": "high" if len(valid) >= 15 else "medium" if len(valid) >= 8 else "low",
     }

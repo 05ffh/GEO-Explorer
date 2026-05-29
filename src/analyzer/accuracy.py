@@ -48,7 +48,10 @@ async def compute_accuracy(
         "accuracy_rate": round(len(correct) / len(mentioned), 4) if mentioned else 0.0,
         "mentioned_fields": len(mentioned),
         "correct_fields": len(correct),
+        "numerator": len(correct),
+        "denominator": len(mentioned),
         "sample_size": len(valid),
+        "confidence": "high" if len(valid) >= 15 else "medium" if len(valid) >= 8 else "low",
         "details": {
             k: {
                 "verdict": v.verdict.value, "reason": v.reason,
