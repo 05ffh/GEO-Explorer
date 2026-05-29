@@ -21,6 +21,7 @@ async def run_collection(
     org_id: uuid.UUID,
     db: AsyncSession,
     trigger_type: str = "manual",
+    auto_analyze: bool = True,
 ) -> CollectionRun:
     brand = (await db.execute(
         select(Brand).where(Brand.id == brand_id, Brand.organization_id == org_id)
@@ -130,4 +131,9 @@ async def run_collection(
     )
     run.collection_completed_at = datetime.utcnow()
     await db.commit()
+
+    if auto_analyze and run.collection_status in ("completed", "partial"):
+        from src.analyzer.collection_analysis import run_analysis_for_collection
+        await run_analysis_for_collection(run.id, org_id, db)
+
     return run
