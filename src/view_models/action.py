@@ -1,4 +1,4 @@
-# GEO Explorer — Action Workbench ViewModel
+"""GEO Explorer — Action Workbench ViewModel."""
 from sqlalchemy import select, desc
 from src.models.action_theme import ActionTheme, THEME_TRANSITIONS
 
@@ -25,4 +25,7 @@ def can_transition(user_role: str, from_status: str, to_status: str) -> bool:
 
 async def build_action_vm(brand, filters, user, db) -> dict:
     """Build view model for the Action workbench page."""
-    return {}
+    return {
+        "brand": {"id": str(brand.id), "name": brand.name},
+        "themes": [],
+    }

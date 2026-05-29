@@ -9,8 +9,8 @@
         <select class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white cursor-pointer"><option value="">全部维度</option></select>
         <select class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white cursor-pointer"><option value="">全部状态</option></select>
     </div>
-    {% if vm.items %}
-    <div class="space-y-3">{% for item in vm.items %}{% endfor %}</div>
+    {% if vm["items"] %}
+    <div class="space-y-3">{% for item in vm["items"] %}{% endfor %}</div>
     {% else %}
     {{ empty_state("暂无 AI 证据", "触发采集后，AI 回答及其与 KPI/幻觉/Action 的关联将在此展示。", none, none) }}
     {% endif %}

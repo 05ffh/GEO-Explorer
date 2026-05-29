@@ -1,4 +1,4 @@
-# GEO Explorer — Hallucination Risk ViewModel
+"""GEO Explorer — Hallucination Risk ViewModel."""
 from sqlalchemy import select
 from src.models.hallucination import HallucinationResult
 
@@ -10,4 +10,8 @@ def cluster_key(h: HallucinationResult, dimension: str = "") -> tuple:
 
 async def build_hallucination_vm(brand, filters, user, db) -> dict:
     """Build view model for the hallucination risk page."""
-    return {}
+    return {
+        "brand": {"id": str(brand.id), "name": brand.name},
+        "clusters": [],
+        "total": 0,
+    }

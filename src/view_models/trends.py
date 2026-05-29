@@ -1,4 +1,4 @@
-# GEO Explorer — Trends & Attribution ViewModel
+"""GEO Explorer — Trends & Attribution ViewModel."""
 from sqlalchemy import select, desc
 from src.models.metrics_snapshot import MetricsSnapshot
 from src.models.collection_run import CollectionRun
@@ -20,4 +20,6 @@ def compute_attribution_label(pre_val, post_val, sample_size, gt_changed, platfo
 
 async def build_trends_vm(brand, range_str, user, db) -> dict:
     """Build view model for the trends & attribution page."""
-    return {}
+    return {
+        "brand": {"id": str(brand.id), "name": brand.name},
+    }
