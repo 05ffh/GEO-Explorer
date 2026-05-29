@@ -7,6 +7,7 @@ from src.models.ground_truth import GroundTruthVersion
 from src.models.query_result import QueryResult
 from src.models.action_plan import ActionPlan
 from src.models.brand import Brand
+from src.actions.executor import _generate_with_llm
 from src.analyzer.sov import compute_sov
 from src.analyzer.first_rec import compute_first_rec
 from src.analyzer.accuracy import compute_accuracy
@@ -181,88 +182,145 @@ async def _run_hallucination_detection(
 async def _generate_content_packages(
     brand_id: str, org_id: str, db: AsyncSession,
 ) -> None:
-    """Generate Content Packages from top P0 action plans using active GT."""
+    """Generate rich Content Packages by grouping action plans into content themes."""
     from src.models.content_package import ContentPackage
+    from collections import Counter
 
-    # Get top P0 plans that haven't been processed yet
-    plans = (await db.execute(
-        select(ActionPlan).where(
-            ActionPlan.brand_id == brand_id,
-            ActionPlan.priority == "P0",
-            ActionPlan.status == "pending",
-        ).limit(5)
-    )).scalars().all()
-
-    if not plans:
-        logger.info("No P0 action plans for content package generation")
-        return
-
-    # Get active GT
     gt = (await db.execute(
         select(GroundTruthVersion).where(
             GroundTruthVersion.brand_id == brand_id,
             GroundTruthVersion.status == "active",
         )
     )).scalar_one_or_none()
-
     if not gt:
-        logger.info("No active GT for brand %s, skipping content packages", brand_id)
         return
-
-    from src.actions.fact_checker import check_content_against_gt
-    from src.actions.schema_generator import generate_jsonld
-    from src.models.brand import Brand
 
     brand = (await db.execute(select(Brand).where(Brand.id == brand_id))).scalar_one_or_none()
     brand_name = brand.name if brand else "Unknown"
-    generated = 0
+    gt_json = gt.ground_truth_json
 
-    for plan in plans:
+    # Field → Content Theme mapping: group related fields into coherent content pieces
+    CONTENT_THEMES = [
+        {
+            "theme": "品牌介绍 (About)",
+            "content_type": "Organization",
+            "fields": ["official_name", "industry", "category", "subcategory", "positioning"],
+            "prompt_template": (
+                "你是一个品牌内容专家。基于以下品牌事实信息，撰写一篇 500-800 字的品牌介绍页面内容。"
+                "内容应包括：品牌背景、所属行业与品类、核心定位与使命。"
+                "使用专业但友好的语调。只使用提供的事实。标注引用来源。\n\n品牌: {brand}\n事实: {facts}"
+            ),
+            "publish_target": "官网 /about 页面",
+        },
+        {
+            "theme": "产品与服务 (Products)",
+            "content_type": "FAQ",
+            "fields": ["core_products", "core_features"],
+            "prompt_template": (
+                "你是一个产品内容专家。基于以下品牌事实，撰写一套 FAQ 格式的产品介绍内容（至少 3 个问题）。"
+                "包含：核心产品有哪些、产品特点、与竞品的区别。"
+                "专业且客观。只使用提供的事实。\n\n品牌: {brand}\n事实: {facts}"
+            ),
+            "publish_target": "官网 /products 或 /faq 页面",
+        },
+        {
+            "theme": "用户与场景 (Users & Scenarios)",
+            "content_type": "FAQ",
+            "fields": ["target_users", "best_fit_users", "core_scenarios", "scenario_keywords"],
+            "prompt_template": (
+                "你是一个用户运营内容专家。基于以下品牌事实，撰写一套面向潜在客户的 FAQ（至少 3 个问题）。"
+                "说明：目标用户是谁、在什么场景下选择这个品牌最合适、解决了什么问题。"
+                "实用且有说服力。只使用提供的事实。\n\n品牌: {brand}\n事实: {facts}"
+            ),
+            "publish_target": "官网 /why-us 或场景推荐页面",
+        },
+        {
+            "theme": "竞争优势 (Differentiation)",
+            "content_type": "FAQ",
+            "fields": ["key_differentiators", "target_competitors", "alternative_solutions"],
+            "prompt_template": (
+                "你是一个市场分析内容专家。基于以下品牌事实，撰写一份客观的竞品对比 FAQ（至少 3 个问题）。"
+                "说明：与主要竞品相比的不同之处、替代方案有哪些、为什么选择该品牌。"
+                "客观公正，不做虚假比较。只使用提供的事实。\n\n品牌: {brand}\n事实: {facts}"
+            ),
+            "publish_target": "官网 /compare 或竞品对比页面",
+        },
+    ]
+
+    from src.actions.fact_checker import check_content_against_gt
+    from src.actions.schema_generator import generate_jsonld
+
+    generated = 0
+    for theme_def in CONTENT_THEMES:
+        # Collect GT facts for this theme's fields
+        facts = {}
+        for field in theme_def["fields"]:
+            if field in gt_json:
+                val = gt_json[field]
+                facts[field] = str(val)[:500] if not isinstance(val, list) else ", ".join(str(x) for x in val)
+
+        if not facts:
+            continue
+
         try:
-            # Build content from GT facts
-            field = plan.correct_ground_truth.get("field", "")
-            gt_value = str(plan.correct_ground_truth.get("value", ""))
-            content_type = plan.suggested_content_type or "FAQ"
+            # Generate rich content via LLM
+            facts_text = "\n".join(f"- {k}: {v}" for k, v in facts.items())
+            prompt = theme_def["prompt_template"].format(brand=brand_name, facts=facts_text)
+
+            content_body = await _generate_with_llm(prompt, theme_def["content_type"])
 
             content_items = [{
-                "type": content_type,
-                "title": f"{brand_name} - {field}",
-                "body": (
-                    f"# {brand_name} 官方信息\n\n"
-                    f"## {field}\n\n"
-                    f"{gt_value}\n\n"
-                    f"---\n"
-                    f"*本内容基于 GEO Explorer 认证的 Ground Truth 生成，确保与品牌事实一致。*"
-                ),
+                "type": theme_def["content_type"],
+                "theme": theme_def["theme"],
+                "title": f"{brand_name} - {theme_def['theme']}",
+                "body": content_body,
+                "source_fields": list(facts.keys()),
             }]
 
             # Fact check
-            fact_report = check_content_against_gt(content_items, gt.ground_truth_json)
+            fact_report = check_content_against_gt(content_items, gt_json)
 
             # Schema.org
-            schema = generate_jsonld(brand_name, gt.ground_truth_json, content_type)
+            schema = generate_jsonld(brand_name, gt_json, theme_def["content_type"])
 
-            # Create ContentPackage
+            # Find representative action plan for this theme
+            rep_plan = (await db.execute(
+                select(ActionPlan).where(
+                    ActionPlan.brand_id == brand_id,
+                    ActionPlan.priority.in_(["P0", "P1"]),
+                    ActionPlan.status == "pending",
+                ).limit(1)
+            )).scalar_one_or_none()
+
             pkg = ContentPackage(
-                action_plan_id=plan.id,
+                action_plan_id=rep_plan.id if rep_plan else None,
                 organization_id=org_id,
                 brand_id=brand_id,
                 content_items=content_items,
                 schema_items=schema["schemas"],
                 publishing_checklist=[
-                    {"item": "确认所有事实与 GT 一致", "checked": fact_report["overall_pass"]},
-                    {"item": "Schema.org JSON-LD 格式验证", "checked": len(schema["schemas"]) > 0},
-                    {"item": "禁止性表述检查通过", "checked": fact_report["issues_found"] == 0},
-                    {"item": "内容适合发布到官方网站", "checked": False},
+                    {"item": f"发布目标: {theme_def['publish_target']}", "checked": False},
+                    {"item": "所有事实与 GT 一致", "checked": fact_report["overall_pass"]},
+                    {"item": "禁止性表述（领先/第一/最大）已检查", "checked": fact_report["issues_found"] == 0},
+                    {"item": "Schema.org JSON-LD 格式有效", "checked": len(schema["schemas"]) > 0},
+                    {"item": "内容经人工审核确认", "checked": False},
                 ],
                 fact_check_report=fact_report,
                 status="draft",
             )
             db.add(pkg)
-            plan.status = "in_progress"
             generated += 1
-        except Exception as e:
-            logger.warning("Content package failed for plan %s: %s", plan.id, e)
 
+        except Exception as e:
+            logger.warning("Content package failed for theme %s: %s", theme_def["theme"], e)
+
+    # Mark processed P0 plans
+    (await db.execute(
+        __import__('sqlalchemy').update(ActionPlan).where(
+            ActionPlan.brand_id == brand_id,
+            ActionPlan.priority == "P0",
+            ActionPlan.status == "pending",
+        ).values(status="in_progress")
+    ))
     await db.commit()
-    logger.info("Content packages generated: %d from %d plans", generated, len(plans))
+    logger.info("Content packages generated: %d themes", generated)
