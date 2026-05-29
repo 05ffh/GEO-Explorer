@@ -1,0 +1,5 @@
+{# GEO Explorer — Risk Level Badge (high/medium/low) #}
+{% macro risk_badge(level) -%}
+{% set colors = {'high': 'badge-p0', 'medium': 'badge-p1', 'low': 'badge-p2'} %}
+<span class="badge {{ colors.get(level, 'badge-pending') }}">{{ level }}</span>
+{%- endmacro %}

@@ -1,0 +1,9 @@
+{# GEO Explorer — Loading Skeleton (shimmer placeholder) #}
+{% macro loading_skeleton(lines=3) -%}
+<div>
+    <div class="skeleton h-8 w-48 mb-4"></div>
+    {% for i in range(lines) %}
+    <div class="skeleton h-4 w-full mb-3" style="width: {{ [100, 80, 60][i % 3] }}%"></div>
+    {% endfor %}
+</div>
+{%- endmacro %}

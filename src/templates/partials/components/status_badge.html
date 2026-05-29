@@ -1,0 +1,4 @@
+{# GEO Explorer — Status Badge Component #}
+{% macro status_badge(status, size='sm') -%}
+<span class="badge badge-{{ status }} {% if size == 'lg' %}text-sm px-3{% endif %}">{{ status }}</span>
+{%- endmacro %}

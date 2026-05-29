@@ -1,0 +1,7 @@
+{# GEO Explorer — Stale Data Warning Banner #}
+{% macro stale_data_banner(brand_id) -%}
+<div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 mb-4 text-sm text-amber-700">
+    数据已超过 7 天未更新，建议触发新一轮采集。
+    <button class="ml-3 underline cursor-pointer" hx-post="/api/dashboard/brands/{{ brand_id }}/reports/generate">触发采集</button>
+</div>
+{%- endmacro %}

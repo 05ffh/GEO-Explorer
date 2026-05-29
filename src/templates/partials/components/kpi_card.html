@@ -1,0 +1,22 @@
+{# GEO Explorer — KPI Metric Card (clickable, HTMX expands detail panel) #}
+{% macro kpi_card(card) -%}
+<div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 cursor-pointer hover:shadow-md transition-shadow duration-200"
+     hx-get="/api/brands/{{ card.brand_id }}/kpi-card/{{ card.key }}"
+     hx-target="#kpi-detail-panel" hx-swap="innerHTML">
+    <div class="text-xs text-slate-400 font-medium uppercase tracking-wide">{{ card.label }}</div>
+    <div class="mt-1.5 font-heading text-2xl font-bold text-text">{{ card.display_value }}</div>
+    {% if card.numerator is not none and card.denominator is not none %}
+    <div class="text-xs text-slate-400 mt-1">{{ card.numerator }}/{{ card.denominator }}</div>
+    {% endif %}
+    {% if card.confidence_label %}
+    <div class="mt-1.5">
+        <span class="badge badge-{{ card.confidence_label }}">{{ card.confidence_label }}</span>
+    </div>
+    {% endif %}
+    {% if card.trend_display %}
+    <div class="mt-1 text-xs {% if card.trend_direction == 'up' %}text-green-600{% elif card.trend_direction == 'down' %}text-red-600{% else %}text-slate-400{% endif %}">
+        {{ card.trend_display }}
+    </div>
+    {% endif %}
+</div>
+{%- endmacro %}
