@@ -89,6 +89,12 @@ FIELD_RISK_LEVELS = {
 }
 
 # Chinese display names for all KPIs
+# Reverse mapping: field_name → risk_level (derived from FIELD_RISK_LEVELS)
+FIELD_TO_RISK_LEVEL = {}
+for _risk, _fields in FIELD_RISK_LEVELS.items():
+    for _f in _fields:
+        FIELD_TO_RISK_LEVEL[_f] = _risk
+
 KPI_DISPLAY_NAMES = {
     # 基础 KPI
     "sov": "声量份额 (SOV)",
