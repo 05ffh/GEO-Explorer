@@ -75,3 +75,53 @@ async def test_collection_creates_full_lineage(db_session, monkeypatch):
     for usage in usages:
         assert usage.collection_run_id == run.id
         assert usage.query_result_id in {qr.id for qr in qrs}
+
+
+@pytest.mark.asyncio
+async def test_kimi_429_retry(db_session, monkeypatch):
+    """Kimi 返回 429 → 重试后成功，记录 retry_count."""
+    org = Organization(name="RetryTest")
+    db_session.add(org)
+    await db_session.commit()
+    brand = Brand(organization_id=org.id, name="TestBrand", aliases=["TB"], industry="Tech")
+    db_session.add(brand)
+    await db_session.flush()
+
+    gt = GroundTruthVersion(brand_id=brand.id, version=1, ground_truth_json={"name": "TestBrand"}, status="active")
+    db_session.add(gt)
+    tmpl = QueryTemplate(dimension="定义认知", template_text="{品牌} 是什么？", priority=1, is_active=True)
+    db_session.add(tmpl)
+    prompt = PromptVersion(name="test", system_prompt="Be honest.", version=1, status="active")
+    db_session.add(prompt)
+    await db_session.commit()
+
+    from src.collector import engine as collector_engine
+    from src.adapters.mock import MockAdapter
+
+    call_count = [0]
+
+    class RetryMockAdapter(MockAdapter):
+        async def query(self, prompt, system_prompt="", **kwargs):
+            call_count[0] += 1
+            if call_count[0] <= 2:
+                from src.adapters.base import AIResponse
+                return AIResponse(
+                    platform=self.platform_name, question=prompt, answer_text="",
+                    latency_ms=100, error="Error code: 429 - {'error': {'message': 'rate limit'}}",
+                )
+            return await super().query(prompt, system_prompt, **kwargs)
+
+    monkeypatch.setattr(collector_engine, "get_adapter", lambda p: RetryMockAdapter(platform_name=p))
+    monkeypatch.setattr(collector_engine, "PLATFORMS", ["kimi"])
+
+    run = await collector_engine.run_collection(brand.id, org.id, db_session, trigger_type="manual", auto_analyze=False)
+    await db_session.refresh(run)
+
+    assert run.collection_status == "completed"
+    assert run.success_count == 1
+    qr = (await db_session.execute(
+        select(QueryResult).where(QueryResult.collection_run_id == run.id)
+    )).scalars().first()
+    assert qr.retry_count >= 2
+    assert qr.rate_limited is True
+    assert qr.status == "success"

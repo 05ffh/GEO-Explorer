@@ -60,20 +60,60 @@ async def run_collection(
     db.add(run)
     await db.flush()
 
-    sem = asyncio.Semaphore(settings.collector_concurrency)
+    _platform_semaphores = {
+        p: asyncio.Semaphore(settings.platform_concurrency_limits.get(p, 4))
+        for p in PLATFORMS
+    }
+
+    def _build_question(tmpl):
+        question = tmpl.template_text
+        for alias in brand.aliases or []:
+            question = question.replace(f"{{{alias}}}", alias)
+        question = question.replace("{品牌}", brand.name)
+        question = question.replace("{行业}", brand.industry)
+        return question
+
+    system = active_prompt.system_prompt if active_prompt else "你是一个诚实的AI助手。"
 
     async def query_one(platform_name, tmpl):
-        async with sem:
-            adapter = get_adapter(platform_name)
-            question = tmpl.template_text
-            for alias in brand.aliases or []:
-                question = question.replace(f"{{{alias}}}", alias)
-            question = question.replace("{品牌}", brand.name)
-            question = question.replace("{行业}", brand.industry)
+        sem = _platform_semaphores[platform_name]
+        retry_cfg = settings.platform_retry_config.get(
+            platform_name, {"max_retries": 2, "backoff_seconds": [1, 2]}
+        )
+        max_retries = retry_cfg["max_retries"]
+        backoffs = retry_cfg["backoff_seconds"]
 
-            system = active_prompt.system_prompt if active_prompt else "你是一个诚实的AI助手。"
-            result = await adapter.query(question, system_prompt=system)
-            return result, platform_name, tmpl
+        adapter = get_adapter(platform_name)
+        question = _build_question(tmpl)
+
+        retry_count = 0
+        rate_limited = False
+        final_error_code = ""
+        response = None
+
+        for attempt in range(max_retries + 1):
+            async with sem:
+                response = await adapter.query(question, system_prompt=system)
+
+            if not response.error:
+                break
+            if "429" in (response.error or "") and attempt < max_retries:
+                retry_count += 1
+                rate_limited = True
+                final_error_code = response.error[:47]
+                wait = backoffs[min(attempt, len(backoffs) - 1)]
+                await asyncio.sleep(wait)
+            else:
+                retry_count = attempt
+                if response.error:
+                    final_error_code = response.error[:47]
+                break
+
+        return response, platform_name, tmpl, {
+            "retry_count": retry_count,
+            "rate_limited": rate_limited,
+            "final_error_code": final_error_code,
+        }
 
     jobs = [query_one(p, t) for p in PLATFORMS for t in templates]
     responses = await asyncio.gather(*jobs, return_exceptions=True)
@@ -81,7 +121,7 @@ async def run_collection(
     for result in responses:
         if isinstance(result, Exception):
             continue
-        response, platform_name, tmpl = result
+        response, platform_name, tmpl, retry_info = result
         qr = QueryResult(
             brand_id=brand_id,
             organization_id=org_id,
@@ -99,6 +139,9 @@ async def run_collection(
             status="error" if response.error else "success",
             error_message=response.error or "",
             latency_ms=response.latency_ms,
+            retry_count=retry_info["retry_count"],
+            rate_limited=retry_info["rate_limited"],
+            final_error_code=retry_info["final_error_code"],
             collected_at=datetime.utcnow(),
         )
         db.add(qr)
