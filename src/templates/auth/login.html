@@ -30,27 +30,31 @@
             <button type="submit"
                     class="w-full py-2.5 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 cursor-pointer">
                 登录</button>
+            <div class="pt-3 border-t border-gray-100 mt-3">
+                <p class="text-xs text-slate-400 mb-2">本地开发 — 一键登录</p>
+                <button type="button" onclick="doLogin('test@geo.com','test123')"
+                        class="w-full py-2 bg-slate-100 text-slate-700 rounded-lg text-sm hover:bg-slate-200 cursor-pointer">
+                    test@geo.com (星巴克)</button>
+                <button type="button" onclick="doLogin('test@test.com','test123')"
+                        class="w-full py-2 bg-slate-100 text-slate-700 rounded-lg text-sm hover:bg-slate-200 cursor-pointer mt-2">
+                    test@test.com (测试品牌)</button>
+            </div>
         </form>
         <p class="text-xs text-slate-400 text-center mt-4">GEO Explorer — 品牌 AI 可见度监测平台</p>
     </div>
 
     <script>
-    async function handleLogin(e) {
-        e.preventDefault();
-        var btn = e.target.querySelector('button');
+    async function doLogin(email, password) {
+        var btn = document.querySelector('#login-form button[type=submit]');
         var errEl = document.getElementById('error-msg');
-        btn.textContent = '登录中...';
-        btn.disabled = true;
+        if (btn) { btn.textContent = '登录中...'; btn.disabled = true; }
         errEl.classList.add('hidden');
 
         try {
             var resp = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    email: document.getElementById('email').value,
-                    password: document.getElementById('password').value
-                })
+                body: JSON.stringify({ email: email, password: password })
             });
             if (!resp.ok) {
                 var data = await resp.json();
@@ -59,15 +63,21 @@
             var data = await resp.json();
             localStorage.setItem('geo_token', data.access_token);
             localStorage.setItem('geo_user', data.user_name);
-            // Set cookie for server-side auth on page loads
             document.cookie = 'geo_token=' + data.access_token + ';path=/;max-age=86400';
             window.location.href = '/';
         } catch (err) {
             errEl.textContent = err.message;
             errEl.classList.remove('hidden');
-            btn.textContent = '登录';
-            btn.disabled = false;
+            if (btn) { btn.textContent = '登录'; btn.disabled = false; }
         }
+    }
+
+    async function handleLogin(e) {
+        e.preventDefault();
+        await doLogin(
+            document.getElementById('email').value,
+            document.getElementById('password').value
+        );
     }
     </script>
 </body>
