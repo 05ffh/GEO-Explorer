@@ -104,13 +104,8 @@ async def trigger_gt_collection(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Trigger GT auto-collection for a brand."""
+    """Trigger GT auto-collection for a brand (async via Celery)."""
     brand = await get_org_brand_or_404(brand_id, user, db)
-    try:
-        from src.collector.gt_collector import collect_gt_candidate
-        candidate = await collect_gt_candidate(str(brand.id), str(user.organization_id), db)
-        return {"status": "collected", "candidate_id": str(candidate.id), "confidence": candidate.overall_confidence}
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error("GT collection failed for brand %s: %s", brand_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail="GT collection failed")
+    from src.collector.tasks import collect_gt_task
+    task = collect_gt_task.delay(str(brand.id), str(user.organization_id))
+    return {"status": "queued", "task_id": task.id, "brand_id": str(brand.id)}
