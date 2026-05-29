@@ -72,6 +72,19 @@ async def compute_and_save_metrics(
     except Exception:
         logger.exception("Insight generation failed for collection %s", collection_run_id)
 
+    # Auto-generate reports
+    try:
+        from src.reports.diagnostic import generate_diagnostic_report
+        from src.reports.action_plan import generate_optimization_plan
+        from src.models.brand import Brand
+        brand = (await db.execute(select(Brand).where(Brand.id == brand_id))).scalar_one_or_none()
+        brand_name = brand.name if brand else "Unknown"
+        await generate_diagnostic_report(brand_name, collection_run_id, brand_id, db)
+        await generate_optimization_plan(brand_name, collection_run_id, brand_id, db)
+        logger.info("Reports generated for collection %s", collection_run_id)
+    except Exception:
+        logger.exception("Report generation failed for collection %s", collection_run_id)
+
     return snapshot
 
 

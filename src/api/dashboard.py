@@ -1,8 +1,10 @@
+import os
 from fastapi import APIRouter, Depends
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc
 from src.database import get_db
-from src.api.deps import get_current_user
+from src.api.deps import get_current_user, get_org_brand_or_404
 from src.models.user import User
 from src.models.brand import Brand
 from src.models.metrics_snapshot import MetricsSnapshot
@@ -150,3 +152,51 @@ async def dashboard_overview(
         "content_package_count": package_count,
         "latest_insight": latest_insight,
     }
+
+
+@router.post("/brands/{brand_id}/reports/generate")
+async def generate_brand_reports(
+    brand_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate diagnostic and optimization reports for a brand."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+
+    # Find latest completed collection run
+    run = (await db.execute(
+        select(MetricsSnapshot.collection_run_id)
+        .where(MetricsSnapshot.brand_id == brand.id)
+        .order_by(desc(MetricsSnapshot.created_at))
+        .limit(1)
+    )).scalar_one_or_none()
+
+    if not run:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="No completed collection found for this brand")
+
+    rid = str(run)
+    from src.reports.diagnostic import generate_diagnostic_report
+    from src.reports.action_plan import generate_optimization_plan
+
+    md_path = await generate_diagnostic_report(brand.name, rid, str(brand.id), db)
+    result = await generate_optimization_plan(brand.name, rid, str(brand.id), db)
+
+    return {
+        "diagnostic_md": md_path,
+        "optimization_md": result["markdown"],
+        "optimization_pdf": result["pdf"],
+        "action_count": result["action_count"],
+        "p0_count": result["p0_count"],
+        "p1_count": result["p1_count"],
+    }
+
+
+@router.get("/reports/{filename}")
+async def download_report(filename: str):
+    """Download a generated report file."""
+    filepath = os.path.join("reports", filename)
+    if not os.path.exists(filepath):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Report not found")
+    return FileResponse(filepath, filename=filename)
