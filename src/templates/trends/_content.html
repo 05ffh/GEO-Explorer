@@ -1,0 +1,130 @@
+{% from "partials/components/empty_state.html" import empty_state %}
+
+{% if not vm.has_data %}
+{{ empty_state("暂无趋势数据", "完成至少 2 次采集后，KPI 趋势图将在此展示。") }}
+{% else %}
+
+<!-- KPI Trend Charts -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 chart-container">
+        <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">声量与引用</h3>
+        <canvas id="trend-chart-sov"></canvas>
+    </div>
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 chart-container">
+        <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">准确与完整</h3>
+        <canvas id="trend-chart-acc"></canvas>
+    </div>
+</div>
+
+<!-- Event Timeline -->
+{% if vm.events %}
+<div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+    <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">关键事件</h3>
+    <div class="flex flex-wrap gap-1.5">
+        {% for ev in vm.events %}
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs
+                     {% if ev.type == 'gt_update' %}bg-blue-100 text-blue-700
+                     {% elif ev.type == 'content_published' %}bg-green-100 text-green-700
+                     {% elif ev.type == 'prompt_change' %}bg-amber-100 text-amber-700
+                     {% else %}bg-slate-100 text-slate-600{% endif %}">
+            {{ ev.date }} — {{ ev.label }}</span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Attribution Table -->
+{% if vm.attribution %}
+<div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+    <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">Action 效果验证</h3>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="border-b border-gray-200 text-left text-xs text-slate-500 uppercase">
+                    <th class="py-2 pr-2">Action</th>
+                    <th class="py-2 pr-2">发布时间</th>
+                    <th class="py-2 pr-2">目标 KPI</th>
+                    <th class="py-2 pr-2">发布前</th>
+                    <th class="py-2 pr-2">发布后</th>
+                    <th class="py-2 pr-2">变化</th>
+                    <th class="py-2 pr-2">样本</th>
+                    <th class="py-2 pr-2">归因</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in vm.attribution %}
+                <tr class="border-b border-gray-100 hover:bg-slate-50">
+                    <td class="py-2 pr-2 font-medium text-text max-w-[200px] truncate" title="{{ row.theme_title }}">{{ row.theme_title }}</td>
+                    <td class="py-2 pr-2 text-slate-500">{{ row.publish_date }}</td>
+                    <td class="py-2 pr-2 text-xs">{{ row.kpi_label }}</td>
+                    <td class="py-2 pr-2">{{ (row.pre_avg * 100)|round|int }}%</td>
+                    <td class="py-2 pr-2">{{ (row.post_avg * 100)|round|int }}%</td>
+                    <td class="py-2 pr-2 {% if row.change > 0 %}text-green-600{% else %}text-red-600{% endif %} font-medium">{{ row.change_display }}</td>
+                    <td class="py-2 pr-2 text-slate-400">{{ row.sample_size }}</td>
+                    <td class="py-2 pr-2">
+                        <span class="badge {% if row.label_key == 'possible_action_effect' %}badge-success
+                                          {% elif row.label_key == 'no_obvious_effect' %}badge-pending
+                                          {% elif row.label_key == 'insufficient_sample' %}badge-tier-D
+                                          {% elif row.label_key == 'confounded' %}badge-p1
+                                          {% elif row.label_key == 'negative_effect_possible' %}badge-p0
+                                          {% else %}badge-pending{% endif %}"
+                              title="置信度: {{ row.confidence }} | {{ row.reason }}">{{ row.label_cn }}</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+{{ empty_state("暂无归因数据", "发布 Content 并完成复测后，Action 效果对比和归因分析将在此展示。") }}
+{% endif %}
+
+{% endif %}
+
+<script>
+(function() {
+    var dates = {{ vm.dates | tojson }};
+    var series = {{ vm.series | tojson }};
+    if (!dates.length) return;
+
+    function destroyChart(id) {
+        if (window.geoCharts && window.geoCharts[id]) {
+            window.geoCharts[id].destroy();
+            delete window.geoCharts[id];
+        }
+    }
+
+    function makeChart(id, kpis) {
+        destroyChart(id);
+        var ctx = document.getElementById(id);
+        if (!ctx) return;
+        var colors = ['#1E40AF','#3B82F6','#F59E0B','#22c55e','#ef4444','#8b5cf6','#ec4899','#06b6d4','#f97316','#84cc16'];
+        var datasets = kpis.map(function(kpi, i) {
+            return {
+                label: kpi, data: series[kpi] || [],
+                borderColor: colors[i % 10],
+                backgroundColor: colors[i % 10] + '20',
+                tension: 0.3, fill: false, pointRadius: 3,
+            };
+        });
+        window.geoCharts = window.geoCharts || {};
+        window.geoCharts[id] = new Chart(ctx, {
+            type: 'line',
+            data: { labels: dates, datasets: datasets },
+            options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15, font: { size: 11 } } } },
+                scales: {
+                    y: { ticks: { callback: function(v) { return (v * 100).toFixed(0) + '%'; } } },
+                    x: { ticks: { maxTicksLimit: 10, font: { size: 10 } } }
+                },
+                interaction: { intersect: false, mode: 'index' },
+            }
+        });
+    }
+
+    makeChart('trend-chart-sov', ['sov', 'citation_rate', 'first_rec_rate']);
+    makeChart('trend-chart-acc', ['accuracy_rate', 'completeness_rate']);
+})();
+</script>

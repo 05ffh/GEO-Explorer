@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 from src.view_models.dashboard import KPI_KEYS, get_latest_completed_run
 from src.view_models.hallucination import cluster_key
 from src.view_models.action import can_transition, TRANSITION_GUARDS
-from src.view_models.trends import compute_attribution_label
+from src.view_models.trends import compute_attribution
 
 
 class TestDashboardKPIKeys:
@@ -105,24 +105,36 @@ class TestActionTransitionGuards:
 
 
 class TestAttribution:
-    def test_insufficient_sample_label(self):
-        """P0-13: Sample < 3 returns '样本不足'."""
-        label = compute_attribution_label(0.5, 0.6, 2, False, False)
-        assert label == "样本不足"
+    def test_insufficient_sample(self):
+        """Sample < 4 → insufficient_sample."""
+        result = compute_attribution(0.5, 0.6, 3, False, 0.1, 0.05)
+        assert result["label_key"] == "insufficient_sample"
+        assert result["confidence"] == "low"
+        assert result["needs_more_data"] is True
 
-    def test_platform_failure_label(self):
-        label = compute_attribution_label(0.5, 0.6, 5, False, True)
-        assert label == "平台失败影响"
+    def test_confounded(self):
+        """Has confounders → confounded."""
+        result = compute_attribution(0.5, 0.6, 5, True, 0.1, 0.05)
+        assert result["label_key"] == "confounded"
 
-    def test_gt_update_label(self):
-        label = compute_attribution_label(0.5, 0.6, 5, True, False)
-        assert label == "GT 更新混淆"
+    def test_no_obvious_effect_small_change(self):
+        """Small change below threshold → no_obvious_effect."""
+        result = compute_attribution(0.50, 0.51, 5, False, 0.01, 0.05)
+        assert result["label_key"] == "no_obvious_effect"
+        assert result["confidence"] == "medium"
 
-    def test_possible_action_effect_label(self):
-        """Significant change → '可能由 Action 导致'."""
-        label = compute_attribution_label(0.5, 0.65, 5, False, False)
-        assert label == "可能由 Action 导致"
+    def test_possible_action_effect(self):
+        """Significant change above threshold + no confounders → possible_action_effect."""
+        result = compute_attribution(0.5, 0.65, 5, False, 0.15, 0.05)
+        assert result["label_key"] == "possible_action_effect"
 
-    def test_no_obvious_effect_label(self):
-        label = compute_attribution_label(0.50, 0.51, 5, False, False)
-        assert label == "无明显效果"
+    def test_negative_effect_possible(self):
+        """Significant negative change → negative_effect_possible."""
+        result = compute_attribution(0.70, 0.55, 5, False, -0.15, 0.05)
+        assert result["label_key"] == "negative_effect_possible"
+
+    def test_result_has_required_keys(self):
+        """Every attribution result is structured with all required keys."""
+        result = compute_attribution(0.5, 0.6, 5, False, 0.1, 0.05)
+        for key in ("label_key", "label_cn", "confidence", "reason", "needs_more_data"):
+            assert key in result

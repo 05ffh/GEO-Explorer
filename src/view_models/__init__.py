@@ -8,7 +8,7 @@ from src.view_models.evidence import build_evidence_vm
 from src.view_models.hallucination import build_hallucination_vm, cluster_key
 from src.view_models.action import build_action_vm, can_transition, TRANSITION_GUARDS
 from src.view_models.content import build_content_vm
-from src.view_models.trends import build_trends_vm, compute_attribution_label
+from src.view_models.trends import build_trends_vm, compute_attribution, get_kpi_value, get_kpi_threshold, infer_target_kpi
 
 __all__ = [
     "build_dashboard_vm",

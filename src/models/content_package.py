@@ -31,5 +31,7 @@ class ContentPackage(Base, UUIDMixin, TimestampMixin):
     fact_source_map: Mapped[dict] = mapped_column(JSONB, default=dict)
     risk_level: Mapped[str] = mapped_column(String(10), default="low")
     publish_url: Mapped[str] = mapped_column(Text, default="")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_platform: Mapped[str] = mapped_column(String(50), default="")
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="draft")

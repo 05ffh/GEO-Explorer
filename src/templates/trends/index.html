@@ -1,21 +1,18 @@
 {% extends "base.html" %}
-{% from "partials/components/empty_state.html" import empty_state %}
 {% block title %}{{ vm.brand.name }} — 趋势归因{% endblock %}
 {% block content %}
 <h1 class="font-heading text-2xl font-bold text-text mb-5">{{ vm.brand.name }} — 趋势与归因</h1>
 <div class="flex items-center gap-3 mb-4">
     <div class="flex bg-slate-100 rounded-lg p-0.5">
-        <button class="px-4 py-1.5 text-sm rounded-md bg-white text-text shadow-sm cursor-pointer">周</button>
-        <button class="px-4 py-1.5 text-sm rounded-md text-slate-600 cursor-pointer">月</button>
-        <button class="px-4 py-1.5 text-sm rounded-md text-slate-600 cursor-pointer">季</button>
+        {% for r, rk in [('周','week'),('月','month'),('季','quarter')] %}
+        <button class="px-4 py-1.5 text-sm rounded-md cursor-pointer transition-colors duration-150
+                       {% if vm.range == rk %}bg-white shadow-sm text-text{% else %}text-slate-600 hover:bg-slate-200{% endif %}"
+                hx-get="/brands/{{ vm.brand.id }}/trends-fragment?range_str={{ rk }}"
+                hx-target="#trends-content" hx-swap="innerHTML">{{ r }}</button>
+        {% endfor %}
     </div>
 </div>
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 chart-container"><canvas id="trend-chart-1"></canvas></div>
-    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 chart-container"><canvas id="trend-chart-2"></canvas></div>
-</div>
-<div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-    <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">Action 效果验证</h3>
-    {{ empty_state("暂无归因数据", "发布 Content 并完成复测后，Action 效果对比和归因分析将在此展示。", none, none) }}
+<div id="trends-content">
+    {% include "trends/_content.html" %}
 </div>
 {% endblock %}

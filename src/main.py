@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, Query
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
@@ -202,15 +202,28 @@ async def content_page(request: Request, brand_id: str,
 
 @app.get("/brands/{brand_id}/trends", response_class=HTMLResponse)
 async def trends_page(request: Request, brand_id: str,
+                      range_str: str = Query("month", pattern="^(week|month|quarter)$"),
                       user: User = Depends(get_current_user),
                       db: AsyncSession = Depends(get_db)):
     """Trends & attribution page."""
     brand = await get_org_brand_or_404(brand_id, user, db)
     from src.view_models.trends import build_trends_vm
-    vm = await build_trends_vm(brand, "month", user, db)
+    vm = await build_trends_vm(brand, range_str, user, db)
     org_brands = await _get_org_brands(user, db)
     return _render(request, "trends/index.html", _page_context(
         request, "trends", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
         vm=vm,
     ))
+
+
+@app.get("/brands/{brand_id}/trends-fragment", response_class=HTMLResponse)
+async def trends_fragment(request: Request, brand_id: str,
+                          range_str: str = Query("month", pattern="^(week|month|quarter)$"),
+                          user: User = Depends(get_current_user),
+                          db: AsyncSession = Depends(get_db)):
+    """HTMX fragment — return _content.html only, no shell."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.trends import build_trends_vm
+    vm = await build_trends_vm(brand, range_str, user, db)
+    return _render(request, "trends/_content.html", {"vm": vm})
