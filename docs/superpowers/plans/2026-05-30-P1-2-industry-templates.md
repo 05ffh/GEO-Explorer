@@ -1,19 +1,21 @@
-# P1-2 行业模板体系 实现计划 v2
+# P1-2 行业模板体系 实现计划 v2.1
 
-**日期:** 2026-05-30 | **状态:** Plan | **审阅:** 15 行业升级方案已通过方向评审
+**日期:** 2026-05-30 | **状态:** Plan | **审阅:** 已通过三轮专家评审
 **当前完成度:** 0%
 
 ---
 
 ## 一、目标
 
-为 15 个高价值行业建立 GEO 诊断模板，让系统能根据不同行业判断：什么事实最重要、什么错误最危险、什么竞品最相关、什么内容最能修复 AI 认知。
+为 15 个高价值行业建立 GEO 诊断模板体系，让系统能根据不同行业判断：什么事实最重要、什么错误最危险、什么竞品最相关、什么内容最能修复 AI 认知。
+
+核心原则：行业模板不只是配置表，而是系统面向不同行业交付专业诊断的核心资产。
 
 ---
 
 ## 二、15 个行业模块
 
-### 阶段一：核心 8 个行业（优先）
+**阶段一：核心 8 个**
 
 | # | 行业 | slug |
 |---|------|------|
@@ -26,7 +28,7 @@
 | 7 | 教育培训与知识服务 | education |
 | 8 | 电商零售与消费品牌 | ecommerce_retail |
 
-### 阶段二：扩展 7 个行业
+**阶段二：扩展 7 个**
 
 | # | 行业 | slug |
 |---|------|------|
@@ -38,101 +40,119 @@
 | 14 | 美妆个护与时尚生活 | beauty_fashion |
 | 15 | 政府公共服务与城市品牌 | public_sector_city |
 
----
-
-## 三、每个行业模板的 7 维度设计
-
-| 维度 | 内容 |
-|------|------|
-| 核心 GT 字段 | required_gt_fields + industry_specific_fields |
-| KPI 权重 | kpi_weights (sum=1.0)，不同行业侧重不同 KPI |
-| 行业问题模板 | industry_query_templates (>=12 个) |
-| 竞品规则 | competitor_rules（同品类/同价位/同区域/同场景） |
-| 风险词库 | risk_keywords（P0/P1 分级） |
-| 合规约束 | compliance_constraints（禁止声明 + 引用要求） |
-| Content 模板 | content_templates（行业化内容生成方向） |
+**兜底模板：** general / unknown / hybrid
 
 ---
 
-## 四、数据模型
+## 三、数据模型
+
+### IndustryTemplate
 
 ```python
 class IndustryTemplate(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "industry_templates"
-    name: Mapped[str]
-    slug: Mapped[str]
-    description: Mapped[str]
-    version: Mapped[str] = mapped_column(default="1.0")
-    status: Mapped[str] = mapped_column(default="draft")  # draft/active/deprecated
-
+    name, slug, description: str
+    parent_id: uuid | None               # 层级继承
+    level: str                            # domain / category / subcategory
+    domain, category, subcategory: str
+    version: str (default="1.0")
+    status: str (draft/active/deprecated)
+    region: str (CN/SG/US/Global)
+    locale: str (zh-CN/en-US)
+    business_model_tags: list             # platform/subscription/offline_chain/...
     # GT
-    required_gt_fields: Mapped[list] = mapped_column(JSONB, default=list)
-    optional_gt_fields: Mapped[list] = mapped_column(JSONB, default=list)
-    high_risk_gt_fields: Mapped[list] = mapped_column(JSONB, default=list)
-    industry_specific_fields: Mapped[dict] = mapped_column(JSONB, default=dict)
-    gt_field_weights: Mapped[dict] = mapped_column(JSONB, default=dict)
-
+    required_gt_fields, optional_gt_fields, high_risk_gt_fields: list
+    industry_specific_fields, field_evidence_requirements, gt_field_weights: dict
     # KPI
-    kpi_weights: Mapped[dict] = mapped_column(JSONB, default=dict)
-
+    kpi_weights: dict                     # sum=1
     # 竞品
-    competitor_rules: Mapped[dict] = mapped_column(JSONB, default=dict)
-
+    competitor_rules: dict                # direct/substitute/category_peer/price_band/...
     # 风险
-    risk_keywords: Mapped[list] = mapped_column(JSONB, default=list)
-    compliance_constraints: Mapped[dict] = mapped_column(JSONB, default=dict)
-
+    risk_rules: list                      # [{term,risk_level,risk_type,match_type,applies_to,action}]
+    compliance_constraints: dict          # {forbidden_claims,required_disclaimers,source_required_rules,...}
     # Action & Content
-    action_rules: Mapped[dict] = mapped_column(JSONB, default=dict)
-    content_templates: Mapped[dict] = mapped_column(JSONB, default=dict)
+    action_rules, content_templates, review_rules: dict
+    # 审计
+    created_by, updated_by: uuid | None
+    change_log: list
 ```
 
-Brand 扩展：
+### IndustryQueryTemplate（独立模型）
+
 ```python
-primary_industry_template_id: Mapped[uuid.UUID | None]
-secondary_industry_template_ids: Mapped[list] = mapped_column(JSONB, default=list)
+class IndustryQueryTemplate(Base, UUIDMixin, TimestampMixin):
+    __tablename__ = "industry_query_templates"
+    industry_template_id: uuid
+    dimension, intent: str
+    question_text: str                    # "{brand} 是否有正规金融牌照？"
+    uses_brand_name: bool
+    target_kpis, target_gt_fields: list
+    risk_level: str (P0/P1/P2)
+    weight: float
+    enabled: bool
+```
+
+### Brand 扩展
+
+```python
+primary_industry_template_id: uuid | None
+secondary_industry_template_ids: list
+industry_template_version: str | None
+industry_template_changed_at: datetime | None
+industry_template_changed_by: uuid | None
+industry_template_change_reason: str
 ```
 
 ---
 
-## 五、实现任务
+## 四、实现任务（9 个）
 
-### Task 1: IndustryTemplate 模型 + Migration + 种子数据
+### Task 1: 行业模型 + Migration
 
-创建模型，运行 migration，编写 15 个行业的完整种子数据脚本。
+创建 IndustryTemplate + IndustryQueryTemplate 模型，Brand 扩展，运行 migration。
 
-### Task 2: Brand 行业关联
+### Task 2: 风险与合规规则结构化
 
-Brand 增加 primary + secondary template_id，支持模板选择。
+risk_keywords → risk_rules（含 risk_type 枚举：financial_return_claim/medical_claim/education_outcome_claim/...）。compliance_constraints 拆为 5 类：forbidden_claims/required_disclaimers/source_required_rules/review_required_rules/content_generation_constraints。
 
-### Task 3: 行业规则接入分析管线
+### Task 3: 竞品规则分层
 
-- Completeness 使用行业字段权重
-- 综合评分使用行业 KPI 权重
-- 幻觉检测使用行业 risk_keywords
+competitor_rules 拆为：direct/substitute/category_peer/price_band/scenario_peer/region_peer/wrong_competitor_types。
 
-### Task 4: 模板管理 API + Dashboard
+### Task 4: 行业问题库
 
-模板列表、详情、品牌关联、行业诊断说明展示。
+每行业 >=12 个 IndustryQueryTemplate，每条绑定 dimension/intent/target_kpis/target_gt_fields/risk_level。
 
-### Task 5: 测试
+### Task 5: 种子数据（分阶段）
 
-- 15 模板 seed 验证
-- 行业字段/KPI 权重/风险规则测试
-- 品牌模板变更审计测试
+阶段一：核心 8 行业完整种子数据；阶段二：扩展 7 行业 + 3 兜底模板。每行业满足：>=10 required_gt_fields, >=6 industry_specific_fields, >=10 risk_rules, >=5 compliance_constraints, >=4 content_templates, kpi_weights 和为 1。
+
+### Task 6: 行业规则接入分析管线
+
+Completeness/综合评分/幻觉检测/Action 生成/Content 生成/审核流 全部按行业规则执行。
+
+### Task 7: 行业模板选择与推荐
+
+手动选择 + 系统推荐（基于品牌名/官网/产品/GT 字段）+ general/unknown/hybrid 兜底 + primary+secondary。变更写入 AuditLog。
+
+### Task 8: Dashboard + 报告行业解释
+
+Dashboard 行业诊断说明卡 + KPI 权重解释 + 报告行业口径说明。
+
+### Task 9: 测试（>=45 个）
+
+seed 质量 15 + 问题模板 4 + 风险规则 5 + 品牌关联 6 + Action/Content 5 + 行业推荐 5 + 变更审计 5。
 
 ---
 
-## 六、质量标准
+## 五、验证标准
 
-每行业模板至少：>=10 required_gt_fields, >=6 industry_specific_fields, >=10 risk_keywords, >=5 compliance_constraints, >=4 content_templates, kpi_weights sum=1
-
----
-
-## 七、验证标准
-
-- [ ] 15 个行业模板种子数据可查询
-- [ ] 每个模板满足质量标准
-- [ ] 品牌可关联行业模板
+- [ ] 15 行业 + 3 兜底模板种子数据
+- [ ] IndustryQueryTemplate 独立模型可用
+- [ ] risk_rules + compliance_constraints 结构化
+- [ ] competitor_rules 分层
+- [ ] 品牌行业关联含版本+审计
+- [ ] 行业模板推荐机制可用
+- [ ] Dashboard 行业解释卡
 - [ ] 131 现有 tests 继续通过
-- [ ] 新增 >=15 个测试
+- [ ] 新增 >=45 个测试
