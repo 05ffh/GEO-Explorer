@@ -12,6 +12,10 @@ from src.api import auth, brands, metrics, collection_runs, hallucinations, acti
 from src.schemas.ground_truth import KPI_DISPLAY_NAMES
 
 app = FastAPI(title="GEO Explorer", version="0.1.0")
+
+# Request ID middleware for audit log linkage
+from src.middleware.request_id import RequestIdMiddleware
+app.add_middleware(RequestIdMiddleware)
 app.mount("/static", StaticFiles(directory="src/static"), name="static")
 templates = Jinja2Templates(directory="src/templates")
 

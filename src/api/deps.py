@@ -43,6 +43,22 @@ async def get_current_user(
     return user
 
 
+def require_permission(permission: str):
+    """FastAPI dependency: raise 403 with structured error if permission denied."""
+    async def checker(user: User = Depends(get_current_user)):
+        from src.auth.permissions import PERMISSIONS
+        allowed = PERMISSIONS.get(permission, [])
+        if user.role not in allowed:
+            raise HTTPException(status_code=403, detail={
+                "error": "permission_denied",
+                "required": permission,
+                "user_role": user.role,
+                "message": "你没有此操作的权限",
+            })
+        return user
+    return checker
+
+
 async def get_org_brand_or_404(brand_id, user: User, db: AsyncSession):
     from src.models.brand import Brand
     brand = (await db.execute(
@@ -54,3 +70,51 @@ async def get_org_brand_or_404(brand_id, user: User, db: AsyncSession):
     if not brand:
         raise HTTPException(status_code=404, detail="Brand not found")
     return brand
+
+
+async def get_org_gt_candidate_or_404(candidate_id, user: User, db: AsyncSession):
+    """Fetch GT candidate, verify org ownership. Cross-org returns 404."""
+    from src.models.gt_candidate import GroundTruthCandidate
+    resource = (await db.execute(
+        select(GroundTruthCandidate).where(GroundTruthCandidate.id == candidate_id)
+    )).scalar_one_or_none()
+    if not resource or resource.organization_id != user.organization_id:
+        raise HTTPException(status_code=404, detail="Not found")
+    return resource
+
+
+async def get_org_action_theme_or_404(theme_id, user: User, db: AsyncSession):
+    """Fetch ActionTheme, verify org ownership."""
+    from src.models.action_theme import ActionTheme
+    resource = (await db.execute(
+        select(ActionTheme).where(ActionTheme.id == theme_id)
+    )).scalar_one_or_none()
+    if not resource or resource.organization_id != user.organization_id:
+        raise HTTPException(status_code=404, detail="Not found")
+    return resource
+
+
+async def get_org_content_package_or_404(package_id, user: User, db: AsyncSession):
+    """Fetch ContentPackage, verify org ownership."""
+    from src.models.content_package import ContentPackage
+    resource = (await db.execute(
+        select(ContentPackage).where(ContentPackage.id == package_id)
+    )).scalar_one_or_none()
+    if not resource or resource.organization_id != user.organization_id:
+        raise HTTPException(status_code=404, detail="Not found")
+    return resource
+
+
+async def get_org_hallucination_or_404(hallucination_id, user: User, db: AsyncSession):
+    """Fetch HallucinationResult, verify org via brand."""
+    from src.models.hallucination import HallucinationResult
+    from src.models.brand import Brand
+    h = (await db.execute(
+        select(HallucinationResult).where(HallucinationResult.id == hallucination_id)
+    )).scalar_one_or_none()
+    if not h:
+        raise HTTPException(status_code=404, detail="Not found")
+    brand = (await db.execute(select(Brand).where(Brand.id == h.brand_id))).scalar_one_or_none()
+    if not brand or brand.organization_id != user.organization_id:
+        raise HTTPException(status_code=404, detail="Not found")
+    return h
