@@ -44,16 +44,34 @@ async def get_current_user(
 
 
 def require_permission(permission: str):
-    """FastAPI dependency: raise 403 with structured error if permission denied."""
+    """FastAPI dependency: raise 403 with structured error if permission denied.
+
+    Checks platform_role first (system_owner has all), then org role.
+    """
     async def checker(user: User = Depends(get_current_user)):
-        from src.auth.permissions import PERMISSIONS
-        allowed = PERMISSIONS.get(permission, [])
-        if user.role not in allowed:
+        from src.auth.permissions import has_permission as _has_perm
+        if not _has_perm(user.platform_role, user.role, permission):
             raise HTTPException(status_code=403, detail={
                 "error": "permission_denied",
                 "required": permission,
                 "user_role": user.role,
+                "platform_role": user.platform_role,
                 "message": "你没有此操作的权限",
+            })
+        return user
+    return checker
+
+
+def require_platform_permission(permission: str):
+    """FastAPI dependency: only platform roles can pass."""
+    async def checker(user: User = Depends(get_current_user)):
+        from src.auth.permissions import has_platform_permission
+        if not has_platform_permission(user.platform_role, permission):
+            raise HTTPException(status_code=403, detail={
+                "error": "platform_permission_denied",
+                "required": permission,
+                "platform_role": user.platform_role,
+                "message": "需要平台级权限",
             })
         return user
     return checker

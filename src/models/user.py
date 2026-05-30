@@ -10,5 +10,7 @@ class User(Base, UUIDMixin, TimestampMixin):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(50), default="viewer")
+    platform_role: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    # platform_role: system_owner / system_admin / system_operator / None(=org member)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     organization: Mapped["Organization"] = relationship(back_populates="users")

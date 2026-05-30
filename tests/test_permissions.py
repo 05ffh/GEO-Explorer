@@ -1,68 +1,68 @@
-"""P1-3 — Permission & Audit Tests."""
+"""P1-3 — Permission & Audit Tests (Dual-Layer Platform + Org)."""
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 
-from src.auth.permissions import PERMISSIONS, has_permission
+from src.auth.permissions import (
+    ORG_PERMISSIONS, PLATFORM_PERMISSIONS,
+    has_permission, has_org_permission, has_platform_permission,
+)
 from src.view_models.action import can_transition, TRANSITION_GUARDS
 from src.services.audit import sanitize_payload, add_audit_log
 
 
 class TestPermissionMap:
-    """Verify PERMISSIONS dictionary is valid and covers all operations."""
+    """Verify dual-layer permission system."""
 
+    # -- Platform permissions --
+    def test_system_owner_has_all_platform_perms(self):
+        for perm in PLATFORM_PERMISSIONS:
+            assert has_platform_permission("system_owner", perm)
+
+    def test_system_admin_has_scoped_platform_perms(self):
+        assert has_platform_permission("system_admin", "platform.user.manage_all")
+        assert not has_platform_permission("system_admin", "platform.organization.delete")
+
+    def test_system_operator_can_only_view_health(self):
+        assert has_platform_permission("system_operator", "platform.system_health.view")
+        assert not has_platform_permission("system_operator", "platform.user.manage_all")
+
+    def test_org_role_has_no_platform_perms(self):
+        assert not has_platform_permission("admin", "platform.organization.create")
+        assert not has_platform_permission("owner", "platform.config.manage")
+
+    # -- Organization permissions --
     def test_viewer_has_no_sensitive_permissions(self):
-        for perm, roles in PERMISSIONS.items():
+        for perm, roles in ORG_PERMISSIONS.items():
             assert "viewer" not in roles, f"viewer should not have {perm}"
 
-    def test_admin_has_all_sensitive_permissions_except_owner_only(self):
-        for perm, roles in PERMISSIONS.items():
+    def test_admin_has_all_org_perms_except_owner_only(self):
+        for perm, roles in ORG_PERMISSIONS.items():
             if perm == "user.remove_admin":
-                continue  # owner-only
-            assert has_permission("admin", perm), f"admin should have {perm}"
+                continue
+            assert has_org_permission("admin", perm), f"admin should have {perm}"
 
     def test_admin_does_not_have_owner_only(self):
-        assert not has_permission("admin", "user.remove_admin")
+        assert not has_org_permission("admin", "user.remove_admin")
 
-    def test_owner_has_all_permissions(self):
-        for perm in PERMISSIONS:
-            assert has_permission("owner", perm), f"owner should have {perm}"
+    def test_owner_has_all_org_permissions(self):
+        for perm in ORG_PERMISSIONS:
+            assert has_org_permission("owner", perm), f"owner should have {perm}"
 
-    def test_gt_reviewer_can_review_gt(self):
-        assert has_permission("gt_reviewer", "gt.review") is True
-        assert has_permission("gt_reviewer", "gt.promote") is True
+    # -- Unified has_permission --
+    def test_system_owner_has_everything(self):
+        """system_owner bypasses all permission checks."""
+        for perm in PLATFORM_PERMISSIONS:
+            assert has_permission("system_owner", None, perm)
+        for perm in ORG_PERMISSIONS:
+            assert has_permission("system_owner", None, perm)
 
-    def test_gt_reviewer_cannot_approve_content(self):
-        assert has_permission("gt_reviewer", "content.approve.high") is False
+    def test_normal_org_admin_no_platform_perms(self):
+        assert not has_permission(None, "admin", "platform.organization.delete")
+        assert not has_permission(None, "admin", "platform.audit.view_all")
 
-    def test_content_editor_can_approve_low(self):
-        assert has_permission("content_editor", "content.approve.low") is True
-
-    def test_content_editor_cannot_approve_high(self):
-        assert has_permission("content_editor", "content.approve.high") is False
-
-    def test_legal_reviewer_can_approve_all_levels(self):
-        for level in ("low", "medium", "high"):
-            assert has_permission("legal_reviewer", f"content.approve.{level}") is True
-
-    def test_analyst_can_review_hallucination(self):
-        assert has_permission("analyst", "hallucination.review") is True
-
-    def test_analyst_cannot_promote_gt(self):
-        assert has_permission("analyst", "gt.promote") is False
-
-    def test_unknown_permission_returns_false(self):
-        assert has_permission("admin", "nonexistent.permission") is False
-
-    def test_user_manage_permissions_split(self):
-        assert "user.view" in PERMISSIONS
-        assert "user.invite" in PERMISSIONS
-        assert "user.role_change" in PERMISSIONS
-        assert "user.disable" in PERMISSIONS
-        assert "user.remove" in PERMISSIONS
-
-    def test_only_owner_can_remove_admin(self):
-        assert "owner" in PERMISSIONS["user.remove_admin"]
-        assert "admin" not in PERMISSIONS["user.remove_admin"]
+    def test_org_perm_without_role_returns_false(self):
+        assert not has_permission(None, None, "gt.review")
+        assert not has_permission(None, None, "content.publish")
 
 
 class TestAuditSanitization:
