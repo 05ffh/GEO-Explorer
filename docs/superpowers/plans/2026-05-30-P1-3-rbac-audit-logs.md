@@ -1,49 +1,71 @@
-# P1-3 权限与审核流 实现计划 v2
+# P1-3 权限与审核流 实现计划 v2.1
 
-**日期:** 2026-05-30 | **状态:** Plan | **审阅:** 已通过方向评审，v2 修正全部 P0/P1
+**日期:** 2026-05-30 | **状态:** Plan | **审阅:** 已通过三轮专家评审
 **当前完成度:** 50% → 目标 100%
 
 ---
 
 ## 一、目标
 
-从"定义了 6 个角色 + 前端按钮隐藏"升级为"permission-based 后端强制权限 + before/after 审计 + 组织隔离 + 状态业务条件守卫 + 字段级追踪"。
+从"定义了 6 个角色 + 前端按钮隐藏"升级为"permission-based 后端强制权限 + before/after 审计 + 组织隔离 + 状态业务条件守卫 + 字段级追踪 + 审计防篡改"。
 
 核心原则：
 ```text
 前端权限 = 用户体验优化
 后端权限 = 安全边界
-审计日志 = 合规追溯
+审计日志 = 合规追溯（append-only, 可脱敏）
 ```
 
 ---
 
-## 二、修正清单（v1 → v2）
+## 二、角色体系（统一为 7 角色）
 
-| # | 问题 | v1 做法 | v2 修正 |
-|---|------|---------|---------|
-| P0-1 | 组织隔离 | 无 | 所有资源查询先校验 `organization_id == user.organization_id`，跨组织返回 404 |
-| P0-2 | 审计事务 | 独立 `db.commit()` | `db.add(log)` 参与同一事务，外层统一 commit/rollback |
-| P0-3 | 审计结构 | 仅 `detail: dict` | 增加 `before_json` / `after_json` / `reason` / `request_id` |
-| P0-4 | 枚举 | 自由文本 | `AuditAction` / `AuditTargetType` 枚举 |
-| P0-5 | 状态条件 | 仅 TRANSITION_GUARDS | 两层：Role Guard（角色）+ Condition Guard（业务条件） |
-| P0-6 | 内容审批 | 仅 legal_reviewer/admin | 按风险等级：low→editor可审 / high→legal+admin |
-| P0-7 | GT 审计 | candidate 级 | 字段级：gt_field_accept/edit/delete/mark_uncertain/resolve_conflict |
-| P0-8 | 幻觉裁决 | confirmed/dismissed | 7 种：confirmed_error/dismissed/partial/gt_is_wrong/outdated/needs_evidence/low_risk |
-| P0-9 | 报告审计 | 无范围 | report_type + included_sections + export_format |
-| P0-10 | 用户管理 | 缺失 | 成员列表 + 角色变更 + 安全规则 |
+| 角色 | 说明 |
+|------|------|
+| owner | 组织拥有者（管理账单、转移所有权、管理 admin） |
+| admin | 组织管理员（管理成员、权限、品牌配置） |
+| analyst | 数据分析师（查看 KPI + 触发采集 + 复核幻觉） |
+| gt_reviewer | GT 审核员（字段级审核 + Promote） |
+| content_editor | 内容编辑（生成内容 + 标记发布） |
+| legal_reviewer | 法务审核（审批高风险内容） |
+| viewer | 只读（查看 Dashboard 和报告） |
+
+安全规则：
+- 每个 org 至少 1 个 owner
+- admin 不能修改/降级/移除 owner
+- 不能移除/降级最后一个 admin（如无 owner）
+- 用户不能把自己降级为导致组织无管理员的状态
 
 ---
 
-## 三、实现任务
+## 三、权限矩阵
 
-### Task 1: AuditLog 模型 + Permission Map + 枚举
+| 功能 | viewer | analyst | gt_reviewer | content_editor | legal_reviewer | admin | owner |
+|------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| 查看 Dashboard | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 触发采集 | - | ✓ | - | - | - | ✓ | ✓ |
+| 审核 GT 字段 | - | - | ✓ | - | - | ✓ | ✓ |
+| Promote GT | - | - | ✓ | - | - | ✓ | ✓ |
+| 复核幻觉 | - | ✓ | ✓ | - | - | ✓ | ✓ |
+| 确认 Action | - | ✓ | - | - | - | ✓ | ✓ |
+| 生成内容 | - | - | - | ✓ | - | ✓ | ✓ |
+| 审核高风险内容 | - | - | - | - | ✓ | ✓ | ✓ |
+| 标记发布 | - | - | - | ✓ | - | ✓ | ✓ |
+| 导出摘要报告 | - | ✓ | - | - | - | ✓ | ✓ |
+| 导出完整报告 | - | - | - | - | - | ✓ | ✓ |
+| 查看组织审计 | - | - | - | - | - | ✓ | ✓ |
+| 管理成员 | - | - | - | - | - | ✓ | ✓ |
+| 转移所有权 | - | - | - | - | - | - | ✓ |
 
-**文件:** `src/models/audit_log.py`（新建）+ Migration
+---
+
+## 四、实现任务
+
+### Task 1: AuditLog 模型 + 枚举 + Permission Map
+
+**文件:** `src/models/audit_log.py` + Migration
 
 ```python
-import enum
-
 class AuditAction(str, enum.Enum):
     GT_FIELD_ACCEPT = "gt_field_accept"
     GT_FIELD_EDIT = "gt_field_edit"
@@ -56,83 +78,65 @@ class AuditAction(str, enum.Enum):
     CONTENT_REJECT = "content_reject"
     CONTENT_PUBLISH = "content_publish"
     REPORT_EXPORT = "report_export"
-    ROLE_CHANGE = "role_change"
+    USER_INVITE = "user_invite"
+    USER_ROLE_CHANGE = "user_role_change"
+    USER_DISABLE = "user_disable"
+    USER_REMOVE = "user_remove"
     PERMISSION_DENIED = "permission_denied"
-
-class AuditTargetType(str, enum.Enum):
-    GT_CANDIDATE = "gt_candidate"
-    GT_FIELD = "gt_field"
-    HALLUCINATION = "hallucination"
-    ACTION_THEME = "action_theme"
-    CONTENT_PACKAGE = "content_package"
-    REPORT = "report"
-    BRAND = "brand"
-    USER = "user"
-
-
-class AuditLog(Base, UUIDMixin):
-    __tablename__ = "audit_logs"
-    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
-    brand_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("brands.id"), nullable=True, index=True)
-    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    user_name: Mapped[str] = mapped_column(String(255), default="")
-    user_role: Mapped[str] = mapped_column(String(50), default="")
-    action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    target_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
-    target_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    before_json: Mapped[dict] = mapped_column(JSONB, default=dict)
-    after_json: Mapped[dict] = mapped_column(JSONB, default=dict)
-    detail: Mapped[dict] = mapped_column(JSONB, default=dict)
-    reason: Mapped[str] = mapped_column(Text, default="")
-    request_id: Mapped[str] = mapped_column(String(100), default="", index=True)
-    ip_address: Mapped[str] = mapped_column(String(50), default="")
-    user_agent: Mapped[str] = mapped_column(String(500), default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 ```
 
-**文件:** `src/auth/permissions.py`（新建）
+AuditLog 包含字段：`organization_id`, `brand_id`, `user_id`, `user_name`, `user_role`, `action`, `target_type`, `target_id`, `before_json`, `after_json`, `detail`, `reason`, `result`(success/denied/blocked/failed), `error_code`, `error_message`, `request_id`, `ip_address`, `user_agent`, `created_at`。
+
+审计策略：
+- Append-only：不提供 update/delete API
+- 保留至少 180 天
+- 查询 API 对非 admin 脱敏 detail 字段
+
+**文件:** `src/auth/permissions.py`
 
 ```python
 PERMISSIONS = {
-    "gt.review": {"roles": ["gt_reviewer", "admin"]},
-    "gt.promote": {"roles": ["gt_reviewer", "admin"]},
-    "hallucination.review": {"roles": ["analyst", "gt_reviewer", "admin"]},
-    "action.transition": {"roles": ["analyst", "content_editor", "admin"]},
-    "content.approve.low": {"roles": ["content_editor", "legal_reviewer", "admin"]},
-    "content.approve.medium": {"roles": ["legal_reviewer", "admin"]},
-    "content.approve.high": {"roles": ["legal_reviewer", "admin"]},
-    "content.publish": {"roles": ["content_editor", "admin"]},
-    "report.export.summary": {"roles": ["analyst", "admin"]},
-    "report.export.full": {"roles": ["admin"]},
-    "audit.view.org": {"roles": ["admin"]},
-    "user.manage": {"roles": ["admin"]},
+    "gt.review":      ["gt_reviewer", "admin", "owner"],
+    "gt.promote":     ["gt_reviewer", "admin", "owner"],
+    "hallucination.review": ["analyst", "gt_reviewer", "admin", "owner"],
+    "action.transition":    ["analyst", "content_editor", "admin", "owner"],
+    "content.approve.low":  ["content_editor", "legal_reviewer", "admin", "owner"],
+    "content.approve.medium": ["legal_reviewer", "admin", "owner"],
+    "content.approve.high": ["legal_reviewer", "admin", "owner"],
+    "content.approve.legal_sensitive": ["legal_reviewer", "admin", "owner"],  # P2: 双人确认
+    "content.publish":  ["content_editor", "admin", "owner"],
+    "report.export.summary": ["analyst", "admin", "owner"],
+    "report.export.full":    ["admin", "owner"],
+    "audit.view.org":   ["admin", "owner"],
+    "user.view":        ["admin", "owner"],
+    "user.invite":      ["admin", "owner"],
+    "user.role_change": ["admin", "owner"],
+    "user.disable":     ["admin", "owner"],
+    "user.remove":      ["admin", "owner"],
+    "user.remove_admin": ["owner"],
 }
-
-def has_permission(user_role: str, permission: str) -> bool:
-    allowed = PERMISSIONS.get(permission, {}).get("roles", [])
-    return user_role in allowed
 ```
 
 ---
 
-### Task 2: 审计日志写入工具（同一事务）
+### Task 2: 审计日志写入工具 + RequestIdMiddleware
 
-**文件:** `src/services/audit.py`（新建）
+**文件:** `src/services/audit.py`
 
 ```python
-async def add_audit_log(db, user, action: str, target_type: str, target_id: str,
-                        before: dict = None, after: dict = None,
-                        detail: dict = None, reason: str = "",
-                        brand_id: str = None, request: Request = None):
-    """Add audit log to current transaction — do NOT commit here."""
+async def add_audit_log(db, user, action, target_type, target_id,
+                        before=None, after=None, detail=None, reason="",
+                        result="success", error_code="", error_message="",
+                        brand_id=None, request=None):
+    """Add audit log to current transaction — do NOT commit here (P0-2)."""
     log = AuditLog(
-        organization_id=user.organization_id,
-        brand_id=brand_id,
+        organization_id=user.organization_id, brand_id=brand_id,
         user_id=user.id, user_name=user.name or "", user_role=user.role or "",
         action=action, target_type=target_type, target_id=str(target_id),
         before_json=before or {}, after_json=after or {},
         detail=detail or {}, reason=reason,
-        request_id=getattr(request, "headers", {}).get("x-request-id", "") if request else "",
+        result=result, error_code=error_code, error_message=error_message,
+        request_id=request.state.request_id if request and hasattr(request.state, 'request_id') else "",
         ip_address=request.client.host if request and request.client else "",
         user_agent=request.headers.get("user-agent", "") if request else "",
     )
@@ -140,146 +144,182 @@ async def add_audit_log(db, user, action: str, target_type: str, target_id: str,
     return log
 ```
 
-业务端点调用模式：
+**文件:** `src/middleware/request_id.py`
+
 ```python
-# 业务操作
-theme.status = "confirmed"
-await add_audit_log(db, user, AuditAction.ACTION_TRANSITION, AuditTargetType.ACTION_THEME,
-                    theme.id, before={"status": "detected"}, after={"status": "confirmed"})
-# 统一提交
-await db.commit()
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 ```
 
 ---
 
-### Task 3: RBAC 依赖注入 + 资源归属查询
+### Task 3: RBAC 依赖注入 + 专用资源归属函数
 
 **文件:** `src/api/deps.py`（扩展）
 
 ```python
 def require_permission(permission: str):
-    """FastAPI dependency: check permission, raise 403 if denied."""
+    """FastAPI dependency: return 403 with structured error if denied."""
     async def checker(user: User = Depends(get_current_user)):
-        from src.auth.permissions import has_permission
-        if not has_permission(user.role or "", permission):
+        from src.auth.permissions import PERMISSIONS
+        allowed = PERMISSIONS.get(permission, {}).get("roles", []) if isinstance(PERMISSIONS.get(permission), dict) else PERMISSIONS.get(permission, [])
+        if user.role not in allowed:
             raise HTTPException(status_code=403, detail={
-                "error": "permission_denied",
-                "required": permission,
-                "user_role": user.role,
-                "message": "你没有此操作的权限",
+                "error": "permission_denied", "required": permission,
+                "user_role": user.role, "message": "你没有此操作的权限",
             })
         return user
     return checker
 
-
-async def get_org_resource_or_404(model, resource_id, user, db):
-    """Fetch resource, verify org ownership. Returns 404 (not 403) for cross-org."""
-    result = await db.execute(select(model).where(model.id == resource_id))
-    resource = result.scalar_one_or_none()
-    if not resource or resource.organization_id != user.organization_id:
-        raise HTTPException(status_code=404, detail="Not found")
-    return resource
+# 专用资源归属函数（P0-8：不依赖通用 model.organization_id 假设）
+async def get_org_brand_or_404(brand_id, user, db): ...       # Brand.organization_id
+async def get_org_gt_candidate_or_404(cid, user, db): ...      # GroundTruthCandidate.organization_id
+async def get_org_action_theme_or_404(tid, user, db): ...      # ActionTheme.organization_id
+async def get_org_content_package_or_404(pid, user, db): ...   # ContentPackage.organization_id
+async def get_org_hallucination_or_404(hid, user, db): ...     # HallucinationResult → brand → org
+async def get_org_audit_log_or_404(aid, user, db): ...         # AuditLog.organization_id
+# 每个函数内部做 organization_id 校验，跨组织返回 404
 ```
 
 ---
 
-### Task 4: API 端点权限 + 审计加固
+### Task 4: 状态守卫细化 — ActionTheme + ContentPackage
 
-逐端点改造。模式：`Depends(require_permission("xxx"))` + `add_audit_log` + 业务条件守卫。
+**ActionTheme 状态流转 + 条件：**
 
-**覆盖清单：**
+| 流转 | 角色 | 业务条件 |
+|------|------|---------|
+| detected → confirmed | analyst/admin/owner | 有证据链 |
+| confirmed → content_generating | content_editor/admin/owner | 有 target KPI + recommended_content_types |
+| content_generating → content_ready | content_editor/admin/owner | 已生成至少 1 个 ContentPackage |
+| content_ready → verification_pending | content_editor/admin/owner | 有关联 ContentPackage 已标记发布 |
+| verification_pending → verified | analyst/admin/owner | 有复测结果或 AttributionResult |
+| → dismissed | analyst/admin/owner | 必须填写 dismiss reason |
 
-| 端点 | 权限 | 审计 action | 业务条件 |
-|------|------|------------|---------|
-| `POST /api/gt-candidates/{id}/review` | `gt.review` | `gt_field_accept/edit/delete/uncertain` | 字段级 before/after 值 |
-| `POST /api/gt-candidates/{id}/promote` | `gt.promote` | `gt_promote` | 高风险字段已审核 + 证据充足 |
-| `POST /api/hallucinations/{id}/review` | `hallucination.review` | `hallucination_review` | verdict + needs_human_review |
-| `POST /api/action-themes/{id}/transition` | `action.transition` | `action_transition` | Role Guard + Condition Guard |
-| `POST /api/content-packages/{id}/approve` | `content.approve.{risk_level}` | `content_approve` | 按 low/medium/high |
-| `POST /api/content-packages/{id}/reject` | `content.approve.{risk_level}` | `content_reject` | 需要 rejection reason |
-| `POST /api/content-packages/{id}/mark-published` | `content.publish` | `content_publish` | 需要 publish_url |
-| `POST /api/dashboard/brands/{id}/reports/generate` | `report.export.summary` | `report_export` | 记录 report_type + format |
+**ContentPackage 状态流转 + 条件：**
+
+| 流转 | 角色 | 业务条件 |
+|------|------|---------|
+| draft → fact_checked | 系统/editor | 完成事实检查 |
+| fact_checked → needs_review | 系统/editor | medium+ 风险进审核 |
+| needs_review → approved | 按风险等级 | 权限通过 |
+| approved → exported | content_editor/admin/owner | 已审批 |
+| exported → published_marked | content_editor/admin/owner | 必填 publish_url + published_at + platform |
+| published_marked → verification_pending | 系统/admin | 已设置复测时间 |
+| verification_pending → verified | analyst/admin/owner | 有归因结果 |
+| → rejected | legal_reviewer/admin/owner | 必填 rejection reason |
 
 ---
 
-### Task 5: Action 状态转移条件守卫
+### Task 5: API 端点权限 + 审计加固
 
-**文件:** `src/view_models/action.py`（扩展）
+逐端点改造。覆盖：GT review/promote、Hallucination review、Action transition、Content approve/reject/publish、Report export、Audit log query、User management。
 
+所有端点模式：
 ```python
-def validate_transition_conditions(theme: ActionTheme, to_status: str, payload: dict) -> list[str]:
-    """Return list of blocking reasons, or empty list if OK."""
-    issues = []
-    if to_status == "approved" and theme.status == "content_ready":
-        if not theme.action_plan_ids:
-            issues.append("缺少关联的 Content Package")
-    if to_status == "published_marked":
-        if not payload.get("publish_url"):
-            issues.append("必须填写 publish_url")
-    if to_status == "verified":
-        if theme.status != "verification_pending":
-            issues.append("必须先进入 verification_pending 状态")
-    return issues
+@router.post("/xxx")
+async def handler(
+    resource_id: str,
+    body: RequestBody,
+    user: User = Depends(require_permission("xxx.xxx")),
+    db: AsyncSession = Depends(get_db),
+    request: Request = None,
+):
+    resource = await get_org_xxx_or_404(resource_id, user, db)
+    before = snapshot(resource)
+    # ... business logic ...
+    after = snapshot(resource)
+    await add_audit_log(db, user, action, target_type, resource_id,
+                        before=before, after=after, request=request)
+    await db.commit()
 ```
 
 ---
 
-### Task 6: 审计日志查询 API
+### Task 6: 审计日志查询 + 脱敏
 
-**文件:** `src/api/audit.py`（新建）
+**文件:** `src/api/audit.py`
 
 ```text
-GET /api/audit-logs?brand_id=&action=&user_id=&page=&page_size=
+GET /api/audit-logs?brand_id=&action=&user_id=&result=&date_from=&date_to=&page=&page_size=
 ```
 
-- admin/owner 查看组织级
-- 支持筛选：action, target_type, user_id, brand_id, date_from, date_to
-- 分页 + 排序（按时间倒序）
-- 结果不含其他组织的日志（organization_id 隔离）
+- admin/owner 查看组织级（organization_id 隔离）
+- 非 admin 返回 403
+- detail/before_json/after_json 中的敏感字段（api_key, token, password, secret）自动脱敏
+- 支持分页、筛选、按时间排序
 
 ---
 
-### Task 7: 测试（25+ 个）
+### Task 7: 前端权限反馈
 
-**文件:** `tests/test_permissions.py`（新建）
+按钮不可用时保留 disabled + tooltip：
+```text
+"你当前是 Content Editor，不能审批高风险内容。请联系 Legal Reviewer 或 Admin。"
+"该 Action 暂不能发布：缺少 publish_url。"
+"你当前是 Viewer，只能查看 Dashboard。"
+```
+
+---
+
+### Task 8: 测试（35+ 个）
+
+**文件:** `tests/test_permissions.py`
 
 ```text
-# 权限
-test_viewer_cannot_review_gt
-test_viewer_cannot_transition_action
-test_content_editor_cannot_approve_high_risk
-test_analyst_cannot_promote_gt
+# 权限 (7)
+test_viewer_cannot_review_gt → 403
+test_content_editor_cannot_approve_high_risk → 403
+test_analyst_cannot_promote_gt → 403
+test_admin_can_all_sensitive_actions → 200
 
-# 组织隔离
+# 组织隔离 (5)
 test_cross_org_resource_returns_404
 test_cannot_access_other_org_action_theme
 test_cannot_query_other_org_audit_logs
 
-# 审计
+# 审计 (8)
 test_gt_review_writes_audit_log
-test_gt_promote_logs_before_after
-test_action_transition_logs_from_to_status
 test_audit_in_same_transaction
+test_audit_before_after_snapshots
+test_permission_denied_writes_audit
 
-# 状态守卫
+# 状态守卫 (6)
 test_publish_requires_url
 test_high_risk_requires_legal_reviewer
+test_action_requires_content_package_for_ready
 
-# 审计查询
-test_admin_can_query_audit_logs
-test_viewer_cannot_query_org_audit_logs
+# 角色管理 (5)
+test_cannot_remove_last_admin
+test_admin_cannot_modify_owner
+test_role_change_writes_audit
+
+# Request ID (3)
+test_request_id_generated_when_missing
+test_audit_log_contains_request_id
+
+# 审计脱敏 + append-only (4)
+test_audit_payload_masks_api_key
+test_no_update_audit_log_endpoint → 404
+test_no_delete_audit_log_endpoint → 404
 ```
 
 ---
 
-## 四、验证标准
+## 五、验证标准
 
-- [ ] Viewer 不能审核 GT → HTTP 403
-- [ ] 跨组织访问资源 → HTTP 404
-- [ ] Content Editor 不能 approve 高风险内容
-- [ ] GT Promote 后审计日志含 before/after 快照
-- [ ] 审计日志与业务在同一事务中
-- [ ] 所有 POST 操作有审计
-- [ ] 审计 API 有组织隔离
-- [ ] 现有 113 tests 继续通过
-- [ ] 新增 >=25 个测试
+- [ ] 7 角色体系 + 权限矩阵全部实现
+- [ ] 所有敏感 API 有后端权限校验（不依赖前端隐藏）
+- [ ] 跨组织访问返回 404
+- [ ] 审计日志与业务同事务，含 before/after
+- [ ] 审计日志 append-only，敏感字段脱敏
+- [ ] RequestIdMiddleware 生成/复用 request_id
+- [ ] Action/Content 状态流转有条件守卫
+- [ ] 前端按钮 disabled + tooltip 说明原因
+- [ ] 113 现有测试继续通过
+- [ ] 新增 35+ 测试
