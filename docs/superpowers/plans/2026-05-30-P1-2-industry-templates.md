@@ -1,102 +1,138 @@
-# P1-2 行业模板体系 实现计划
+# P1-2 行业模板体系 实现计划 v2
 
-**日期:** 2026-05-30 | **状态:** Plan | **当前完成度:** 0%
+**日期:** 2026-05-30 | **状态:** Plan | **审阅:** 15 行业升级方案已通过方向评审
+**当前完成度:** 0%
 
 ---
 
 ## 一、目标
 
-不同行业的企业，GT 字段优先级、KPI 权重、问题模板、竞品逻辑、风险词库差异巨大。当前系统对所有品牌一视同仁——星巴克（餐饮）和 SaaS 企业用同一套模板。需要建立行业模板体系，让 GEO 诊断对不同行业更精准。
+为 15 个高价值行业建立 GEO 诊断模板，让系统能根据不同行业判断：什么事实最重要、什么错误最危险、什么竞品最相关、什么内容最能修复 AI 认知。
 
 ---
 
-## 二、核心设计
+## 二、15 个行业模块
 
-### 行业模板包含 6 个维度
+### 阶段一：核心 8 个行业（优先）
 
-| 维度 | 说明 | 示例（金融 vs 餐饮） |
-|------|------|---------------------|
-| **GT 字段权重** | 哪些字段对该行业最关键 | 金融: 资质许可(P0) vs 餐饮: 门店覆盖(P1) |
-| **问题模板** | 行业特有的查询问题 | 金融: "有牌照吗" vs 餐饮: "在哪有店" |
-| **KPI 权重** | 不同 KPI 对该行业的重要性 | 金融: Accuracy 权重最高 vs 餐饮: SOV 权重最高 |
-| **竞品规则** | 该行业如何定义竞品 | 金融: 同牌照类型 vs 餐饮: 同品类+同价格带 |
-| **风险词库** | 行业禁止/敏感声明 | 金融: 保证收益/无风险 vs 餐饮: 包治百病 |
-| **合规提醒** | 行业特有的法规要求 | 金融: 不得承诺收益 vs 餐饮: 食品安全 |
+| # | 行业 | slug |
+|---|------|------|
+| 1 | 金融服务 | finance |
+| 2 | 餐饮与食品饮料 | fnb |
+| 3 | SaaS 与企业服务 | saas_b2b |
+| 4 | 新能源汽车与智能出行 | ev_mobility |
+| 5 | 消费电子与智能硬件 | consumer_electronics |
+| 6 | 医疗健康与医药 | healthcare_pharma |
+| 7 | 教育培训与知识服务 | education |
+| 8 | 电商零售与消费品牌 | ecommerce_retail |
 
-### 首批 4 个行业模板
+### 阶段二：扩展 7 个行业
 
-1. **金融** (Finance)
-2. **餐饮** (F&B)
-3. **SaaS** (SaaS)
-4. **新能源** (EV/New Energy)
+| # | 行业 | slug |
+|---|------|------|
+| 9 | 文旅酒店与本地生活 | travel_hospitality |
+| 10 | 房地产与家居建材 | real_estate_home |
+| 11 | 工业制造与 B2B 供应链 | industrial_b2b |
+| 12 | 物流供应链与跨境贸易 | logistics_crossborder |
+| 13 | AI / 云计算 / 开发者工具 | ai_cloud_devtools |
+| 14 | 美妆个护与时尚生活 | beauty_fashion |
+| 15 | 政府公共服务与城市品牌 | public_sector_city |
 
 ---
 
-## 三、数据模型
+## 三、每个行业模板的 7 维度设计
 
-**文件:** `src/models/industry_template.py`（新建）
+| 维度 | 内容 |
+|------|------|
+| 核心 GT 字段 | required_gt_fields + industry_specific_fields |
+| KPI 权重 | kpi_weights (sum=1.0)，不同行业侧重不同 KPI |
+| 行业问题模板 | industry_query_templates (>=12 个) |
+| 竞品规则 | competitor_rules（同品类/同价位/同区域/同场景） |
+| 风险词库 | risk_keywords（P0/P1 分级） |
+| 合规约束 | compliance_constraints（禁止声明 + 引用要求） |
+| Content 模板 | content_templates（行业化内容生成方向） |
+
+---
+
+## 四、数据模型
 
 ```python
 class IndustryTemplate(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "industry_templates"
-    name: Mapped[str]                # 金融 / 餐饮 / SaaS / 新能源
-    slug: Mapped[str]                # finance / fnb / saas / ev
-    gt_field_weights: Mapped[dict]   # {field_name: weight (0-1)}
-    kpi_weights: Mapped[dict]        # {kpi_key: weight (0-1)}
-    query_dimension_overrides: Mapped[dict]  # 行业特有的问题维度
-    competitor_rules: Mapped[dict]   # 竞品匹配规则
-    risk_keywords: Mapped[list]      # 风险关键词
-    compliance_notes: Mapped[list]   # 合规提醒
+    name: Mapped[str]
+    slug: Mapped[str]
+    description: Mapped[str]
+    version: Mapped[str] = mapped_column(default="1.0")
+    status: Mapped[str] = mapped_column(default="draft")  # draft/active/deprecated
+
+    # GT
+    required_gt_fields: Mapped[list] = mapped_column(JSONB, default=list)
+    optional_gt_fields: Mapped[list] = mapped_column(JSONB, default=list)
+    high_risk_gt_fields: Mapped[list] = mapped_column(JSONB, default=list)
+    industry_specific_fields: Mapped[dict] = mapped_column(JSONB, default=dict)
+    gt_field_weights: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+    # KPI
+    kpi_weights: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+    # 竞品
+    competitor_rules: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+    # 风险
+    risk_keywords: Mapped[list] = mapped_column(JSONB, default=list)
+    compliance_constraints: Mapped[dict] = mapped_column(JSONB, default=dict)
+
+    # Action & Content
+    action_rules: Mapped[dict] = mapped_column(JSONB, default=dict)
+    content_templates: Mapped[dict] = mapped_column(JSONB, default=dict)
 ```
 
-Migration + 种子数据（4 条记录）。
+Brand 扩展：
+```python
+primary_industry_template_id: Mapped[uuid.UUID | None]
+secondary_industry_template_ids: Mapped[list] = mapped_column(JSONB, default=list)
+```
 
 ---
 
-## 四、实现任务
+## 五、实现任务
 
-### Task 1: 行业模板模型 + Migration + 种子数据
+### Task 1: IndustryTemplate 模型 + Migration + 种子数据
 
-**文件:** `src/models/industry_template.py` + Migration + `src/seed/industry_templates.py`
+创建模型，运行 migration，编写 15 个行业的完整种子数据脚本。
 
-4 个行业的种子数据，每个含完整的 6 维度配置。
+### Task 2: Brand 行业关联
 
-### Task 2: 行业模板注入品牌
+Brand 增加 primary + secondary template_id，支持模板选择。
 
-**文件:** `src/models/brand.py`（扩展）
+### Task 3: 行业规则接入分析管线
 
-Brand 增加 `industry_template_id` 外键。创建品牌时可选择行业模板。
+- Completeness 使用行业字段权重
+- 综合评分使用行业 KPI 权重
+- 幻觉检测使用行业 risk_keywords
 
-### Task 3: GT 字段权重读取
+### Task 4: 模板管理 API + Dashboard
 
-**文件:** `src/analyzer/completeness.py`（扩展）
+模板列表、详情、品牌关联、行业诊断说明展示。
 
-根据品牌的行业模板，调整 GT 字段的 completeness 权重。
+### Task 5: 测试
 
-### Task 4: KPI 权重配置
-
-**文件:** `src/analyzer/pipeline.py`（扩展）
-
-综合评分时按行业 KPI 权重加权。
-
-### Task 5: 模板管理 API + Dashboard 展示
-
-**文件:** `src/api/industry.py` + Dashboard 新增配置入口
-
-列出可用模板、查看模板详情、品牌关联模板。
-
-### Task 6: 测试
-
-- 种子数据验证（4 模板 + 必需字段）
-- 权重读取验证
-- 无模板时兜底策略
+- 15 模板 seed 验证
+- 行业字段/KPI 权重/风险规则测试
+- 品牌模板变更审计测试
 
 ---
 
-## 五、验证标准
+## 六、质量标准
 
-- [ ] 4 个行业模板种子数据可查询
+每行业模板至少：>=10 required_gt_fields, >=6 industry_specific_fields, >=10 risk_keywords, >=5 compliance_constraints, >=4 content_templates, kpi_weights sum=1
+
+---
+
+## 七、验证标准
+
+- [ ] 15 个行业模板种子数据可查询
+- [ ] 每个模板满足质量标准
 - [ ] 品牌可关联行业模板
-- [ ] 无模板时使用默认权重
-- [ ] 现有 131 tests 继续通过
-- [ ] 新增 >=10 个测试
+- [ ] 131 现有 tests 继续通过
+- [ ] 新增 >=15 个测试
