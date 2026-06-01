@@ -1,0 +1,1 @@
+{"sample_id": "starbucks_gt_insufficient_001", "brand": "星巴克", "question": "星巴克在三四线城市的门店密度如何？", "response": "星巴克在三四线城市约有500家门店，覆盖率约30%。", "expected_subject_type": "target_brand", "expected_judgment": "gt_insufficient", "expected_severity": "P1", "must_not_be": ["contradicted"], "sample_source": "starbucks_run_6f51457c", "created_reason": "gt_insufficient_field"}
