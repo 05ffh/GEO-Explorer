@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, Integer, DateTime, Text
+from sqlalchemy import String, ForeignKey, Integer, DateTime, Text, Boolean
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from src.models.base import Base, TimestampMixin, UUIDMixin
@@ -30,3 +30,9 @@ class CollectionRun(Base, UUIDMixin, TimestampMixin):
     collection_error_summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     analysis_error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     analysis_error_trace: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    preflight_summary_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    report_quality_summary_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    template_health_report_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    report_publishable: Mapped[bool] = mapped_column(Boolean, default=False)
+    blocking_reasons_json: Mapped[list] = mapped_column(JSONB, default=list)

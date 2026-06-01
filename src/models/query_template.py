@@ -12,3 +12,7 @@ class QueryTemplate(Base, UUIDMixin, TimestampMixin):
     priority: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    hallucination_check_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    template_level: Mapped[str] = mapped_column(String(20), default="important")
+    question_scope: Mapped[str | None] = mapped_column(String(30), nullable=True)
