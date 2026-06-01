@@ -42,6 +42,40 @@ async def deliver_all_reports(
     # 5. Build README index
     _write_readme(brand_name, analysis, deliver_dir, opt_result, cp_files)
 
+    # ── Phase A: Format failure writeback ──
+    import json as _json
+    format_failures = []
+    for fmt_label, path in [("md", diag_path), ("docx", opt_result.get("docx")), ("pdf", opt_result.get("pdf"))]:
+        if not path or not os.path.exists(path):
+            format_failures.append(fmt_label)
+        elif os.path.getsize(path) == 0:
+            format_failures.append(fmt_label)
+
+    if format_failures:
+        row = (await db.execute(text("""
+            SELECT report_publishable, blocking_reasons_json, report_quality_summary_json
+            FROM collection_runs WHERE id = :rid
+        """), {"rid": collection_run_id})).fetchone()
+        if row:
+            rd = dict(row._mapping)
+            br = rd.get("blocking_reasons_json") or []
+            br.append({
+                "code": "REPORT_FORMAT_FAILURE",
+                "message": f"Report format(s) failed: {', '.join(format_failures)}",
+                "severity": "block",
+            })
+            qs = rd.get("report_quality_summary_json") or {}
+            qs["report_publishable"] = False
+            qs["blocking_reasons"] = br
+            await db.execute(text("""
+                UPDATE collection_runs
+                SET report_publishable = FALSE,
+                    blocking_reasons_json = :br::jsonb,
+                    report_quality_summary_json = :qs::jsonb
+                WHERE id = :rid
+            """), {"rid": collection_run_id, "br": _json.dumps(br), "qs": _json.dumps(qs)})
+            await db.commit()
+
     return {
         "dir": os.path.abspath(deliver_dir),
         "diagnostic_md": diag_path,
@@ -61,11 +95,15 @@ async def _fetch_analysis_data(brand_id: str, collection_run_id: str, brand_name
     # Collection run summary
     cr = (await db.execute(text("""
         SELECT collection_status, analysis_status, total_queries, success_count,
-               failure_count, created_at, collection_completed_at
+               failure_count, created_at, collection_completed_at, report_quality_summary_json
         FROM collection_runs WHERE id = :rid
     """), {"rid": collection_run_id})).fetchone()
     if cr:
         data.update(dict(cr._mapping))
+
+    # Ensure quality summary is always present
+    if "report_quality_summary_json" not in data or data["report_quality_summary_json"] is None:
+        data["report_quality_summary_json"] = {}
 
     # Metrics
     ms = (await db.execute(text("""
@@ -113,6 +151,42 @@ async def _fetch_analysis_data(brand_id: str, collection_run_id: str, brand_name
     return data
 
 
+def _render_quality_summary_section(analysis: dict) -> str:
+    """Render ReportQualitySummary as Markdown for report front page."""
+    qs = analysis.get("report_quality_summary_json", {})
+    if not qs:
+        return ""
+    ai = qs.get("ai_hallucination", {})
+    tmpl = qs.get("template_issue", {})
+    gt = qs.get("gt_insufficient", {})
+    nab = qs.get("not_about_brand", {})
+    pub = qs.get("report_publishable", False)
+    blocking = qs.get("blocking_reasons", [])
+
+    lines = [
+        "## 本次诊断可信度概览",
+        "",
+        "| 类别 | 数量 | 说明 |",
+        "|------|:--:|------|",
+        f"| AI 幻觉 (P0) | {ai.get('p0_count', 0)} | {ai.get('p0_explanation', '品牌核心事实与 GT 矛盾')} |",
+        f"| AI 幻觉 (P1/P2) | {ai.get('p1_count', 0)}/{ai.get('p2_count', 0)} | 次要/边缘事实偏差 |",
+        f"| 模板问题 | {tmpl.get('invalid_template_count', 0)} | 模板变量未替换，不计入 AI 幻觉 |",
+        f"| GT 不足 | {gt.get('unsupported_claim_count', 0)} | GT 数据不足以核验，不计入 AI 幻觉 |",
+        f"| 回答无关 | {nab.get('generic_statement_count', 0)} | 回答未涉及目标品牌，不计入 AI 幻觉 |",
+        "",
+        f"**报告状态:** {'可发布' if pub else '不可发布'}",
+        "",
+    ]
+    if blocking:
+        lines.append("**阻断/警告详情:**")
+        for b in blocking:
+            icon = "[BLOCK]" if b.get("severity") == "block" else "[WARN]"
+            lines.append(f"- {icon} {b.get('code')}: {b.get('message')}")
+        lines.append("")
+    lines.append(f"> {ai.get('excluded_explanation', '模板问题、GT不足、回答无关不计入 AI 幻觉')}")
+    return "\n".join(lines)
+
+
 def _write_diagnostic(brand_name: str, data: dict, deliver_dir: str) -> str:
     """Write 诊断报告.md."""
     from src.schemas.ground_truth import KPI_DISPLAY_NAMES
@@ -126,10 +200,17 @@ def _write_diagnostic(brand_name: str, data: dict, deliver_dir: str) -> str:
         f"**生成时间:** {now}  ",
         f"**采集:** {data.get('collection_status','?')} | {data.get('success_count',0)}/{data.get('total_queries',0)} 成功 | {data.get('failure_count',0)} 失败",
         f"",
-        f"## KPI 评分",
-        f"| 指标 | 得分 | |",
-        f"|------|------|--|",
     ]
+
+    # Prepend quality summary if available
+    quality_section = _render_quality_summary_section(data)
+    if quality_section:
+        lines.append(quality_section)
+        lines.append("")
+
+    lines.append("## KPI 评分")
+    lines.append("| 指标 | 得分 | |")
+    lines.append("|------|------|--|")
     kpis = [
         ("sov", data.get("sov") or 0), ("first_rec_rate", data.get("first_rec_rate") or 0),
         ("accuracy_rate", data.get("accuracy_rate") or 0), ("completeness_rate", data.get("completeness_rate") or 0),
