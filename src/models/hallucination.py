@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, Text, DateTime
+from sqlalchemy import String, ForeignKey, Text, DateTime, Boolean
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from src.models.base import Base, TimestampMixin, UUIDMixin
@@ -16,6 +16,7 @@ class HallucinationResult(Base, UUIDMixin, TimestampMixin):
     field_level: Mapped[str] = mapped_column(String(10), nullable=False)
     severity: Mapped[str] = mapped_column(String(10), default="P1")
     verdict: Mapped[str] = mapped_column(String(50), default="uncertain")
+    error_type: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     ai_claim: Mapped[str] = mapped_column(Text, default="")
     ground_truth_value: Mapped[str] = mapped_column(Text, default="")
     detected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -23,3 +24,9 @@ class HallucinationResult(Base, UUIDMixin, TimestampMixin):
     human_verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
     reviewer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    claim_text: Mapped[str] = mapped_column(Text, default="")
+    subject_type: Mapped[str] = mapped_column(String(50), default="")
+    matched_gt_field: Mapped[str] = mapped_column(String(100), default="")
+    reason: Mapped[str] = mapped_column(Text, default="")
+    needs_human_review: Mapped[bool] = mapped_column(Boolean, default=False)

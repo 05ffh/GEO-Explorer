@@ -15,6 +15,67 @@ from src.models.ground_truth import GroundTruthVersion
 
 PLATFORMS = ["deepseek", "kimi", "doubao", "wenxin"]
 
+TEMPLATE_LEVEL_MAP = {
+    "brand_definition": "critical",
+    "brand_attribute": "critical",
+    "brand_comparison": "important",
+    "brand_trust": "important",
+    "category_recommendation": "optional",
+    "scenario_solution": "optional",
+    "user_recommendation": "optional",
+    "generic_advice": "optional",
+}
+
+
+def _build_template_health_report(preflight_results: list) -> dict:
+    """Build TemplateHealthReport from preflight results with corrected counting."""
+    from datetime import datetime, timezone
+
+    def _level(r):
+        qt = getattr(r, 'question_type', None)
+        if qt is None:
+            tmpl = getattr(r, 'template', None)
+            qt = getattr(tmpl, 'question_type', 'brand_definition') if tmpl else 'brand_definition'
+        return TEMPLATE_LEVEL_MAP.get(qt, "important")
+
+    total = len(preflight_results) if preflight_results else 0
+    invalid = [r for r in (preflight_results or []) if getattr(r, 'render_status', None) != "ok"]
+    skipped = [r for r in (preflight_results or []) if getattr(r, 'render_status', None) == "skipped_missing_variable"]
+
+    critical_invalid = [r for r in invalid if _level(r) == "critical"]
+    important_invalid = [r for r in invalid if _level(r) == "important"]
+    optional_skipped = [r for r in skipped if _level(r) == "optional"]
+
+    invalid_ratio = len(invalid) / total if total > 0 else 0.0
+
+    return {
+        "schema_version": "template_health_v1",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "total_templates": total,
+        "valid_templates": total - len(invalid),
+        "invalid_templates": len(invalid),
+        "skipped_templates": len(skipped),
+        "critical_invalid": len(critical_invalid),
+        "important_invalid": len(important_invalid),
+        "optional_skipped": len(optional_skipped),
+        "blocking_invalid_templates": len(critical_invalid) + len(important_invalid),
+        "non_blocking_skipped_templates": len(optional_skipped),
+        "invalid_ratio": round(invalid_ratio, 4),
+        "missing_variables": _aggregate_missing_vars(invalid),
+        "can_collect": invalid_ratio <= 0.20,
+        "can_publish_report": len(critical_invalid) == 0,
+    }
+
+
+def _aggregate_missing_vars(invalid_results: list) -> dict:
+    """Aggregate unresolved variables from invalid preflight results."""
+    result = {}
+    for r in invalid_results:
+        unresolved = getattr(r, 'unresolved_variables', [])
+        for v in unresolved:
+            result[v] = result.get(v, 0) + 1
+    return result
+
 
 async def run_collection(
     brand_id: uuid.UUID,
