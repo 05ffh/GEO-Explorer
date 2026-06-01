@@ -1,14 +1,17 @@
+import os
+from datetime import datetime, timezone
 from fastapi import FastAPI, Request, Depends, Query
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 from src.database import get_db
+from src.config import settings
 from src.api.deps import get_current_user, get_org_brand_or_404
 from src.models.user import User
 from src.models.brand import Brand
-from src.api import auth, brands, metrics, collection_runs, hallucinations, actions, dashboard, ground_truth
+from src.api import auth, brands, metrics, collection_runs, hallucinations, actions, dashboard, ground_truth, tasks, publishing, saas, platform
 from src.schemas.ground_truth import KPI_DISPLAY_NAMES
 
 app = FastAPI(title="GEO Explorer", version="0.1.0")
@@ -23,6 +26,7 @@ for router in [
     auth.router, brands.router, metrics.router,
     collection_runs.router, hallucinations.router,
     actions.router, dashboard.router, ground_truth.router,
+    tasks.router, publishing.router, saas.router, platform.router,
 ]:
     app.include_router(router)
 
@@ -65,9 +69,40 @@ async def login_page(request: Request):
     return _render(request, "auth/login.html")
 
 
+@app.get("/register", response_class=HTMLResponse)
+async def register_page(request: Request):
+    """Registration page — no auth required."""
+    return _render(request, "auth/register.html")
+
+
+@app.get("/onboarding", response_class=HTMLResponse)
+async def onboarding_page(request: Request, user: User = Depends(get_current_user),
+                            db: AsyncSession = Depends(get_db)):
+    """Onboarding page — after registration."""
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "auth/onboarding.html", _page_context(
+        request, "onboarding", org_brands,
+        user_email=user.email, user_name=user.name,
+    ))
+
+
 @app.get("/health")
-async def health():
-    return {"status": "ok"}
+async def health(db: AsyncSession = Depends(get_db)):
+    """Deep health check: app + DB + Redis."""
+    import redis as redis_lib
+    checks = {"app": "ok"}
+    try:
+        await db.execute(text("SELECT 1"))
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {e}"
+    try:
+        r = redis_lib.from_url(settings.redis_url)
+        r.ping()
+        checks["redis"] = "ok"
+    except Exception as e:
+        checks["redis"] = f"error: {e}"
+    return checks
 
 
 def _empty_dashboard_vm(brand_id: str = "", brand_name: str = "", industry: str = "") -> dict:
@@ -231,3 +266,221 @@ async def trends_fragment(request: Request, brand_id: str,
     from src.view_models.trends import build_trends_vm
     vm = await build_trends_vm(brand, range_str, user, db)
     return _render(request, "trends/_content.html", {"vm": vm})
+
+
+@app.get("/monitor/queue", response_class=HTMLResponse)
+async def queue_monitor_page(request: Request,
+                              user: User = Depends(get_current_user),
+                              db: AsyncSession = Depends(get_db)):
+    """Queue monitor page — org-wide, not brand-specific."""
+    from src.view_models.queue_monitor import build_queue_monitor_vm
+    vm = await build_queue_monitor_vm(None, user, db)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "queue_monitor/index.html", _page_context(
+        request, "queue-monitor", org_brands,
+        vm=vm, current_page="queue-monitor",
+    ))
+
+
+@app.get("/publishing", response_class=HTMLResponse)
+async def publishing_page(request: Request, user: User = Depends(get_current_user),
+                           db: AsyncSession = Depends(get_db)):
+    """Publishing management page."""
+    org_brands = await _get_org_brands(user, db)
+    from src.view_models.publishing import build_publishing_vm
+    vm = await build_publishing_vm(user.organization_id, db)
+    return _render(request, "publishing/index.html", _page_context(
+        request, "publishing", org_brands, vm=vm, current_page="publishing",
+    ))
+
+
+@app.get("/saas/settings", response_class=HTMLResponse)
+async def saas_settings_page(request: Request, user: User = Depends(get_current_user),
+                              db: AsyncSession = Depends(get_db)):
+    """SaaS settings page."""
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "saas/settings.html", _page_context(
+        request, "saas", org_brands, current_page="saas",
+    ))
+
+
+@app.get("/saas/api-keys", response_class=HTMLResponse)
+async def saas_api_keys_page(request: Request, user: User = Depends(get_current_user),
+                              db: AsyncSession = Depends(get_db)):
+    """API Keys management page."""
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "saas/api_keys.html", _page_context(
+        request, "saas", org_brands, current_page="saas",
+    ))
+
+
+@app.get("/saas/members", response_class=HTMLResponse)
+async def saas_members_page(request: Request, user: User = Depends(get_current_user),
+                             db: AsyncSession = Depends(get_db)):
+    """Members management page."""
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "saas/members.html", _page_context(
+        request, "saas", org_brands, current_page="saas",
+    ))
+
+
+@app.get("/saas/plans", response_class=HTMLResponse)
+async def saas_plans_page(request: Request, user: User = Depends(get_current_user),
+                           db: AsyncSession = Depends(get_db)):
+    """Pricing/plans comparison page."""
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "saas/plans.html", _page_context(
+        request, "saas", org_brands, current_page="saas",
+    ))
+
+
+@app.get("/saas/data", response_class=HTMLResponse)
+async def saas_data_page(request: Request, user: User = Depends(get_current_user),
+                           db: AsyncSession = Depends(get_db)):
+    """Data export & deletion management page."""
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "saas/data.html", _page_context(
+        request, "saas", org_brands, current_page="saas",
+    ))
+
+
+# ── Platform Console (system_admin+) ──────────────────────────────────────────
+
+@app.get("/platform", response_class=HTMLResponse)
+async def platform_overview_page(request: Request, user: User = Depends(get_current_user),
+                                   db: AsyncSession = Depends(get_db)):
+    """Platform overview dashboard."""
+    from src.view_models.platform import build_platform_vm
+    vm = await build_platform_vm(user, db)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "platform/index.html", _page_context(
+        request, "platform", org_brands, vm=vm))
+
+
+@app.get("/platform/organizations", response_class=HTMLResponse)
+async def platform_organizations_page(request: Request, user: User = Depends(get_current_user),
+                                        db: AsyncSession = Depends(get_db)):
+    """Organization management."""
+    from src.view_models.platform import build_platform_vm
+    vm = await build_platform_vm(user, db)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "platform/organizations.html", _page_context(
+        request, "platform-orgs", org_brands, vm=vm))
+
+
+@app.get("/platform/plans", response_class=HTMLResponse)
+async def platform_plans_page(request: Request, user: User = Depends(get_current_user),
+                                db: AsyncSession = Depends(get_db)):
+    """Plan management (system_owner only)."""
+    from src.view_models.platform import build_platform_vm
+    vm = await build_platform_vm(user, db)
+    if not vm["visible_pages"]["plans"]:
+        return _render(request, "platform/403.html", {}, status_code=403)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "platform/plans.html", _page_context(
+        request, "platform-plans", org_brands, vm=vm))
+
+
+@app.get("/platform/feature-flags", response_class=HTMLResponse)
+async def platform_flags_page(request: Request, user: User = Depends(get_current_user),
+                                db: AsyncSession = Depends(get_db)):
+    """Feature flag management."""
+    from src.view_models.platform import build_platform_vm
+    vm = await build_platform_vm(user, db)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "platform/feature_flags.html", _page_context(
+        request, "platform-flags", org_brands, vm=vm))
+
+
+@app.get("/platform/emergency-pause", response_class=HTMLResponse)
+async def platform_pause_page(request: Request, user: User = Depends(get_current_user),
+                                db: AsyncSession = Depends(get_db)):
+    """Emergency pause management."""
+    from src.view_models.platform import build_platform_vm
+    vm = await build_platform_vm(user, db)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "platform/emergency_pause.html", _page_context(
+        request, "platform-pause", org_brands, vm=vm))
+
+
+@app.get("/platform/audit-logs", response_class=HTMLResponse)
+async def platform_audit_page(request: Request, user: User = Depends(get_current_user),
+                                db: AsyncSession = Depends(get_db)):
+    """Audit log viewer."""
+    from src.view_models.platform import build_platform_vm
+    vm = await build_platform_vm(user, db)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "platform/audit_logs.html", _page_context(
+        request, "platform-audit", org_brands, vm=vm))
+
+
+@app.get("/platform/data-deletion", response_class=HTMLResponse)
+async def platform_deletion_page(request: Request, user: User = Depends(get_current_user),
+                                   db: AsyncSession = Depends(get_db)):
+    """Data deletion approval (system_owner only)."""
+    from src.view_models.platform import build_platform_vm
+    vm = await build_platform_vm(user, db)
+    if not vm["visible_pages"]["data_deletion"]:
+        return _render(request, "platform/403.html", {}, status_code=403)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "platform/data_deletion.html", _page_context(
+        request, "platform-deletion", org_brands, vm=vm))
+
+
+@app.get("/brands/{brand_id}/reports", response_class=HTMLResponse)
+async def reports_page(request: Request, brand_id: str,
+                        user: User = Depends(get_current_user),
+                        db: AsyncSession = Depends(get_db)):
+    """Report download page."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.reports import build_reports_vm
+    vm = await build_reports_vm(brand, user, db)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "reports/index.html", _page_context(
+        request, "reports", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name, vm=vm,
+    ))
+
+
+@app.post("/api/brands/{brand_id}/reports/generate")
+async def generate_reports_api(brand_id: str,
+                                body: dict,
+                                user: User = Depends(get_current_user),
+                                db: AsyncSession = Depends(get_db)):
+    """Trigger report generation via async Celery task."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.reports.delivery import deliver_customer_reports
+    result = await deliver_customer_reports(
+        brand_name=brand.name,
+        brand_id=str(brand.id),
+        collection_run_id=body.get("collection_run_id", ""),
+        db=db,
+        editions=body.get("editions"),
+        generated_by=str(user.id),
+    )
+    return result
+
+
+@app.get("/api/brands/{brand_id}/reports/download")
+async def download_report(brand_id: str,
+                           artifact_id: str = Query(...),
+                           user: User = Depends(get_current_user),
+                           db: AsyncSession = Depends(get_db)):
+    """Download a report artifact file."""
+    from fastapi.responses import FileResponse
+    from src.models.report_artifact import ReportArtifact
+    import uuid
+
+    artifact = await db.get(ReportArtifact, uuid.UUID(artifact_id))
+    if not artifact or artifact.brand_id != uuid.UUID(brand_id):
+        return {"detail": "Not found"}, 404
+
+    # Increment download count
+    artifact.download_count = (artifact.download_count or 0) + 1
+    artifact.last_downloaded_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    if not artifact.file_path or not os.path.exists(artifact.file_path):
+        return {"detail": "File not found on disk"}, 404
+
+    return FileResponse(artifact.file_path, filename=os.path.basename(artifact.file_path))

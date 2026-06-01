@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}发布管理 — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-6">
+  <div class="flex justify-between items-center mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">发布管理</h1>
+      <p class="text-sm text-gray-500 mt-1">
+        {{ vm["target_count"] }} 个发布目标 · {{ vm["active_request_count"] }} 个进行中
+      </p>
+    </div>
+    <button onclick="showCreateTarget()" class="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-800">
+      + 新增发布目标
+    </button>
+  </div>
+
+  <!-- Health Overview -->
+  <div class="grid grid-cols-5 gap-3 mb-6">
+    {% for state, label in [("healthy","健康"),("degraded","降级"),("failing","故障"),("invalid","无效"),("paused","暂停")] %}
+    <div class="bg-white rounded-lg border p-3 text-center">
+      <div class="text-2xl font-bold {% if state == 'healthy' %}text-green-600{% elif state in ('degraded','failing') %}text-red-600{% else %}text-gray-400{% endif %}">
+        {{ vm["health_summary"].get(state, 0) }}
+      </div>
+      <div class="text-xs text-gray-500">{{ label }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Publish Targets -->
+  <div class="bg-white rounded-lg border mb-6">
+    <div class="px-4 py-3 border-b font-medium text-gray-700">发布目标</div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500">
+          <tr>
+            <th class="px-4 py-2 text-left">名称</th>
+            <th class="px-4 py-2 text-left">类型</th>
+            <th class="px-4 py-2 text-left">健康</th>
+            <th class="px-4 py-2 text-left">凭据</th>
+            <th class="px-4 py-2 text-left">最近成功</th>
+            <th class="px-4 py-2 text-left">失败次数</th>
+            <th class="px-4 py-2 text-right">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in vm["targets"] %}
+          <tr class="border-t hover:bg-gray-50">
+            <td class="px-4 py-2 font-medium">{{ t["name"] }}</td>
+            <td class="px-4 py-2">
+              <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{{ t["target_type"] }}</span>
+            </td>
+            <td class="px-4 py-2">
+              {% set hc = {"healthy":"bg-green-100 text-green-700","degraded":"bg-yellow-100 text-yellow-700","failing":"bg-red-100 text-red-700","invalid":"bg-gray-100 text-gray-500","paused":"bg-gray-100 text-gray-500"} %}
+              <span class="text-xs px-2 py-0.5 rounded {{ hc.get(t['health_status'], 'bg-gray-100') }}">{{ t["health_status"] }}</span>
+            </td>
+            <td class="px-4 py-2">
+              <span class="text-xs {% if t['credential_status'] == 'valid' %}text-green-600{% else %}text-gray-400{% endif %}">{{ t["credential_status"] }}</span>
+            </td>
+            <td class="px-4 py-2 text-xs text-gray-400">{{ t["last_success_at"] or "—" }}</td>
+            <td class="px-4 py-2">{{ t["failure_count"] }}</td>
+            <td class="px-4 py-2 text-right space-x-1">
+              <button onclick="verifyTarget('{{ t['id'] }}')" class="text-xs text-blue-600 hover:underline">验证</button>
+              <button onclick="toggleTarget('{{ t['id'] }}')" class="text-xs text-gray-600 hover:underline">启停</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Recent Publish Requests -->
+  <div class="bg-white rounded-lg border">
+    <div class="px-4 py-3 border-b font-medium text-gray-700">最近发布请求</div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-gray-500">
+          <tr>
+            <th class="px-4 py-2 text-left">时间</th>
+            <th class="px-4 py-2 text-left">状态</th>
+            <th class="px-4 py-2 text-left">类型</th>
+            <th class="px-4 py-2 text-left">外部链接</th>
+            <th class="px-4 py-2 text-right">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in vm["requests"] %}
+          <tr class="border-t hover:bg-gray-50">
+            <td class="px-4 py-2 text-xs text-gray-400">{{ r["created_at"][:19] if r["created_at"] else "" }}</td>
+            <td class="px-4 py-2">
+              {% set sc = {"delivered":"bg-green-100 text-green-700","published":"bg-green-100 text-green-700","acknowledged":"bg-blue-100 text-blue-700","sending":"bg-yellow-100 text-yellow-700","queued":"bg-gray-100 text-gray-600","failed":"bg-red-100 text-red-700"} %}
+              <span class="text-xs px-2 py-0.5 rounded {{ sc.get(r['status'], 'bg-gray-100') }}">{{ r["status"] }}</span>
+            </td>
+            <td class="px-4 py-2 text-xs">{{ r["trigger_type"] }}</td>
+            <td class="px-4 py-2 text-xs">
+              {% if r["external_public_url"] %}<a href="{{ r['external_public_url'] }}" target="_blank" class="text-blue-600 hover:underline">查看</a>{% else %}—{% endif %}
+            </td>
+            <td class="px-4 py-2 text-right space-x-1">
+              {% if r["can_retry"] %}<button onclick="retryPublish('{{ r['id'] }}')" class="text-xs text-blue-600 hover:underline">重试</button>{% endif %}
+              {% if r["can_cancel"] %}<button onclick="cancelPublish('{{ r['id'] }}')" class="text-xs text-red-600 hover:underline">取消</button>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Create Target Modal -->
+<div id="create-target-modal" class="hidden fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <h2 class="text-lg font-bold mb-4">新增发布目标</h2>
+    <form id="create-target-form" class="space-y-3">
+      <input name="name" placeholder="目标名称" required class="w-full border rounded-lg px-3 py-2 text-sm">
+      <select name="target_type" class="w-full border rounded-lg px-3 py-2 text-sm">
+        <option value="webhook">Webhook</option>
+        <option value="wordpress" disabled>WordPress (即将支持)</option>
+      </select>
+      <input name="endpoint_url" placeholder="Webhook URL (https://...)" required class="w-full border rounded-lg px-3 py-2 text-sm">
+      <div class="flex justify-end gap-2 pt-3">
+        <button type="button" onclick="document.getElementById('create-target-modal').classList.add('hidden')" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
+        <button type="submit" class="px-4 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800">创建</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function showCreateTarget() { document.getElementById('create-target-modal').classList.remove('hidden'); }
+
+document.getElementById('create-target-form').onsubmit = async function(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = { name: fd.get('name'), target_type: fd.get('target_type'), endpoint_url: fd.get('endpoint_url') };
+  const res = await fetch('/api/publishing/targets', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (res.ok) {
+    const data = await res.json();
+    if (data.webhook_secret) {
+      alert('目标已创建！Secret（仅展示一次）: ' + data.webhook_secret);
+    }
+    location.reload();
+  } else {
+    const err = await res.json();
+    alert('创建失败: ' + (err.detail || err.message || '未知错误'));
+  }
+};
+
+async function verifyTarget(id) {
+  const res = await fetch('/api/publishing/targets/' + id + '/verify', { method: 'POST' });
+  const data = await res.json();
+  alert(data.verified ? '验证通过' : '验证失败: ' + (data.reason || ''));
+}
+
+async function toggleTarget(id) {
+  // Simple toggle - in production use proper status management
+  if (confirm('确定要切换此目标的启停状态吗？')) {
+    location.reload();
+  }
+}
+
+async function retryPublish(id) {
+  const res = await fetch('/api/publishing/requests/' + id + '/retry', { method: 'POST' });
+  if (res.ok) { location.reload(); }
+}
+
+async function cancelPublish(id) {
+  if (confirm('确定取消此发布请求吗？')) {
+    const res = await fetch('/api/publishing/requests/' + id + '/cancel', { method: 'POST' });
+    if (res.ok) { location.reload(); }
+  }
+}
+</script>
+{% endblock %}

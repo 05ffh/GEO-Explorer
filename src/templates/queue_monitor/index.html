@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}队列监控 — GEO Explorer{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-heading font-bold text-gray-900">队列监控</h1>
+        <span class="text-sm text-gray-500">
+            {% if vm.is_platform %}全平台视图{% else %}本组织视图{% endif %}
+        </span>
+    </div>
+
+    <!-- Queue Stats Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+        {% for key, label in [("queued","排队中"), ("running","运行中"), ("retrying","重试中"), ("completed","已完成"), ("failed","失败"), ("dead_lettered","DLQ")] %}
+        <div class="bg-white rounded-lg border border-gray-200 p-4">
+            <div class="text-sm text-gray-500">{{ label }}</div>
+            <div class="text-2xl font-bold text-gray-900">{{ vm.counts[key] }}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Recent Tasks -->
+    <div class="bg-white rounded-lg border border-gray-200">
+        <div class="px-5 py-3 border-b border-gray-200 font-medium">最近任务</div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 text-gray-500">
+                    <tr>
+                        <th class="px-4 py-2 text-left">任务</th>
+                        <th class="px-4 py-2 text-left">状态</th>
+                        <th class="px-4 py-2 text-left">进度</th>
+                        <th class="px-4 py-2 text-left">重试</th>
+                        <th class="px-4 py-2 text-left">时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in vm.recent_tasks %}
+                    <tr class="border-t border-gray-100">
+                        <td class="px-4 py-2 font-mono text-xs">{{ t.task_name }}</td>
+                        <td class="px-4 py-2">
+                            <span class="inline-block px-2 py-0.5 rounded text-xs font-medium
+                                {% if t.status == 'completed' %}bg-green-100 text-green-800
+                                {% elif t.status == 'failed' or t.status == 'dead_lettered' %}bg-red-100 text-red-800
+                                {% elif t.status == 'running' %}bg-blue-100 text-blue-800
+                                {% elif t.status == 'retrying' %}bg-amber-100 text-amber-800
+                                {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                {{ t.status }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2">
+                            <div class="flex items-center gap-2">
+                                <div class="w-20 bg-gray-200 rounded-full h-1.5">
+                                    <div class="bg-primary h-1.5 rounded-full" style="width: {{ (t.progress * 100)|int }}%"></div>
+                                </div>
+                                <span class="text-xs text-gray-500">{{ (t.progress * 100)|int }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-2 text-xs">{{ t.retry_count }}</td>
+                        <td class="px-4 py-2 text-xs text-gray-500">{{ t.created_at[:19] }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="px-4 py-6 text-center text-gray-400">暂无任务</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- DLQ Panel -->
+    <div class="bg-white rounded-lg border border-gray-200">
+        <div class="px-5 py-3 border-b border-gray-200 font-medium flex items-center justify-between">
+            <span>死信队列 (DLQ) — {{ vm.counts.dead_lettered }} 条</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 text-gray-500">
+                    <tr>
+                        <th class="px-4 py-2 text-left">任务</th>
+                        <th class="px-4 py-2 text-left">策略</th>
+                        <th class="px-4 py-2 text-left">原因</th>
+                        <th class="px-4 py-2 text-left">重放次数</th>
+                        <th class="px-4 py-2 text-left">入队时间</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in vm.dlq_tasks %}
+                    <tr class="border-t border-gray-100">
+                        <td class="px-4 py-2 font-mono text-xs">{{ t.task_name }}</td>
+                        <td class="px-4 py-2">
+                            <span class="inline-block px-2 py-0.5 rounded text-xs font-medium
+                                {% if t.dlq_retry_policy == 'auto' %}bg-amber-100 text-amber-800
+                                {% elif t.dlq_retry_policy == 'manual' %}bg-blue-100 text-blue-800
+                                {% else %}bg-gray-100 text-gray-600{% endif %}">
+                                {{ t.dlq_retry_policy }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 text-xs text-gray-600 max-w-xs truncate">{{ t.dlq_reason }}</td>
+                        <td class="px-4 py-2 text-xs">{{ t.dlq_requeue_count }}/{{ t.dlq_max_requeues }}</td>
+                        <td class="px-4 py-2 text-xs text-gray-500">{{ t.dlq_at[:19] if t.dlq_at else "" }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="px-4 py-6 text-center text-gray-400">DLQ 为空</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Platform Health -->
+    <div class="bg-white rounded-lg border border-gray-200">
+        <div class="px-5 py-3 border-b border-gray-200 font-medium">平台健康</div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 p-5">
+            {% for platform, health in vm.platform_health.items() %}
+            <div class="text-center p-3 rounded-lg border
+                {% if health.circuit_state == 'closed' %}border-green-200 bg-green-50
+                {% elif health.circuit_state == 'open' %}border-red-200 bg-red-50
+                {% else %}border-amber-200 bg-amber-50{% endif %}">
+                <div class="font-medium text-gray-900">{{ platform }}</div>
+                <div class="text-sm
+                    {% if health.circuit_state == 'closed' %}text-green-700
+                    {% elif health.circuit_state == 'open' %}text-red-700
+                    {% else %}text-amber-700{% endif %}">
+                    {{ health.circuit_state }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Alerts -->
+    {% if vm.alerts %}
+    <div class="bg-white rounded-lg border border-gray-200">
+        <div class="px-5 py-3 border-b border-gray-200 font-medium">告警 ({{ vm.alerts|length }})</div>
+        <div class="divide-y divide-gray-100">
+            {% for a in vm.alerts %}
+            <div class="px-5 py-3 flex items-center gap-3">
+                <span class="inline-block w-2 h-2 rounded-full
+                    {% if a.severity == 'critical' %}bg-red-500{% else %}bg-amber-500{% endif %}"></span>
+                <span class="text-sm text-gray-700 flex-1">{{ a.message }}</span>
+                <span class="text-xs text-gray-400">{{ a.created_at[:19] }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

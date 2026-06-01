@@ -1,0 +1,51 @@
+# {{ ctx.brand.name }} AI 品牌认知优化 — 执行方案
+**生成时间: {{ ctx.meta.generated_at[:19] }} | 健康度: {{ ctx.health.score }} 分（{{ ctx.health.grade }}）**
+
+## 当前状态
+
+{% for kpi in ctx.kpis %}
+- **{{ kpi.customer_label }}**: {{ "%.0f"|format(kpi.value * 100) }}% — {{ kpi.explanation }}
+{% endfor %}
+
+{% if ctx.health.confidence_reason %}
+> 数据可信度说明: {{ ctx.health.confidence_reason }}
+{% endif %}
+
+## 优先级行动清单
+
+| # | 优先级 | 问题 | 内容资产 | 发布位置 | 负责人 | 审核 | 周期 | 验收标准 | 复测时间 |
+|---|--------|------|---------|---------|--------|------|------|---------|---------|
+{% for a in ctx.actions %}
+| {{ loop.index }} | {{ a.priority }} | {{ a.problem }} | {{ a.content_asset }} | {{ a.publish_location }} | {{ a.owner_role }} | {{ a.review_required }} | {{ a.timeline }} | {{ a.acceptance_criteria }} | {{ a.recheck_timing }} |
+{% endfor %}
+
+{% if not ctx.actions %}
+暂无系统生成的行动主题。以下为基于诊断结果的建议方向：
+
+| 优先级 | 建议方向 | 目标指标 |
+|--------|---------|---------|
+{% for kpi in ctx.kpis if kpi.verdict == 'bad' %}
+| P1 | {{ kpi.customer_advice }} | {{ kpi.customer_label }} |
+{% endfor %}
+{% endif %}
+
+## 审核要求
+
+{% if ctx.industry.compliance_note %}
+**行业合规提醒:** {{ ctx.industry.compliance_note }}
+{% endif %}
+
+- 所有发布内容需经品牌负责人审核
+- 涉及竞品比较、客户案例、价格信息的内容需额外法务审核
+- 发布前确认内容与品牌事实库一致
+
+## 复测验证计划
+
+建议在内容发布完成后 2-4 周重新触发品牌采集，对比以下指标变化：
+{% for kpi in ctx.kpis %}
+- {{ kpi.customer_label }}: 当前 {{ "%.0f"|format(kpi.value * 100) }}% → 目标待定
+{% endfor %}
+
+---
+
+*本报告由 GEO Explorer 自动生成，供内部执行团队使用。报告基于指定时间范围内的 AI 平台回答和品牌事实库，优化效果需通过后续复测验证。*

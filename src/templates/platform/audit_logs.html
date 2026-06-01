@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}审计日志 — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <h1 class="text-2xl font-bold text-gray-900 mb-4">审计日志</h1>
+  <p class="text-xs text-gray-500 mb-4">敏感信息已脱敏 — 不展示 API Key / secret / token 明文</p>
+  <div id="log-list" class="space-y-1 text-sm">加载中...</div>
+</div>
+<script>
+async function loadLogs() {
+  const r = await fetch('/api/platform/audit-logs?limit=100'); const logs = await r.json();
+  document.getElementById('log-list').innerHTML = logs.length
+    ? logs.map(l => '<div class="border-b py-2 flex gap-4 text-xs">' +
+      '<span class="text-gray-400 w-32">'+(l.created_at||'').substring(0,16)+'</span>' +
+      '<span class="font-medium w-32">'+l.action+'</span>' +
+      '<span class="text-gray-500 w-20">'+l.resource_type+'</span>' +
+      '<span class="text-gray-400">'+ (l.actor_user_id||'') +'</span>' +
+      '</div>').join('')
+    : '<p class="text-sm text-gray-400 py-4">无审计日志</p>';
+}
+loadLogs();
+</script>
+{% endblock %}

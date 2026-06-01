@@ -121,17 +121,99 @@ async def run_collection(
     db.add(run)
     await db.flush()
 
+    # --- Preflight: template health + coverage ---
+    import re
+    _UNRESOLVED_RE = re.compile(r"\{[^{}]+\}")
+
+    # GT-derived variable expansion
+    _GT_VAR_MAP = {
+        "{品类}": "category",
+        "{竞品}": "target_competitors",
+        "{场景}": "core_scenarios",
+        "{目标用户}": "target_users",
+    }
+
+    class _PreflightResult:
+        __slots__ = ("template", "render_status", "unresolved_variables", "question_type")
+        def __init__(self, template, status, unresolved, qtype):
+            self.template = template
+            self.render_status = status
+            self.unresolved_variables = unresolved
+            self.question_type = qtype
+
+    _gt_json = {}
+    if active_gt and active_gt.ground_truth_json:
+        _gt_json = active_gt.ground_truth_json
+
+    def _expand_vars(text: str) -> str:
+        for alias in brand.aliases or []:
+            text = text.replace(f"{{{alias}}}", alias)
+        text = text.replace("{品牌}", brand.name)
+        text = text.replace("{行业}", brand.industry or "")
+        for _var, _gt_key in _GT_VAR_MAP.items():
+            _val = _gt_json.get(_gt_key, "")
+            if isinstance(_val, list):
+                _val = "、".join(str(v) for v in _val)
+            text = text.replace(_var, str(_val) if _val else _var)
+        return text
+
+    preflight_results = []
+    for _t in templates:
+        _question = _expand_vars(_t.template_text)
+        _unresolved = _UNRESOLVED_RE.findall(_question)
+        _status = "ok" if not _unresolved else "missing_variable"
+        preflight_results.append(_PreflightResult(
+            template=_t, status=_status,
+            unresolved=_unresolved,
+            qtype=getattr(_t, "question_type", "brand_definition"),
+        ))
+
+    health_report = _build_template_health_report(preflight_results)
+    run.template_health_report_json = health_report
+
+    # Coverage: count templates by question_type and platform
+    qtype_counts = {}
+    for _t in templates:
+        _qt = getattr(_t, "question_type", "brand_definition")
+        qtype_counts[_qt] = qtype_counts.get(_qt, 0) + 1
+    active_platforms = settings.platform_concurrency_limits or {
+        "deepseek": 3, "kimi": 3, "doubao": 2, "wenxin": 1,
+    }
+    platform_coverage = {
+        p: len(templates) for p in active_platforms
+    }
+    total_templates = len(templates)
+    valid_templates = health_report.get("valid_templates", total_templates)
+    run.coverage_report_json = {
+        "raw_coverage": total_templates / max(total_templates, 1),
+        "valid_answer_coverage": valid_templates / max(total_templates, 1),
+        "metric_eligible_coverage": valid_templates / max(total_templates, 1),
+        "platform_coverage": platform_coverage,
+        "qtype_distribution": qtype_counts,
+    }
+    await db.flush()
+    # --- End preflight ---
+
     _platform_semaphores = {
         p: asyncio.Semaphore(settings.platform_concurrency_limits.get(p, 4))
         for p in PLATFORMS
     }
+
+    _gt_json = {}
+    if active_gt and active_gt.ground_truth_json:
+        _gt_json = active_gt.ground_truth_json
 
     def _build_question(tmpl):
         question = tmpl.template_text
         for alias in brand.aliases or []:
             question = question.replace(f"{{{alias}}}", alias)
         question = question.replace("{品牌}", brand.name)
-        question = question.replace("{行业}", brand.industry)
+        question = question.replace("{行业}", brand.industry or "")
+        for _var, _gt_key in _GT_VAR_MAP.items():
+            _val = _gt_json.get(_gt_key, "")
+            if isinstance(_val, list):
+                _val = "、".join(str(v) for v in _val)
+            question = question.replace(_var, str(_val) if _val else _var)
         return question
 
     system = active_prompt.system_prompt if active_prompt else "你是一个诚实的AI助手。"

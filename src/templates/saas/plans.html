@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}套餐对比 — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <h1 class="text-2xl font-bold text-gray-900 mb-2">套餐对比</h1>
+  <p class="text-sm text-gray-500 mb-6" id="current-plan-info">加载中...</p>
+
+  <div id="plans-grid" class="grid grid-cols-3 gap-4">
+    <div class="col-span-3 text-center text-gray-400 py-12">加载中...</div>
+  </div>
+</div>
+
+<script>
+(async function() {
+  const [entRes, plansRes] = await Promise.all([
+    fetch('/api/saas/entitlements'), fetch('/api/saas/plans')
+  ]);
+  const ent = await entRes.json();
+  const plans = await plansRes.json();
+  const currentPlan = (ent.plan || {}).name || 'free';
+
+  document.getElementById('current-plan-info').textContent =
+    '当前套餐: ' + currentPlan.toUpperCase() + ' | 订阅状态: ' + (ent.subscription_status || 'active');
+
+  const features = ['feature_kpi_dashboard','feature_benchmark','feature_trends',
+    'feature_reports_online','feature_reports_pdf','feature_reports_docx','feature_reports_branding',
+    'feature_cms_webhook','feature_cms_wordpress','feature_api_access','feature_api_write',
+    'feature_content_packages','feature_data_export','feature_team_members','feature_cost_dashboard'];
+  const featureLabels = {
+    feature_kpi_dashboard:'KPI 仪表盘',feature_benchmark:'行业基准',feature_trends:'趋势分析',
+    feature_reports_online:'在线报告',feature_reports_pdf:'PDF 导出',feature_reports_docx:'Word 导出',
+    feature_reports_branding:'品牌定制',feature_cms_webhook:'Webhook 发布',feature_cms_wordpress:'WordPress 发布',
+    feature_api_access:'API 接入',feature_api_write:'API 写入',feature_content_packages:'内容包',
+    feature_data_export:'数据导出',feature_team_members:'团队协作',feature_cost_dashboard:'成本看板'
+  };
+
+  document.getElementById('plans-grid').innerHTML = plans.map(p => {
+    const isCurrent = p.name === currentPlan;
+    const f = p.features || {};
+    return '<div class="bg-white rounded-lg border ' + (isCurrent ? 'ring-2 ring-blue-500' : '') + ' p-6">' +
+      '<h2 class="text-xl font-bold">' + p.display_name + '</h2>' +
+      '<div class="text-3xl font-bold mt-3">' + (p.monthly_price_cny === 0 ? '免费' : (p.monthly_price_cny ? '¥' + p.monthly_price_cny + '<span class="text-sm text-gray-400">/月</span>' : '议价')) + '</div>' +
+      '<div class="mt-4 space-y-2 text-sm">' +
+        '<div><strong>' + (p.max_brands < 0 ? '不限' : p.max_brands) + '</strong> 品牌</div>' +
+        '<div><strong>' + (p.max_users < 0 ? '不限' : p.max_users) + '</strong> 成员</div>' +
+        '<div><strong>' + (p.max_api_keys < 0 ? '不限' : p.max_api_keys) + '</strong> API Key</div>' +
+        '<div>数据保留 <strong>' + (p.data_retention_days < 0 ? '永久' : p.data_retention_days + '天') + '</strong></div>' +
+      '</div>' +
+      '<div class="mt-4 pt-4 border-t space-y-1 text-xs">' +
+        features.map(fk => '<div class="flex items-center gap-2 ' + (f[fk] ? 'text-gray-700' : 'text-gray-300') + '">' +
+          (f[fk] ? '✓' : '—') + ' ' + (featureLabels[fk] || fk) + '</div>').join('') +
+      '</div>' +
+      (isCurrent ? '<div class="mt-4 py-2 bg-blue-50 text-blue-700 text-sm text-center rounded-lg font-medium">当前套餐</div>' :
+       '<button onclick="upgradePlan(\'' + p.name + '\')" class="mt-4 w-full py-2 bg-blue-700 text-white text-sm rounded-lg hover:bg-blue-800">升级到 ' + p.display_name + '</button>') +
+    '</div>';
+  }).join('');
+})();
+
+async function upgradePlan(name) {
+  const res = await fetch('/api/saas/plan-change-preview', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({target_plan: name})
+  });
+  const data = await res.json();
+  const impacts = data.impacts || {};
+  let msg = '升级到 ' + name.toUpperCase() + '？\n\n';
+  if (impacts.features_gained && impacts.features_gained.length) msg += '新增功能: ' + impacts.features_gained.join(', ') + '\n';
+  if (impacts.features_lost && impacts.features_lost.length) msg += '将失去: ' + impacts.features_lost.join(', ') + '\n';
+  if (impacts.brands_over_limit && impacts.brands_over_limit.length) msg += '⚠ 品牌超限: ' + impacts.brands_over_limit[0] + '\n';
+  if (confirm(msg)) {
+    alert('套餐变更将在下一账单周期生效。（MVP: 立即生效）');
+    location.reload();
+  }
+}
+</script>
+{% endblock %}

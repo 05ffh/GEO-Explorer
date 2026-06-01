@@ -6,7 +6,9 @@ from jose import JWTError, jwt
 from src.database import get_db
 from src.config import settings
 from src.models.user import User
+import logging
 
+logger = logging.getLogger(__name__)
 security = HTTPBearer(auto_error=False)
 
 
@@ -41,6 +43,67 @@ async def get_current_user(
     if not user:
         raise HTTPException(status_code=401)
     return user
+
+
+async def get_user_or_api_key(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    """Authenticate via cookie/JWT or API Key header.
+
+    Tries cookie/JWT first. Falls back to API Key (X-GEO-API-Key header).
+    Returns a User in both cases.
+    """
+    # Try cookie/JWT auth first
+    token = None
+    if credentials:
+        token_str = credentials.credentials
+        if not token_str.startswith("geo_live_") and not token_str.startswith("geo_test_"):
+            token = token_str
+    else:
+        cookie_token = request.cookies.get("geo_token")
+        if cookie_token:
+            token = cookie_token
+
+    if token:
+        try:
+            payload = jwt.decode(
+                token, settings.secret_key, algorithms=[settings.jwt_algorithm],
+            )
+            user_id = payload.get("sub")
+            if user_id:
+                user = (await db.execute(
+                    select(User).where(User.id == user_id)
+                )).scalar_one_or_none()
+                if user:
+                    return user
+        except JWTError:
+            pass
+
+    # Fall back to API Key auth
+    from src.saas.api_key_auth import resolve_user_from_api_key
+    result = await resolve_user_from_api_key(request, db)
+    if result is None:
+        raise HTTPException(status_code=401, detail="Not authenticated — provide a valid session cookie, JWT token, or API Key")
+
+    user, api_key = result
+    # Store API key on request state so routes can check auth method
+    request.state.api_key = api_key
+    return user
+
+
+def require_api_scope(*required_scopes: str):
+    """Authenticate via API Key only (no cookie fallback) with scope enforcement.
+
+    Use for machine-to-machine endpoints where cookie auth is not appropriate.
+    Returns (User, ApiKey).
+    """
+    async def verifier(request: Request, db: AsyncSession = Depends(get_db)):
+        from src.saas.api_key_auth import require_api_key_scope as _require
+        dep = _require(*required_scopes)
+        return await dep(request, db)
+    return verifier
 
 
 def require_permission(permission: str):

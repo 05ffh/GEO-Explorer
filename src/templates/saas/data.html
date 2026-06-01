@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}数据管理 — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <h1 class="text-2xl font-bold text-gray-900 mb-2">数据管理</h1>
+  <p class="text-sm text-gray-500 mb-6">数据导出与删除</p>
+
+  <!-- Tabs -->
+  <div class="flex gap-2 mb-6 border-b">
+    <button onclick="switchTab('export')" id="tab-export"
+       class="px-4 py-2 text-sm font-medium border-b-2 border-blue-700 text-blue-700">数据导出</button>
+    <button onclick="switchTab('deletion')" id="tab-deletion"
+       class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">数据删除</button>
+  </div>
+
+  <!-- Export Tab -->
+  <div id="panel-export">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-lg font-semibold">导出列表</h2>
+      <button onclick="showCreateExport()" class="px-3 py-1.5 bg-blue-700 text-white text-sm rounded-lg hover:bg-blue-800">+ 新建导出</button>
+    </div>
+    <p class="text-xs text-gray-500 mb-2">full 导出包含 AI 原文和诊断明细 | redacted 导出会脱敏 | 下载链接 72 小时过期 | revoke 后不可下载</p>
+    <div id="export-list" class="space-y-2">加载中...</div>
+  </div>
+
+  <!-- Deletion Tab -->
+  <div id="panel-deletion" class="hidden">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-lg font-semibold">删除请求</h2>
+      <button onclick="showCreateDeletion()" class="px-3 py-1.5 bg-red-700 text-white text-sm rounded-lg hover:bg-red-800">+ 新建删除请求</button>
+    </div>
+    <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-800 mb-4">
+      组织级删除不可逆 | 审计日志按安全政策保留 | 备份按保留周期自然过期 | 删除完成后无法恢复
+    </div>
+    <div id="deletion-list" class="space-y-2">加载中...</div>
+  </div>
+</div>
+
+<script>
+let currentTab = 'export';
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-export').className = tab === 'export'
+    ? 'px-4 py-2 text-sm font-medium border-b-2 border-blue-700 text-blue-700'
+    : 'px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700';
+  document.getElementById('tab-deletion').className = tab === 'deletion'
+    ? 'px-4 py-2 text-sm font-medium border-b-2 border-blue-700 text-blue-700'
+    : 'px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700';
+  document.getElementById('panel-export').className = tab === 'export' ? '' : 'hidden';
+  document.getElementById('panel-deletion').className = tab === 'deletion' ? '' : 'hidden';
+  if (tab === 'deletion') loadDeletions();
+}
+
+const statusLabels = {
+  queued: '等待中', generating: '生成中', completed: '已完成',
+  expired: '已过期', failed: '失败', revoked: '已撤销',
+  requested: '等待审批', approved: '已批准', scheduled: '等待执行',
+  processing: '处理中', cancelled: '已取消', completed_with_warnings: '已完成(有警告)',
+  manual_review: '需人工处理'
+};
+
+const statusColors = {
+  queued: 'bg-yellow-100 text-yellow-800', generating: 'bg-blue-100 text-blue-800',
+  completed: 'bg-green-100 text-green-800', completed_with_warnings: 'bg-green-100 text-green-800',
+  expired: 'bg-gray-100 text-gray-500', failed: 'bg-red-100 text-red-800',
+  revoked: 'bg-gray-100 text-gray-500', requested: 'bg-yellow-100 text-yellow-800',
+  approved: 'bg-blue-100 text-blue-800', scheduled: 'bg-purple-100 text-purple-800',
+  processing: 'bg-blue-100 text-blue-800', cancelled: 'bg-gray-100 text-gray-500',
+  manual_review: 'bg-red-100 text-red-800'
+};
+
+// ── Exports ──
+
+async function loadExports() {
+  const res = await fetch('/api/saas/data-exports');
+  const data = await res.json();
+  if (!data.length) {
+    document.getElementById('export-list').innerHTML = '<p class="text-sm text-gray-400 py-4">暂无导出</p>';
+    return;
+  }
+  document.getElementById('export-list').innerHTML = data.map(e => {
+    const ts = e.created_at ? new Date(e.created_at).toLocaleString() : '-';
+    const exp = e.expires_at ? new Date(e.expires_at).toLocaleString() : '-';
+    return '<div class="bg-white border rounded-lg p-4 flex justify-between items-center">' +
+      '<div><div class="text-sm font-medium">' + e.format.toUpperCase() + ' · ' + e.scope + '</div>' +
+      '<div class="text-xs text-gray-400">' + ts + ' · 过期: ' + exp + ' · 下载 ' + (e.download_count || 0) + ' 次</div></div>' +
+      '<div class="flex items-center gap-2">' +
+      '<span class="px-2 py-0.5 text-xs rounded-full ' + (statusColors[e.status] || '') + '">' + (statusLabels[e.status] || e.status) + '</span>' +
+      (e.status === 'completed' ? '<button onclick="downloadExport(\'' + e.id + '\')" class="text-xs text-blue-700 hover:underline">下载</button>' +
+       '<button onclick="revokeExport(\'' + e.id + '\')" class="text-xs text-red-600 hover:underline">撤销</button>' : '') +
+      (e.status === 'failed' ? '<button onclick="retryExport(\'' + e.id + '\')" class="text-xs text-blue-700 hover:underline">重试</button>' : '') +
+      '</div></div>';
+  }).join('');
+}
+
+async function showCreateExport() {
+  const scope = prompt('导出范围 (brand / organization):', 'brand');
+  if (!scope) return;
+  const fmt = prompt('格式 (json / csv_zip):', 'json');
+  if (!fmt) return;
+  const level = prompt('脱敏级别 (full / redacted):', 'full');
+  const res = await fetch('/api/saas/data-exports', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({scope, format: fmt, redaction_level: level || 'full'}),
+  });
+  if (res.ok) { alert('导出已创建'); loadExports(); }
+  else alert('创建失败: ' + (await res.json()).detail);
+}
+
+async function downloadExport(id) {
+  const res = await fetch('/api/saas/data-exports/' + id);
+  const exp = await res.json();
+  if (exp.download_token) window.open('/api/saas/data-exports/' + id + '/download?token=' + exp.download_token);
+  else alert('下载链接不可用');
+  loadExports();
+}
+
+async function revokeExport(id) {
+  if (!confirm('确认撤销此导出？撤销后不可下载。')) return;
+  await fetch('/api/saas/data-exports/' + id + '/revoke', {method:'POST'});
+  loadExports();
+}
+
+async function retryExport(id) {
+  await fetch('/api/saas/data-exports/' + id + '/retry', {method:'POST'});
+  loadExports();
+}
+
+// ── Deletions ──
+
+async function loadDeletions() {
+  const res = await fetch('/api/saas/data-deletion-requests');
+  const data = await res.json();
+  if (!data.length) {
+    document.getElementById('deletion-list').innerHTML = '<p class="text-sm text-gray-400 py-4">暂无删除请求</p>';
+    return;
+  }
+  document.getElementById('deletion-list').innerHTML = data.map(d => {
+    const ts = d.requested_at ? new Date(d.requested_at).toLocaleString() : '-';
+    return '<div class="bg-white border rounded-lg p-4 flex justify-between items-center">' +
+      '<div><div class="text-sm font-medium">' + d.scope + ' · ' + (d.reason || '') + '</div>' +
+      '<div class="text-xs text-gray-400">' + ts + '</div></div>' +
+      '<div class="flex items-center gap-2">' +
+      '<span class="px-2 py-0.5 text-xs rounded-full ' + (statusColors[d.status] || '') + '">' + (statusLabels[d.status] || d.status) + '</span>' +
+      ((d.status === 'requested' || d.status === 'approved') ? '<button onclick="cancelDeletion(\'' + d.id + '\')" class="text-xs text-red-600 hover:underline">取消</button>' : '') +
+      ((d.status === 'completed' || d.status === 'completed_with_warnings') ? '<button onclick="viewReceipt(\'' + d.id + '\')" class="text-xs text-blue-700 hover:underline">查看收据</button>' : '') +
+      '</div></div>';
+  }).join('');
+}
+
+async function showCreateDeletion() {
+  const scope = prompt('删除范围 (brand / organization):', 'brand');
+  if (!scope) return;
+  const reason = prompt('删除原因 (必填):', '');
+  if (!reason) return alert('必须填写删除原因');
+  if (scope === 'organization' && !confirm('⚠ 组织级删除不可逆！所有品牌、采集数据、报告将被永久删除。确认继续？')) return;
+  const res = await fetch('/api/saas/data-deletion-requests', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({scope, reason}),
+  });
+  if (res.ok) { alert('删除请求已提交，等待审批'); loadDeletions(); }
+  else alert('创建失败: ' + (await res.json()).detail);
+}
+
+async function cancelDeletion(id) {
+  if (!confirm('确认取消此删除请求？')) return;
+  await fetch('/api/saas/data-deletion-requests/' + id + '/cancel', {method:'POST'});
+  loadDeletions();
+}
+
+async function viewReceipt(id) {
+  const res = await fetch('/api/saas/data-deletion-requests/' + id + '/receipt');
+  if (!res.ok) { alert('收据不可用'); return; }
+  const r = await res.json();
+  alert('删除收据\n\n' +
+    '删除表: ' + (r.affected_tables || []).join(', ') + '\n' +
+    '文件删除: ' + (r.file_deleted_count || 0) + ' / 失败: ' + (r.file_failed_count || 0) + '\n' +
+    'Hash: ' + (r.receipt_hash || '').substring(0, 16) + '...');
+}
+
+// Init
+loadExports();
+</script>
+{% endblock %}

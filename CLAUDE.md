@@ -6,16 +6,17 @@
 
 ## 项目状态
 
-**Phase 12 + P1 5/11 完成。70+ commits, 144 tests (0 failures)。GitHub: https://github.com/05ffh/GEO-Explorer**
+**Phase 12 + P1 6/6 + P2 3/5 完成。130+ commits, 334 tests (0 failures)。GitHub: https://github.com/05ffh/GEO-Explorer**
 
-完整链路（Phase 11 加固后）:
+完整链路:
 ```
 GT采集(含S/A/B/C/D来源等级) → GT审核(证据+人工双重阻断) → 品牌GEO采集
 → 10KPI(统一numerator/denominator/confidence) → 语义幻觉检测(9错误类型+needs_human_review)
-→ Action Theme聚合(最多10主题) → Content Package(风险分级+状态机) → 报告(.md/.docx/.pdf)
+→ Action Theme聚合(最多10主题) → Content Package(风险分级+状态机)
+→ 行业基准+竞品归因(P2-1) → 长期趋势+稳定性(P2-2) → 报告产品化(P2-3) → 报告(.md/.docx/.pdf)
 ```
 
-**下一步:** P1-5 队列稳定性 + P1-6 客户版报告语言
+**下一步:** P2-4 CMS 集成
 
 **设计系统:** Data-Dense Dashboard, #1E40AF/#3B82F6/#F59E0B, Fira Code+Fira Sans, Jinja2+HTMX+Tailwind CDN+Chart.js+Heroicons
 

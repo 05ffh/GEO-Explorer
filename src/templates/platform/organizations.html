@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}组织管理 — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <h1 class="text-2xl font-bold text-gray-900 mb-4">组织管理</h1>
+  <div class="mb-4"><input type="text" id="search" placeholder="搜索组织..." oninput="loadOrgs()"
+    class="px-3 py-2 border rounded-lg text-sm w-64"></div>
+  <div id="org-list" class="space-y-2">加载中...</div>
+</div>
+<script>
+let vm = {{ vm["user"] | tojson | safe }};
+async function loadOrgs() {
+  const q = document.getElementById('search').value;
+  const r = await fetch('/api/platform/organizations?search=' + encodeURIComponent(q));
+  const orgs = await r.json();
+  document.getElementById('org-list').innerHTML = orgs.map(o =>
+    '<div class="bg-white border rounded-lg p-4 flex justify-between items-center">' +
+    '<div><div class="text-sm font-medium">' + o.name + ' <span class="text-xs text-gray-400">' + (o.slug||'') + '</span></div>' +
+    '<div class="text-xs text-gray-400">品牌:' + (o.brand_count||0) + ' 用户:' + (o.user_count||0) + ' 套餐:' + (o.plan||'free') + '</div></div>' +
+    '<div class="flex items-center gap-2">' +
+    (o.is_active ? '<span class="text-xs text-green-600">活跃</span>' : '<span class="text-xs text-red-600">已暂停</span>') +
+    (vm.is_system_owner ? (o.is_active
+      ? '<button onclick="suspendOrg(\'' + o.id + '\')" class="text-xs text-red-600 hover:underline ml-2">暂停</button>'
+      : '<button onclick="resumeOrg(\'' + o.id + '\')" class="text-xs text-green-600 hover:underline ml-2">恢复</button>') : '') +
+    '</div></div>'
+  ).join('') || '<p class="text-sm text-gray-400 py-4">无组织</p>';
+}
+async function suspendOrg(id) {
+  const reason = prompt('暂停原因 (必填):'); if (!reason) return;
+  await fetch('/api/platform/organizations/' + id + '/suspend', {
+    method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({reason})});
+  loadOrgs();
+}
+async function resumeOrg(id) {
+  if (!confirm('确认恢复此组织？')) return;
+  await fetch('/api/platform/organizations/' + id + '/resume', {method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({})});
+  loadOrgs();
+}
+loadOrgs();
+</script>
+{% endblock %}

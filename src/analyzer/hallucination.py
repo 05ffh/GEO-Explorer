@@ -7,6 +7,20 @@ from src.models.hallucination import HallucinationResult
 from src.schemas.ground_truth import GT_FIELD_LEVELS
 
 
+# ── Expanded verdict states (P0-6) ──────────────────────────────────────────
+# supported: GT supports the claim
+# contradicted: claim conflicts with GT
+# unsupported: GT does not cover this claim
+# not_about_brand: response is not about the target brand
+# generic_statement: generic advice, not a brand claim
+# template_invalid: template had unresolved variables
+# gt_insufficient: GT does not have enough data to verify
+# ambiguous: claim is semantically unclear
+# not_checkable: claim cannot be fact-checked
+
+SERIOUS_CONTROVERSY = {"contradicted", "unsupported"}
+NON_HALLUCINATION = {"not_about_brand", "generic_statement", "template_invalid", "not_checkable"}
+
 HALLUCINATION_ERROR_TYPES = {
     "identity_error": "品牌身份错误",
     "category_error": "行业/品类错误",
@@ -21,16 +35,28 @@ HALLUCINATION_ERROR_TYPES = {
 
 
 @dataclass
+class BrandRelevanceResult:
+    relevance: str  # brand_centric | brand_mentioned | category_general | irrelevant
+    confidence: float
+    evidence: list[str] = field(default_factory=list)
+    should_extract_brand_claims: bool = False
+
+
+@dataclass
 class Claim:
     field: str
     claim_text: str
     context: str
     confidence: float
+    subject_type: str = "unknown"   # target_brand | competitor | category | generic | unknown
+    predicate_type: str = "other"   # identity | industry | product | positioning | target_user | scenario | competitor | reputation | recommendation | other
+    checkable: bool = False
+    source_sentence: str = ""
 
 
 @dataclass
 class ClaimVerification:
-    verdict: str  # correct / incorrect / partial / unsupported / uncertain
+    verdict: str  # supported | contradicted | unsupported | not_about_brand | generic_statement | template_invalid | gt_insufficient | ambiguous | not_checkable
     error_type: str | None
     severity: str
     gt_value: str
@@ -59,7 +85,7 @@ def _tokenize(text: str) -> set[str]:
     """Extract tokens using punctuation-splitting + character n-grams for Chinese."""
     text = text.lower()
     # Split on punctuation
-    phrases = re.split(r'[，。、；：！？\s\n\(\)（）\[\]【】""''/，,!?;:\-]+', text)
+    phrases = re.split(r'[，。、；：！？\s\n\(\)（）\[\]【】""''/，,!?;:\\-]+', text)
     phrases = [p.strip() for p in phrases if len(p.strip()) >= 2]
     tokens = set()
     for phrase in phrases:
@@ -77,10 +103,79 @@ def _tokenize(text: str) -> set[str]:
 class HallucinationDetector:
     """Detect factual claims in AI responses and verify against Ground Truth."""
 
-    def extract_claims(self, response: str) -> list[Claim]:
+    def _classify_relevance(self, response: str, brand_name: str, gt_json: dict) -> BrandRelevanceResult:
+        """Classify whether an AI response is about the target brand (P0-4)."""
+        # Check if brand name or official_name appears as the subject
+        official = str(gt_json.get("official_name", ""))
+        industry = str(gt_json.get("industry", ""))
+        evidence = []
+
+        brand_mentions = brand_name in response or (official and official in response)
+        if brand_mentions:
+            evidence.append(f"品牌名出现: {brand_name}")
+
+        # Count sentences where brand is clearly the subject
+        sentences = re.split(r'[。\n]+', response)
+        brand_subject_count = 0
+        for sent in sentences:
+            sent = sent.strip()
+            if not sent:
+                continue
+            # Brand name appears early in sentence (likely subject)
+            if brand_name in sent and sent.index(brand_name) < min(len(sent) / 3, 20):
+                brand_subject_count += 1
+            elif official and official in sent and sent.index(official) < min(len(sent) / 3, 20):
+                brand_subject_count += 1
+
+        # If brand is the subject of multiple sentences, it's brand_centric
+        if brand_subject_count >= 2:
+            return BrandRelevanceResult(
+                relevance="brand_centric", confidence=0.9, evidence=evidence,
+                should_extract_brand_claims=True,
+            )
+
+        # If brand is mentioned at least once as subject
+        if brand_subject_count >= 1 or (brand_mentions and len(sentences) <= 5):
+            return BrandRelevanceResult(
+                relevance="brand_centric" if brand_subject_count > 0 else "brand_mentioned",
+                confidence=0.7, evidence=evidence,
+                should_extract_brand_claims=brand_subject_count > 0,
+            )
+
+        # Check for category/industry-level discussion (not about brand)
+        industry_words = ["行业", "品类", "工具", "平台", "推荐", "选择"]
+        if any(w in response for w in industry_words):
+            return BrandRelevanceResult(
+                relevance="category_general", confidence=0.6,
+                evidence=["回答讨论行业/品类而非特定品牌"],
+                should_extract_brand_claims=False,
+            )
+
+        return BrandRelevanceResult(
+            relevance="irrelevant", confidence=0.5,
+            evidence=["未找到品牌相关信号"],
+            should_extract_brand_claims=False,
+        )
+
+    def _infer_subject_type(self, claim_text: str, brand_name: str, gt_json: dict) -> str:
+        """Infer whether a claim is about the target brand, a competitor, or generic."""
+        official = str(gt_json.get("official_name", ""))
+        if brand_name in claim_text or (official and official in claim_text):
+            return "target_brand"
+        competitors = gt_json.get("target_competitors", [])
+        for comp in (competitors if isinstance(competitors, list) else []):
+            if str(comp) in claim_text:
+                return "competitor"
+        # Check if claim uses brand as subject implicitly
+        if any(kw in claim_text for kw in ["星巴克", "品牌", "该公司", "其"]):
+            return "target_brand"
+        return "generic"
+
+    def extract_claims(self, response: str, brand_name: str = "", gt_json: dict | None = None) -> list[Claim]:
         """Extract sentences that make factual claims about specific GT fields."""
         claims = []
         sentences = re.split(r'[。\n]+', response)
+        gt = gt_json or {}
 
         for sent in sentences:
             sent = sent.strip()
@@ -101,93 +196,142 @@ class HallucinationDetector:
 
                     ctx_start = max(0, idx - 40)
                     ctx_end = min(len(response), response.lower().find(sent_lower) + idx + len(kw) + 60)
+
+                    subject_type = self._infer_subject_type(sent, brand_name, gt) if brand_name else "unknown"
+                    predicate_type = _infer_predicate_type(field_name)
+                    checkable = subject_type in ("target_brand", "competitor")
+
                     claims.append(Claim(
                         field=field_name,
                         claim_text=fragment[:150],
                         context=response[ctx_start:ctx_end] if ctx_start < ctx_end else sent[:200],
                         confidence=0.6 + (0.1 * len(matched_kw)),
+                        subject_type=subject_type,
+                        predicate_type=predicate_type,
+                        checkable=checkable,
+                        source_sentence=sent[:300],
                     ))
                     break
 
         return claims
 
     def verify_claim(self, claim: Claim, gt_json: dict) -> dict:
-        """Verify claim against GT with error type classification and human review flag."""
-        gt_value = gt_json.get(claim.field)
+        """Verify claim against GT with expanded verdict states (P0-6)."""
         field_level = GT_FIELD_LEVELS.get(claim.field, "P1")
 
+        # Non-checkable claims
+        if not claim.checkable:
+            if claim.subject_type == "generic":
+                return {"verdict": "generic_statement", "severity": "Info",
+                        "error_type": None, "needs_human_review": False,
+                        "reason": "Generic statement, not a brand-specific claim",
+                        "ai_claim": claim.claim_text, "ground_truth_value": ""}
+            if claim.subject_type == "competitor":
+                return {"verdict": "not_checkable", "severity": "Info",
+                        "error_type": None, "needs_human_review": False,
+                        "reason": "Claim about competitor, not target brand",
+                        "ai_claim": claim.claim_text, "ground_truth_value": ""}
+            return {"verdict": "not_checkable", "severity": "Info",
+                    "error_type": None, "needs_human_review": False,
+                    "reason": f"Subject type '{claim.subject_type}' not checkable against brand GT",
+                    "ai_claim": claim.claim_text, "ground_truth_value": ""}
+
+        gt_value = gt_json.get(claim.field)
         if not gt_value:
-            return {
-                "verdict": "uncertain", "severity": field_level,
-                "error_type": None, "needs_human_review": False,
-                "reason": "GT field not defined, cannot verify",
-            }
+            return {"verdict": "gt_insufficient", "severity": "Info",
+                    "error_type": None, "needs_human_review": False,
+                    "reason": f"GT field '{claim.field}' not defined, cannot verify",
+                    "ai_claim": claim.claim_text, "ground_truth_value": ""}
 
         gt_str = str(gt_value) if not isinstance(gt_value, list) else " ".join(gt_value)
         claim_tokens = _tokenize(claim.claim_text)
         gt_tokens = _tokenize(gt_str)
 
         if not claim_tokens or not gt_tokens:
-            return {"verdict": "uncertain", "severity": field_level,
+            return {"verdict": "ambiguous", "severity": "Info",
                     "error_type": None, "needs_human_review": False,
-                    "reason": "Insufficient tokens", "ai_claim": claim.claim_text,
-                    "ground_truth_value": gt_str}
+                    "reason": "Insufficient tokens for comparison",
+                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
 
         overlap = claim_tokens & gt_tokens
         claim_coverage = len(overlap) / len(claim_tokens) if claim_tokens else 0
         gt_coverage = len(overlap) / len(gt_tokens) if gt_tokens else 0
         similarity_score = (claim_coverage + gt_coverage) / 2
 
-        # Correct: strong overlap both ways
+        # Supported: strong overlap both ways
         if gt_coverage >= 0.3 and claim_coverage >= 0.2:
-            return {
-                "verdict": "correct", "severity": field_level,
-                "error_type": None, "needs_human_review": False,
-                "similarity_score": round(similarity_score, 3),
-                "reason": f"Token match: claim={claim_coverage:.0%} gt={gt_coverage:.0%}",
-                "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
-            }
+            return {"verdict": "supported", "severity": field_level,
+                    "error_type": None, "needs_human_review": False,
+                    "similarity_score": round(similarity_score, 3),
+                    "reason": f"Token match: claim={claim_coverage:.0%} gt={gt_coverage:.0%}",
+                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
 
-        # Determine error type
+        # Overclaim / contradicted
         extra_tokens = claim_tokens - gt_tokens
         forbidden = {"领先", "第一", "最大", "最好", "唯一", "最强", "顶级", "绝对"}
         hit_forbidden = [t for t in extra_tokens if t in forbidden]
 
         if hit_forbidden:
-            return {
-                "verdict": "incorrect", "severity": "P0",
-                "error_type": "overclaim", "needs_human_review": True,
-                "similarity_score": round(similarity_score, 3),
-                "reason": f"Forbidden claim: {hit_forbidden}",
-                "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
-            }
+            return {"verdict": "contradicted", "severity": "P0",
+                    "error_type": "overclaim", "needs_human_review": True,
+                    "similarity_score": round(similarity_score, 3),
+                    "reason": f"Forbidden claim: {hit_forbidden}",
+                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
 
         if extra_tokens and gt_coverage < 0.15:
             error_type = _classify_error_type(claim.field, claim.claim_text, gt_str)
             needs_review = field_level == "P0" or claim.field in (
                 "official_name", "category", "positioning")
-            return {
-                "verdict": "incorrect", "severity": field_level,
-                "error_type": error_type, "needs_human_review": needs_review,
-                "similarity_score": round(similarity_score, 3),
-                "reason": f"Tokens not in GT: {sorted(extra_tokens)[:5]}",
-                "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
-            }
+            # Only P0 if core identity fields contradicted
+            severity = "P0" if field_level == "P0" and claim.field in (
+                "official_name", "industry", "category", "core_products") else field_level
+            return {"verdict": "contradicted", "severity": severity,
+                    "error_type": error_type, "needs_human_review": needs_review,
+                    "similarity_score": round(similarity_score, 3),
+                    "reason": f"Tokens not in GT: {sorted(extra_tokens)[:5]}",
+                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
 
-        # Partial / uncertain
-        return {
-            "verdict": "uncertain", "severity": field_level,
-            "error_type": None, "needs_human_review": False,
-            "similarity_score": round(similarity_score, 3) if overlap else None,
-            "reason": "Partial match — needs human review" if overlap else "No match",
-            "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
-        }
+        # Unsupported / ambiguous
+        if overlap:
+            return {"verdict": "unsupported", "severity": field_level,
+                    "error_type": None, "needs_human_review": False,
+                    "similarity_score": round(similarity_score, 3),
+                    "reason": "Partial match — GT cannot fully confirm",
+                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
+
+        return {"verdict": "ambiguous", "severity": "Info",
+                "error_type": None, "needs_human_review": False,
+                "reason": "No meaningful overlap with GT",
+                "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
 
     async def detect(
         self, query_result: QueryResult, gt: GroundTruthVersion, db: AsyncSession,
+        brand_name: str = "",
     ) -> list[HallucinationResult]:
-        claims = self.extract_claims(query_result.answer_text)
         gt_json = gt.ground_truth_json
+        brand = brand_name or str(gt_json.get("official_name", ""))
+
+        # Brand relevance pre-check (P0-4)
+        relevance = self._classify_relevance(query_result.answer_text, brand, gt_json)
+
+        # Only extract brand claims for brand_centric responses
+        if relevance.relevance not in ("brand_centric", "brand_mentioned"):
+            return [HallucinationResult(
+                brand_id=query_result.brand_id,
+                query_result_id=query_result.id,
+                collection_run_id=query_result.collection_run_id,
+                ground_truth_version_id=gt.id,
+                field_name="",
+                field_level="Info",
+                severity="Info",
+                verdict="not_about_brand" if relevance.relevance != "category_general" else "generic_statement",
+                ai_claim=relevance.evidence[0] if relevance.evidence else "",
+                ground_truth_value="",
+                error_type="",
+            )]
+
+        # Extract claims with brand awareness
+        claims = self.extract_claims(query_result.answer_text, brand, gt_json)
         results = []
 
         for claim in claims:
@@ -195,6 +339,7 @@ class HallucinationDetector:
             h = HallucinationResult(
                 brand_id=query_result.brand_id,
                 query_result_id=query_result.id,
+                collection_run_id=query_result.collection_run_id,
                 ground_truth_version_id=gt.id,
                 field_name=claim.field,
                 field_level=GT_FIELD_LEVELS.get(claim.field, "P1"),
@@ -202,9 +347,22 @@ class HallucinationDetector:
                 verdict=verification["verdict"],
                 ai_claim=verification.get("ai_claim", claim.claim_text),
                 ground_truth_value=verification.get("ground_truth_value", ""),
+                error_type=verification.get("error_type") or "",
             )
             results.append(h)
         return results
+
+
+def _infer_predicate_type(field_name: str) -> str:
+    """Map GT field name to predicate type."""
+    mapping = {
+        "official_name": "identity", "industry": "industry", "category": "industry",
+        "positioning": "positioning", "target_users": "target_user",
+        "core_products": "product", "core_features": "product",
+        "key_differentiators": "positioning", "target_competitors": "competitor",
+        "core_scenarios": "scenario", "forbidden_claims": "reputation",
+    }
+    return mapping.get(field_name, "other")
 
 
 def _classify_error_type(field: str, claim_text: str, gt_str: str) -> str:

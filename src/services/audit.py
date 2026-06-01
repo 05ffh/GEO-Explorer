@@ -52,11 +52,11 @@ async def add_audit_log(db, user, action: str, target_type: str, target_id: str,
         ua = request.headers.get("user-agent", "") if hasattr(request, "headers") else ""
 
     log_entry = AuditLog(
-        organization_id=user.organization_id,
+        organization_id=user.organization_id if user else None,
         brand_id=brand_id,
-        user_id=user.id,
-        user_name=user.name or "",
-        user_role=user.role or "",
+        user_id=user.id if user else None,
+        user_name=user.name or "" if user else "",
+        user_role=user.role or "" if user else "",
         action=action,
         target_type=target_type,
         target_id=str(target_id),

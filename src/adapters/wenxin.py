@@ -28,6 +28,10 @@ class WenxinAdapter(PlatformAdapter):
                 },
             )
             data = resp.json()
+            if "error" in data:
+                raise Exception(f"Wenxin token error: {data.get('error')} — {data.get('error_description', '')}")
+            if "access_token" not in data:
+                raise Exception(f"Wenxin token missing: {str(data)[:200]}")
             self._access_token = data["access_token"]
             self._token_expiry = now + data.get("expires_in", 2592000) - 300
             return self._access_token
@@ -53,7 +57,11 @@ class WenxinAdapter(PlatformAdapter):
                 )
                 data = resp.json()
                 latency = int((time.time() - start) * 1000)
+                if "error_msg" in data:
+                    raise Exception(f"Wenxin API error: {data.get('error_msg', '')[:200]}")
                 answer = data.get("result", "")
+                if not answer:
+                    raise Exception(f"Wenxin returned empty result — full response: {str(data)[:300]}")
                 return AIResponse(
                     platform=self.platform_name, question=prompt, answer_text=answer,
                     citations=await self.extract_citations(answer),

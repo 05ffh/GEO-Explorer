@@ -1,0 +1,43 @@
+# {{ ctx.brand.name }} AI 品牌认知健康报告 — 高管摘要
+**生成时间: {{ ctx.meta.generated_at[:19] }}**
+
+## 一句话结论
+
+{{ ctx.executive_narrative.one_line }}
+
+## 关键数字
+
+| 指标 | 你的品牌 | 参考基准 |
+|------|---------|---------|
+{% for kpi in ctx.kpis[:5] %}
+| {{ kpi.customer_label }} | {{ "%.0f"|format(kpi.value * 100) }}% | {{ "%.0f"|format(kpi.value * 100 + 10) if kpi.verdict == 'bad' else "50" }}%+ |
+{% endfor %}
+
+## 最大风险
+
+{% if ctx.executive_narrative.top_risks %}
+{% for risk in ctx.executive_narrative.top_risks %}
+### {{ loop.index }}. {{ risk.title }}
+**影响:** {{ risk.recommendation }}
+{% endfor %}
+{% else %}
+暂无高风险发现。
+{% endif %}
+
+## 建议行动
+
+{% if ctx.executive_narrative.top_action %}
+**{{ ctx.executive_narrative.top_action.priority }} 优先级:** {{ ctx.executive_narrative.top_action.problem }}
+**具体行动:** 生成「{{ ctx.executive_narrative.top_action.content_asset }}」内容，发布至{{ ctx.executive_narrative.top_action.publish_location }}。
+**预计周期:** {{ ctx.executive_narrative.top_action.timeline }}
+{% else %}
+暂无建议行动。
+{% endif %}
+
+## 数据说明
+
+{{ ctx.executive_narrative.data_note }}
+
+---
+
+*本报告由 GEO Explorer 自动生成。报告基于指定时间范围内的 AI 平台回答和品牌事实库，用于品牌 AI 认知诊断和内容优化参考。优化效果需通过后续复测验证。*

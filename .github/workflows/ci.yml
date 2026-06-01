@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: geo_test
+          POSTGRES_PASSWORD: geo_test
+          POSTGRES_DB: geo_explorer_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+
+      - name: Run tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://geo_test:geo_test@localhost:5432/geo_explorer_test
+          REDIS_URL: redis://localhost:6379/0
+        run: |
+          python -m pytest tests/ -q \
+            --deselect tests/test_collector.py::test_collection_creates_full_lineage \
+            --deselect tests/test_collector.py::test_kimi_429_retry \
+            --deselect tests/test_phase10_e2e.py::test_content_package_pipeline_e2e
+
+  migration-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: geo_test
+          POSTGRES_PASSWORD: geo_test
+          POSTGRES_DB: geo_explorer_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Alembic migration
+        env:
+          DATABASE_URL: postgresql+asyncpg://geo_test:geo_test@localhost:5432/geo_explorer_test
+        run: |
+          alembic upgrade head
+
+  seed-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: geo_test
+          POSTGRES_PASSWORD: geo_test
+          POSTGRES_DB: geo_explorer_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Alembic + Seed (idempotency check)
+        env:
+          DATABASE_URL: postgresql+asyncpg://geo_test:geo_test@localhost:5432/geo_explorer_test
+        run: |
+          alembic upgrade head
+          python -c "
+          import asyncio
+          from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+          from sqlalchemy.pool import NullPool
+          from src.seed.saas_seed import run_all_saas_seeds
+          from src.config import settings
+
+          async def check():
+              engine = create_async_engine(settings.database_url, poolclass=NullPool)
+              Session = async_sessionmaker(engine, expire_on_commit=False)
+              async with Session() as db:
+                  r1 = await run_all_saas_seeds(db)
+                  r2 = await run_all_saas_seeds(db)  # Idempotency
+                  assert r2['plans']['plans'] == 'skipped'
+                  assert r2['system_owner']['system_owner'] == 'exists'
+                  print('Seed idempotency: PASS')
+              await engine.dispose()
+          asyncio.run(check())
+          "

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Feature Flags — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <div class="flex justify-between items-center mb-4">
+    <h1 class="text-2xl font-bold text-gray-900">Feature Flags</h1>
+    {% if vm["actions"]["feature_flags.create"] %}
+    <button onclick="createFlag()" class="px-3 py-1.5 bg-blue-700 text-white text-sm rounded-lg">+ 新建</button>
+    {% endif %}
+  </div>
+  <p class="text-xs text-gray-500 mb-4">beta_feature: 可灰度 | kill_switch: 高风险需reason | commercial: 影响套餐需system_owner</p>
+  <div id="flag-list" class="space-y-2">加载中...</div>
+</div>
+<script>
+let actions = {{ vm["actions"] | tojson | safe }};
+async function loadFlags() {
+  const r = await fetch('/api/platform/feature-flags'); const flags = await r.json();
+  document.getElementById('flag-list').innerHTML = flags.map(f =>
+    '<div class="bg-white border rounded-lg p-4 flex justify-between items-center">' +
+    '<div><div class="text-sm font-medium">'+f.key+' <span class="text-xs px-1 rounded '+(f.default_enabled?'bg-green-100 text-green-700':'bg-gray-100')+'">'+(f.default_enabled?'默认启用':'默认关闭')+'</span></div>' +
+    '<div class="text-xs text-gray-400">'+f.flag_type+' · '+ (f.description||'') +'</div></div>' +
+    (actions['feature_flags.edit']
+      ? '<button onclick="toggleFlag(\''+f.id+'\','+ !f.default_enabled +')" class="text-xs text-blue-700 hover:underline">'+(f.default_enabled?'禁用':'启用')+'</button>'
+      : '') +
+    '</div>'
+  ).join('') || '<p class="text-sm text-gray-400 py-4">无 Feature Flag</p>';
+}
+async function createFlag() {
+  const key = prompt('Flag key:'); if (!key) return;
+  const type = prompt('类型 (beta_feature / kill_switch / commercial):', 'beta_feature');
+  const r = await fetch('/api/platform/feature-flags', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({key, flag_type:type, default_enabled:false})});
+  if (r.ok) loadFlags(); else alert('创建失败');
+}
+async function toggleFlag(id, enabled) {
+  if (!confirm(enabled?'启用此 flag?':'禁用此 flag?')) return;
+  await fetch('/api/platform/feature-flags/'+id, {method:'PATCH', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({default_enabled:enabled})});
+  loadFlags();
+}
+loadFlags();
+</script>
+{% endblock %}

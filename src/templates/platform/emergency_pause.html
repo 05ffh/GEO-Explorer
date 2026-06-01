@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}紧急暂停 — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <div class="flex justify-between items-center mb-4">
+    <h1 class="text-2xl font-bold text-gray-900">紧急暂停</h1>
+    {% if vm["actions"]["emergency_pause.global"] %}
+    <button onclick="triggerPause()" class="px-3 py-1.5 bg-red-700 text-white text-sm rounded-lg">触发暂停</button>
+    {% endif %}
+  </div>
+  <div class="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700 mb-4">
+    global 暂停需 system_owner · 必须填写原因 · 可阻止 collection / report / export / cms_publish
+  </div>
+  <div id="pause-list" class="space-y-2">加载中...</div>
+</div>
+<script>
+let vm = {{ vm["actions"] | tojson | safe }};
+async function loadPauses() {
+  const r = await fetch('/api/platform/emergency-pauses'); const pauses = await r.json();
+  document.getElementById('pause-list').innerHTML = pauses.length
+    ? pauses.map(p => '<div class="bg-white border rounded-lg p-4 flex justify-between items-center">' +
+      '<div><span class="text-xs px-1 rounded '+(p.risk_level==='high'?'bg-red-100 text-red-700':'bg-yellow-100')+'">'+p.risk_level+'</span> ' +
+      '<span class="text-sm font-medium">'+p.scope+'</span> <span class="text-xs text-gray-400">'+p.reason+'</span></div>' +
+      (vm['emergency_pause.resolve']
+        ? '<button onclick="resolvePause(\''+p.id+'\')" class="text-xs text-green-700 hover:underline">恢复</button>'
+        : '') +
+      '</div>').join('')
+    : '<p class="text-sm text-gray-400 py-4">无活跃紧急暂停</p>';
+}
+async function triggerPause() {
+  const scope = prompt('暂停范围 (global / organization / feature / operation):','global');
+  const reason = prompt('暂停原因 (必填):'); if (!reason) return alert('必须填写原因');
+  const rl = prompt('风险等级 (high / medium / low):','high');
+  const r = await fetch('/api/platform/emergency-pause', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({scope, reason, risk_level:rl})});
+  if (r.ok) loadPauses(); else alert('触发失败');
+}
+async function resolvePause(id) {
+  const reason = prompt('恢复原因:'); if (!reason) return;
+  await fetch('/api/platform/emergency-resume', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({pause_id:id, resume_reason:reason})});
+  loadPauses();
+}
+loadPauses();
+</script>
+{% endblock %}

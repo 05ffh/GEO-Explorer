@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}删除审批 — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <h1 class="text-2xl font-bold text-gray-900 mb-4">数据删除审批</h1>
+  <p class="text-xs text-gray-500 mb-4">审批/拒绝必须填写原因 · 审批前可 dry-run 预览 · 审批写 AuditLog</p>
+  <div id="deletion-list" class="space-y-2">加载中...</div>
+</div>
+<script>
+async function loadRequests() {
+  const r = await fetch('/api/platform/data-deletion-requests'); const reqs = await r.json();
+  document.getElementById('deletion-list').innerHTML = reqs.length
+    ? reqs.map(d => '<div class="bg-white border rounded-lg p-4"><div class="flex justify-between items-center">' +
+      '<div><div class="text-sm font-medium">'+d.scope+' · '+d.status+'</div>' +
+      '<div class="text-xs text-gray-400">理由: '+ (d.reason||'') +' · 组织: '+d.organization_id+'</div></div>' +
+      '<div class="flex gap-2">' +
+      '<button onclick="dryRun(\''+d.id+'\')" class="text-xs text-blue-700 hover:underline">Dry-Run</button>' +
+      '<button onclick="approveDeletion(\''+d.id+'\')" class="text-xs text-green-700 hover:underline">批准</button>' +
+      '<button onclick="rejectDeletion(\''+d.id+'\')" class="text-xs text-red-600 hover:underline">拒绝</button>' +
+      '</div></div></div>').join('')
+    : '<p class="text-sm text-gray-400 py-4">无待审批删除请求</p>';
+}
+async function dryRun(id) {
+  const r = await fetch('/api/platform/data-deletion-requests/'+id+'/dry-run', {method:'POST'});
+  const d = await r.json();
+  alert('预估影响:\n\n' + Object.entries(d.estimated_delete_counts||{}).map(([k,v]) => k+': '+v).join('\n') + '\n\n风险等级: '+d.risk_level);
+}
+async function approveDeletion(id) {
+  const reason = prompt('批准原因 (必填):'); if (!reason) return alert('必须填写原因');
+  const r = await fetch('/api/platform/data-deletion-requests/'+id+'/approve', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({reason})});
+  if (r.ok) loadRequests(); else alert('批准失败');
+}
+async function rejectDeletion(id) {
+  const reason = prompt('拒绝原因 (必填):'); if (!reason) return alert('必须填写原因');
+  const r = await fetch('/api/platform/data-deletion-requests/'+id+'/reject', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({reason})});
+  if (r.ok) loadRequests(); else alert('拒绝失败');
+}
+loadRequests();
+</script>
+{% endblock %}

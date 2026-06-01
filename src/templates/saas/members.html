@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}成员管理 — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-6">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">成员管理</h1>
+    <button onclick="showInviteModal()" class="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-800">+ 邀请成员</button>
+  </div>
+  <div id="seat-info" class="text-sm text-gray-500 mb-4">加载中...</div>
+
+  <div class="bg-white rounded-lg border mb-6">
+    <div class="px-4 py-3 border-b font-medium text-gray-700">待处理邀请</div>
+    <div id="pending-invites"><div class="px-4 py-8 text-center text-gray-400">加载中...</div></div>
+  </div>
+</div>
+
+<!-- Invite Modal -->
+<div id="invite-modal" class="hidden fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <h2 class="text-lg font-bold mb-4">邀请成员</h2>
+    <form id="invite-form" class="space-y-3">
+      <input name="email" type="email" placeholder="邮箱地址" required class="w-full border rounded-lg px-3 py-2 text-sm">
+      <select name="role" class="w-full border rounded-lg px-3 py-2 text-sm">
+        <option value="viewer">Viewer</option>
+        <option value="analyst">Analyst</option>
+        <option value="admin">Admin</option>
+      </select>
+      <div class="flex justify-end gap-2 pt-3">
+        <button type="button" onclick="document.getElementById('invite-modal').classList.add('hidden')" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
+        <button type="submit" class="px-4 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800">发送邀请</button>
+      </div>
+    </form>
+    <div id="invited-token" class="hidden mt-4 p-3 bg-blue-50 rounded-lg text-xs">
+      <p class="font-medium">邀请已创建。邀请链接：</p>
+      <code id="token-value" class="block mt-1 p-2 bg-white rounded break-all"></code>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadData() {
+  const [entRes, invRes] = await Promise.all([
+    fetch('/api/saas/entitlements'), fetch('/api/saas/invites')
+  ]);
+  const ent = await entRes.json();
+  const limits = ent.effective_limits || {};
+  const usage = ent.usage || {};
+  document.getElementById('seat-info').textContent =
+    '席位: ' + (usage.users||0) + '/' + (limits.max_users > 0 ? limits.max_users : '∞') +
+    ' | 品牌: ' + (usage.brands||0) + '/' + (limits.max_brands > 0 ? limits.max_brands : '∞');
+
+  const invites = await invRes.json();
+  document.getElementById('pending-invites').innerHTML = invites.length === 0
+    ? '<div class="px-4 py-8 text-center text-gray-400">暂无待处理邀请</div>'
+    : '<table class="w-full text-sm">' +
+      '<thead class="bg-gray-50 text-gray-500"><tr><th class="px-4 py-2 text-left">邮箱</th><th class="px-4 py-2 text-left">角色</th><th class="px-4 py-2 text-left">过期</th><th class="px-4 py-2 text-right">操作</th></tr></thead>' +
+      '<tbody>' + invites.map(i => '<tr class="border-t">' +
+        '<td class="px-4 py-2">' + i.email + '</td>' +
+        '<td class="px-4 py-2 text-xs">' + i.role + '</td>' +
+        '<td class="px-4 py-2 text-xs text-gray-400">' + (i.expires_at ? i.expires_at.slice(0,10) : '') + '</td>' +
+        '<td class="px-4 py-2 text-right"><button onclick="revokeInvite(\'' + i.id + '\')" class="text-xs text-red-600 hover:underline">撤销</button></td>' +
+        '</tr>').join('') + '</tbody></table>';
+}
+
+function showInviteModal() {
+  document.getElementById('invite-modal').classList.remove('hidden');
+  document.getElementById('invited-token').classList.add('hidden');
+}
+
+document.getElementById('invite-form').onsubmit = async function(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = { email: fd.get('email'), role: fd.get('role') };
+  const res = await fetch('/api/saas/invites', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (res.ok) {
+    const data = await res.json();
+    document.getElementById('invited-token').classList.remove('hidden');
+    document.getElementById('token-value').textContent = data.invite_token || '已发送';
+    loadData();
+  } else {
+    const err = await res.json();
+    alert('邀请失败: ' + (err.detail || JSON.stringify(err)));
+  }
+};
+
+async function revokeInvite(id) {
+  if (!confirm('确定撤销此邀请？')) return;
+  await fetch('/api/saas/invites/' + id + '/revoke', { method: 'POST' });
+  loadData();
+}
+
+loadData();
+</script>
+{% endblock %}

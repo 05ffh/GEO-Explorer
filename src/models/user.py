@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import String, ForeignKey
+from sqlalchemy import String, ForeignKey, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.models.base import Base, TimestampMixin, UUIDMixin
 
@@ -12,5 +12,8 @@ class User(Base, UUIDMixin, TimestampMixin):
     role: Mapped[str] = mapped_column(String(50), default="viewer")
     platform_role: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     # platform_role: system_owner / system_admin / system_operator / None(=org member)
+    platform_mfa_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    platform_access_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    email_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     organization: Mapped["Organization"] = relationship(back_populates="users")

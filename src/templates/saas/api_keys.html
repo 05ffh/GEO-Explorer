@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}API Keys — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 py-6">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">API Keys</h1>
+    <button onclick="showCreateModal()" class="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-800">+ 创建 API Key</button>
+  </div>
+
+  <div id="keys-list" class="bg-white rounded-lg border">
+    <div class="px-4 py-3 border-b font-medium text-gray-700">密钥列表</div>
+    <div id="keys-table"><div class="px-4 py-8 text-center text-gray-400">加载中...</div></div>
+  </div>
+</div>
+
+<!-- Create Modal -->
+<div id="create-modal" class="hidden fixed inset-0 bg-black bg-opacity-30 z-50 flex items-center justify-center">
+  <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+    <h2 class="text-lg font-bold mb-4">创建 API Key</h2>
+    <form id="create-form" class="space-y-3">
+      <input name="name" placeholder="密钥名称" required class="w-full border rounded-lg px-3 py-2 text-sm">
+      <div><label class="text-sm text-gray-600">Scopes</label>
+        <div class="grid grid-cols-2 gap-1 mt-1">
+          {% for s in ["brands:read","brands:write","collections:read","collections:run","reports:read","reports:generate","exports:create","cms:publish","usage:read"] %}
+          <label class="text-xs flex items-center gap-1"><input type="checkbox" name="scopes" value="{{ s }}" class="rounded"> {{ s }}</label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-3">
+        <button type="button" onclick="document.getElementById('create-modal').classList.add('hidden')" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
+        <button type="submit" class="px-4 py-2 text-sm bg-blue-700 text-white rounded-lg hover:bg-blue-800">创建</button>
+      </div>
+    </form>
+    <div id="created-key" class="hidden mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+      <p class="text-sm font-medium text-green-800">密钥已创建！请立即保存，关闭后无法再次查看：</p>
+      <code id="key-value" class="block mt-2 p-2 bg-white rounded text-xs break-all border"></code>
+      <button onclick="navigator.clipboard.writeText(document.getElementById('key-value').textContent)" class="mt-2 text-xs text-blue-600 hover:underline">复制</button>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadKeys() {
+  const res = await fetch('/api/saas/api-keys');
+  const keys = await res.json();
+  document.getElementById('keys-table').innerHTML = keys.length === 0
+    ? '<div class="px-4 py-8 text-center text-gray-400">暂无 API Key</div>'
+    : '<table class="w-full text-sm">' +
+      '<thead class="bg-gray-50 text-gray-500"><tr><th class="px-4 py-2 text-left">名称</th><th class="px-4 py-2 text-left">Key</th><th class="px-4 py-2 text-left">Scopes</th><th class="px-4 py-2 text-left">最近使用</th><th class="px-4 py-2 text-left">调用次数</th><th class="px-4 py-2 text-right">操作</th></tr></thead>' +
+      '<tbody>' + keys.map(k => '<tr class="border-t hover:bg-gray-50">' +
+        '<td class="px-4 py-2 font-medium">' + k.name + '</td>' +
+        '<td class="px-4 py-2 font-mono text-xs">' + k.key_prefix + '****</td>' +
+        '<td class="px-4 py-2 text-xs">' + (k.scopes||[]).join(', ') + '</td>' +
+        '<td class="px-4 py-2 text-xs text-gray-400">' + (k.last_used_at ? k.last_used_at.slice(0,10) : '—') + '</td>' +
+        '<td class="px-4 py-2">' + k.usage_count + '</td>' +
+        '<td class="px-4 py-2 text-right space-x-1">' +
+          '<button onclick="rotateKey(\'' + k.id + '\')" class="text-xs text-blue-600 hover:underline">轮换</button>' +
+          '<button onclick="revokeKey(\'' + k.id + '\')" class="text-xs text-red-600 hover:underline">撤销</button>' +
+        '</td></tr>').join('') + '</tbody></table>';
+}
+
+function showCreateModal() {
+  document.getElementById('create-modal').classList.remove('hidden');
+  document.getElementById('created-key').classList.add('hidden');
+}
+
+document.getElementById('create-form').onsubmit = async function(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const scopes = Array.from(document.querySelectorAll('input[name="scopes"]:checked')).map(c => c.value);
+  const body = { name: fd.get('name'), scopes: scopes.length ? scopes : ['brands:read'] };
+  const res = await fetch('/api/saas/api-keys', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (res.ok) {
+    const data = await res.json();
+    document.getElementById('created-key').classList.remove('hidden');
+    document.getElementById('key-value').textContent = data.api_key;
+    loadKeys();
+  } else {
+    const err = await res.json();
+    alert('创建失败: ' + (err.detail || JSON.stringify(err)));
+  }
+};
+
+async function rotateKey(id) {
+  if (!confirm('轮换后旧密钥立即失效。确定继续？')) return;
+  const res = await fetch('/api/saas/api-keys/' + id + '/rotate', { method: 'POST' });
+  if (res.ok) {
+    const data = await res.json();
+    alert('新密钥: ' + data.api_key + '\n请立即保存！');
+    loadKeys();
+  }
+}
+
+async function revokeKey(id) {
+  if (!confirm('确定撤销此密钥？此操作不可恢复。')) return;
+  const res = await fetch('/api/saas/api-keys/' + id, { method: 'DELETE' });
+  if (res.ok) loadKeys();
+}
+
+loadKeys();
+</script>
+{% endblock %}

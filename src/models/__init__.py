@@ -20,6 +20,28 @@ from src.models.gt_review import GroundTruthReview
 from src.models.content_package import ContentPackage, CONTENT_PACKAGE_TRANSITIONS
 from src.models.action_theme import ActionTheme, THEME_TRANSITIONS
 from src.models.audit_log import AuditLog
+from src.models.task_state import TaskState, TaskEvent, TASK_STATUS_TRANSITIONS, TERMINAL_STATUSES
+from src.models.queue_alert import QueueAlert
+from src.models.report_artifact import ReportArtifact
+from src.models.benchmark_definition import BenchmarkDefinition
+from src.models.benchmark_snapshot import BenchmarkSnapshot
+from src.models.gap_attribution import GapAttributionResult
+from src.models.trend_insight import (
+    TrendAnalysisDefinition, TrendInsight, TrendInsightEvent,
+    PlatformTrendIncident, ImpactEvent, ModelEvent,
+)
+from src.models.report_delivery import (
+    ReportBranding, ReportSchedule, ReportScheduleRun, ReportSubscription,
+    ReportDeliveryAttempt, ReportDownloadLink, ReportDownloadEvent, ReportBatch,
+)
+from src.models.saas import (
+    PlanDefinition, OrgSubscription, ApiKey, ApiKeyUsageLog,
+    OrgInvite, DataExport, DataDeletionRequest, DeletionReceipt,
+    UsageEvent, UsageSnapshot, UsageMeterDefinition,
+    PlanChangeRequest, FeatureFlag, FeatureFlagOverride,
+    EmergencyPause, PlatformAdminProfile, PlatformAccessSession,
+    PlatformApprovalRequest, AuditIntegrityCheck, RateLimitPolicy,
+)
 
 __all__ = [
     "Base", "TimestampMixin", "UUIDMixin",
@@ -34,4 +56,19 @@ __all__ = [
     "GroundTruthCandidate", "GroundTruthEvidence", "GroundTruthReview",
     "ContentPackage", "CONTENT_PACKAGE_TRANSITIONS",
     "ActionTheme", "THEME_TRANSITIONS",
+    "AuditLog",
+    "TaskState", "TaskEvent", "TASK_STATUS_TRANSITIONS", "TERMINAL_STATUSES",
+    "QueueAlert",
+    "ReportArtifact",
+    "BenchmarkDefinition", "BenchmarkSnapshot", "GapAttributionResult",
+    "TrendAnalysisDefinition", "TrendInsight", "TrendInsightEvent",
+    "PlatformTrendIncident", "ImpactEvent", "ModelEvent",
+    "ReportBranding", "ReportSchedule", "ReportScheduleRun", "ReportSubscription",
+    "ReportDeliveryAttempt", "ReportDownloadLink", "ReportDownloadEvent", "ReportBatch",
+    "PlanDefinition", "OrgSubscription", "ApiKey", "ApiKeyUsageLog",
+    "OrgInvite", "DataExport", "DataDeletionRequest", "DeletionReceipt",
+    "UsageEvent", "UsageSnapshot", "UsageMeterDefinition",
+    "PlanChangeRequest", "FeatureFlag", "FeatureFlagOverride",
+    "EmergencyPause", "PlatformAdminProfile", "PlatformAccessSession",
+    "PlatformApprovalRequest", "AuditIntegrityCheck", "RateLimitPolicy",
 ]

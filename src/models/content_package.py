@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, ForeignKey, DateTime, Text
+from sqlalchemy import String, ForeignKey, Integer, DateTime, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from src.models.base import Base, TimestampMixin, UUIDMixin
@@ -34,4 +34,8 @@ class ContentPackage(Base, UUIDMixin, TimestampMixin):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     published_platform: Mapped[str] = mapped_column(String(50), default="")
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    publish_status_summary: Mapped[str] = mapped_column(String(30), default="not_published")
+    published_target_count: Mapped[int] = mapped_column(Integer, default=0)
+    failed_target_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="draft")

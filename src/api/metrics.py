@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 from src.database import get_db
-from src.api.deps import get_current_user, get_org_brand_or_404
+from src.api.deps import get_current_user, get_user_or_api_key, get_org_brand_or_404
 from src.models.user import User
 from src.models.metrics_snapshot import MetricsSnapshot
 
@@ -25,7 +25,7 @@ class MetricsResponse(BaseModel):
 @router.get("")
 async def get_latest_metrics(
     brand_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_api_key),
     db: AsyncSession = Depends(get_db),
 ):
     await get_org_brand_or_404(brand_id, user, db)
@@ -42,7 +42,7 @@ async def get_latest_metrics(
 @router.get("/history")
 async def get_metrics_history(
     brand_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_api_key),
     db: AsyncSession = Depends(get_db),
 ):
     await get_org_brand_or_404(brand_id, user, db)

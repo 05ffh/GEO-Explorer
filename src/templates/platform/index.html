@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}平台总览 — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <h1 class="text-2xl font-bold text-gray-900 mb-2">平台总览</h1>
+  <p class="text-sm text-gray-500 mb-6" id="role-badge">角色: {{ vm["user"]["platform_role"] }}</p>
+
+  <div class="grid grid-cols-4 gap-4 mb-6" id="stats-grid">
+    <div class="bg-white border rounded-lg p-4"><div class="text-2xl font-bold" id="stat-orgs">-</div><div class="text-xs text-gray-500">组织 (活跃)</div></div>
+    <div class="bg-white border rounded-lg p-4"><div class="text-2xl font-bold" id="stat-brands">-</div><div class="text-xs text-gray-500">品牌</div></div>
+    <div class="bg-white border rounded-lg p-4"><div class="text-2xl font-bold" id="stat-users">-</div><div class="text-xs text-gray-500">用户</div></div>
+    <div class="bg-white border rounded-lg p-4"><div class="text-2xl font-bold" id="stat-keys">-</div><div class="text-xs text-gray-500">活跃 API Key</div></div>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4">
+    <div class="bg-white border rounded-lg p-4">
+      <h3 class="font-semibold mb-2 text-sm">活跃紧急暂停</h3>
+      <div id="active-pauses" class="text-sm text-gray-400">加载中...</div>
+    </div>
+    <div class="bg-white border rounded-lg p-4">
+      <h3 class="font-semibold mb-2 text-sm">月度 Token 用量</h3>
+      <div id="monthly-tokens" class="text-2xl font-bold">-</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(async () => {
+  const r = await fetch('/api/platform/overview');
+  const d = await r.json();
+  document.getElementById('stat-orgs').textContent = d.org_count + ' (' + d.active_org_count + ')';
+  document.getElementById('stat-brands').textContent = d.brand_count;
+  document.getElementById('stat-users').textContent = d.user_count;
+  document.getElementById('stat-keys').textContent = d.active_api_key_count;
+  document.getElementById('monthly-tokens').textContent = (d.monthly_tokens || 0).toLocaleString();
+  const pauses = d.active_emergency_pauses || [];
+  document.getElementById('active-pauses').innerHTML = pauses.length
+    ? pauses.map(p => '<div class="text-red-700">' + p.scope + ': ' + p.reason + '</div>').join('')
+    : '<span class="text-green-600">无活跃暂停</span>';
+})();
+</script>
+{% endblock %}

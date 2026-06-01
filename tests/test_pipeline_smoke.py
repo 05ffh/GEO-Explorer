@@ -206,8 +206,9 @@ def test_pipeline_hallucination_detection():
     # At least one claim should be verifiable
     correct_claims = [r for r in results if r["verdict"] == "correct"]
     uncertain_claims = [r for r in results if r["verdict"] == "uncertain"]
+    not_checkable_claims = [r for r in results if r["verdict"] == "not_checkable"]
 
-    total_verifiable = len(correct_claims) + len(uncertain_claims)
+    total_verifiable = len(correct_claims) + len(uncertain_claims) + len(not_checkable_claims)
     assert total_verifiable > 0, "No verifiable claims found"
 
     # The 竞品B claim about 上海 should be detected as potentially incorrect

@@ -31,6 +31,11 @@ class CollectionRun(Base, UUIDMixin, TimestampMixin):
     analysis_error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     analysis_error_trace: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    platform_status_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    progress_json: Mapped[dict] = mapped_column(JSONB, default=dict)
+    coverage_report_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    analysis_skipped_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     preflight_summary_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     report_quality_summary_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     template_health_report_json: Mapped[dict] = mapped_column(JSONB, default=dict)

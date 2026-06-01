@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}报告下载 — {{ vm.brand.name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-heading font-bold text-gray-900">{{ vm.brand.name }} — 报告下载</h1>
+    </div>
+
+    {% if not vm.runs %}
+    <div class="bg-white rounded-lg border border-gray-200 p-12 text-center">
+        <p class="text-gray-500">暂无诊断记录。请先完成一次品牌采集。</p>
+        <a href="/brands/{{ vm.brand.id }}" class="mt-4 inline-block text-primary hover:underline">前往品牌总览</a>
+    </div>
+    {% endif %}
+
+    {% for run in vm.runs %}
+    <div class="bg-white rounded-lg border border-gray-200">
+        <div class="px-5 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+            <div>
+                <span class="font-medium text-gray-900">{{ run.trigger_type }} 采集</span>
+                <span class="ml-3 text-sm text-gray-500">{{ run.created_at[:19] }}</span>
+                <span class="ml-3 text-sm text-gray-500">{{ run.success_count }}/{{ run.total_queries }} 成功</span>
+            </div>
+        </div>
+        <div class="p-5">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {% for ed in vm.editions %}
+                {% set art = run.artifacts[ed.key] %}
+                <div class="border rounded-lg p-4 {% if art.status == 'generated' %}border-green-200 bg-green-50{% elif art.status == 'generating' %}border-blue-200 bg-blue-50{% elif art.status == 'failed' %}border-red-200 bg-red-50{% else %}border-gray-200 bg-gray-50{% endif %}">
+                    <div class="font-medium text-gray-900 mb-1">{{ ed.label }}</div>
+                    <div class="text-xs text-gray-500 mb-3">{{ ed.desc }}</div>
+
+                    {% if art.status == 'generated' %}
+                    <div class="flex flex-wrap gap-2">
+                        {% for fmt, item in art.formats.items() %}
+                        {% if item.file_path %}
+                        <a href="/api/brands/{{ vm.brand.id }}/reports/download?artifact_id={{ item.id }}"
+                           class="inline-flex items-center px-3 py-1.5 bg-primary text-white text-xs rounded hover:bg-primary-dark transition-colors cursor-pointer">
+                            {{ fmt.upper() }} (v{{ item.report_version }})
+                        </a>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% if art.formats|length == 0 %}
+                    <button onclick="generateReport('{{ run.id }}', '{{ ed.key }}')"
+                            class="px-3 py-1.5 bg-primary text-white text-xs rounded hover:bg-primary-dark transition-colors cursor-pointer">
+                        生成
+                    </button>
+                    {% endif %}
+                    {% elif art.status == 'generating' %}
+                    <span class="text-sm text-blue-600">⏳ 生成中...</span>
+                    {% elif art.status == 'failed' %}
+                    <span class="text-sm text-red-600">生成失败</span>
+                    <button onclick="generateReport('{{ run.id }}', '{{ ed.key }}')"
+                            class="mt-2 px-3 py-1.5 bg-red-100 text-red-700 text-xs rounded hover:bg-red-200 transition-colors cursor-pointer">
+                        重试
+                    </button>
+                    {% elif art.status == 'stale' %}
+                    <span class="text-sm text-amber-600">数据已过期</span>
+                    <button onclick="generateReport('{{ run.id }}', '{{ ed.key }}')"
+                            class="mt-2 px-3 py-1.5 bg-amber-100 text-amber-700 text-xs rounded hover:bg-amber-200 transition-colors cursor-pointer">
+                        重新生成
+                    </button>
+                    {% else %}
+                    <button onclick="generateReport('{{ run.id }}', '{{ ed.key }}')"
+                            class="px-3 py-1.5 bg-primary text-white text-xs rounded hover:bg-primary-dark transition-colors cursor-pointer">
+                        生成报告
+                    </button>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+function generateReport(runId, edition) {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = '生成中...';
+    fetch(`/api/brands/{{ vm.brand.id }}/reports/generate`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({collection_run_id: runId, editions: [edition]})
+    }).then(r => r.json()).then(data => {
+        if (data.status === 'queued') {
+            btn.textContent = '已排队，刷新查看';
+        } else {
+            btn.textContent = '失败: ' + (data.detail || '');
+            btn.disabled = false;
+        }
+    }).catch(() => {
+        btn.textContent = '失败，重试';
+        btn.disabled = false;
+    });
+}
+</script>
+{% endblock %}

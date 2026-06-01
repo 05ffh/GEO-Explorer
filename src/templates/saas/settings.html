@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}组织设置 — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <h1 class="text-2xl font-bold text-gray-900 mb-6">组织设置</h1>
+
+  <!-- Plan Info -->
+  <div class="bg-white rounded-lg border p-6 mb-6">
+    <div class="flex justify-between items-start">
+      <div>
+        <h2 class="text-lg font-semibold">当前套餐</h2>
+        <p class="text-sm text-gray-500 mt-1">订阅状态和用量概览</p>
+      </div>
+      <button onclick="location.href='/saas/plans'" class="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-800">升级套餐</button>
+    </div>
+    <div id="entitlement-info" class="mt-4 grid grid-cols-3 gap-4">
+      <div class="text-center p-3 bg-gray-50 rounded-lg">
+        <div class="text-2xl font-bold" id="brand-usage">—</div>
+        <div class="text-xs text-gray-500">品牌数</div>
+      </div>
+      <div class="text-center p-3 bg-gray-50 rounded-lg">
+        <div class="text-2xl font-bold" id="user-usage">—</div>
+        <div class="text-xs text-gray-500">成员数</div>
+      </div>
+      <div class="text-center p-3 bg-gray-50 rounded-lg">
+        <div class="text-2xl font-bold" id="api-key-usage">—</div>
+        <div class="text-xs text-gray-500">API Key</div>
+      </div>
+    </div>
+    <div id="entitlement-warnings" class="mt-3"></div>
+    <div id="blocked-actions" class="mt-3"></div>
+  </div>
+
+  <!-- Quick Links -->
+  <div class="grid grid-cols-3 gap-4">
+    <a href="/saas/members" class="bg-white rounded-lg border p-4 hover:border-blue-400 transition-colors">
+      <div class="text-lg font-medium">成员管理</div>
+      <div class="text-sm text-gray-500 mt-1">邀请、角色、席位</div>
+    </a>
+    <a href="/saas/api-keys" class="bg-white rounded-lg border p-4 hover:border-blue-400 transition-colors">
+      <div class="text-lg font-medium">API Keys</div>
+      <div class="text-sm text-gray-500 mt-1">生成、轮换、撤销</div>
+    </a>
+    <a href="/saas/data" class="bg-white rounded-lg border p-4 hover:border-blue-400 transition-colors">
+      <div class="text-lg font-medium">数据管理</div>
+      <div class="text-sm text-gray-500 mt-1">导出、删除请求</div>
+    </a>
+  </div>
+</div>
+
+<script>
+(async function() {
+  try {
+    const res = await fetch('/api/saas/entitlements');
+    const data = await res.json();
+    const limits = data.effective_limits || {};
+    const usage = data.usage || {};
+
+    document.getElementById('brand-usage').textContent = (usage.brands || 0) + '/' + (limits.max_brands > 0 ? limits.max_brands : '∞');
+    document.getElementById('user-usage').textContent = (usage.users || 0) + '/' + (limits.max_users > 0 ? limits.max_users : '∞');
+    document.getElementById('api-key-usage').textContent = (usage.api_keys || 0) + '/' + (limits.max_api_keys > 0 ? limits.max_api_keys : '∞');
+
+    const warnDiv = document.getElementById('entitlement-warnings');
+    (data.warnings || []).forEach(w => {
+      warnDiv.innerHTML += '<div class="text-sm text-yellow-700 bg-yellow-50 px-3 py-2 rounded mt-1">' + w + '</div>';
+    });
+
+    const blockedDiv = document.getElementById('blocked-actions');
+    (data.blocked_by || []).forEach(b => {
+      blockedDiv.innerHTML += '<div class="text-sm text-red-700 bg-red-50 px-3 py-2 rounded mt-1">暂停: ' + b + '</div>';
+    });
+  } catch(e) {}
+})();
+</script>
+{% endblock %}

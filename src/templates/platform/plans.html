@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}套餐管理 — GEO Explorer{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+  <div class="flex justify-between items-center mb-4">
+    <h1 class="text-2xl font-bold text-gray-900">套餐管理</h1>
+    {% if vm["actions"]["plans.create"] %}
+    <button onclick="createPlan()" class="px-3 py-1.5 bg-blue-700 text-white text-sm rounded-lg">+ 新建套餐</button>
+    {% endif %}
+  </div>
+  <div id="plan-list" class="space-y-2">加载中...</div>
+</div>
+<script>
+let vm = {{ vm["actions"] | tojson | safe }};
+async function loadPlans() {
+  const r = await fetch('/api/platform/plans'); const plans = await r.json();
+  document.getElementById('plan-list').innerHTML = plans.map(p =>
+    '<div class="bg-white border rounded-lg p-4">' +
+    '<div class="flex justify-between items-center"><div><span class="font-medium">'+p.display_name+'</span> ' +
+    '<span class="text-xs text-gray-400">'+p.name+' v'+p.version+' tier='+p.tier+'</span></div>' +
+    '<div class="flex gap-2 text-xs">' +
+    (p.is_active?'<span class="text-green-600">活跃</span>':'<span class="text-gray-400">停用</span>') +
+    (p.is_deprecated?'<span class="text-yellow-600">已废弃</span>':'') +
+    '</div></div>' +
+    '<div class="text-xs text-gray-500 mt-1">品牌:'+(p.max_brands<0?'不限':p.max_brands)+
+    ' 成员:'+(p.max_users<0?'不限':p.max_users)+
+    ' API Key:'+(p.max_api_keys<0?'不限':p.max_api_keys)+
+    ' 价格:'+(p.monthly_price_cny!=null?'¥'+p.monthly_price_cny+'/月':'议价')+'</div>' +
+    (vm['plans.edit'] ? '<div class="mt-2"><button onclick="editPlan(\''+p.id+'\')" class="text-xs text-blue-700 hover:underline">编辑</button></div>' : '') +
+    '</div>'
+  ).join('') || '<p class="text-sm text-gray-400 py-4">无套餐</p>';
+}
+async function createPlan() {
+  const name = prompt('套餐标识 (如 pro):'); if (!name) return;
+  const display = prompt('显示名称 (如 专业版):'); if (!display) return;
+  const price = prompt('月费 (CNY, 0=免费):', '0');
+  const r = await fetch('/api/platform/plans', {method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name, display_name:display, monthly_price_cny:parseInt(price||'0')})});
+  if (r.ok) loadPlans(); else alert('创建失败');
+}
+async function editPlan(id) {
+  const dep = confirm('设为废弃? (OK=废弃, Cancel=仅编辑)');
+  if (dep !== null) {
+    await fetch('/api/platform/plans/'+id, {method:'PATCH', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({is_deprecated: dep})});
+    loadPlans();
+  }
+}
+loadPlans();
+</script>
+{% endblock %}
