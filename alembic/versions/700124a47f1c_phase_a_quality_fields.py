@@ -52,16 +52,29 @@ def upgrade() -> None:
         'query_templates',
         sa.Column('question_scope', sa.String(30), nullable=True)
     )
-    # question_type column may already exist in some databases (added directly);
-    # use IF NOT EXISTS to make the migration idempotent across environments.
+    # question_type / brand_directed / hallucination_check_enabled may already
+    # exist (P0-2/P0-3); use IF NOT EXISTS for idempotency.
     op.execute(
         "ALTER TABLE query_templates ADD COLUMN IF NOT EXISTS "
-        "question_type VARCHAR(50)"
+        "question_type VARCHAR(50) DEFAULT 'brand_definition'"
+    )
+    op.execute(
+        "ALTER TABLE query_templates ADD COLUMN IF NOT EXISTS "
+        "brand_directed BOOLEAN DEFAULT TRUE"
+    )
+    op.execute(
+        "ALTER TABLE query_templates ADD COLUMN IF NOT EXISTS "
+        "hallucination_check_enabled BOOLEAN DEFAULT TRUE"
     )
     op.create_index('ix_query_templates_question_type', 'query_templates', ['question_type'])
     op.create_index('ix_query_templates_template_level', 'query_templates', ['template_level'])
 
     # HallucinationResult columns
+    op.add_column(
+        'hallucination_results',
+        sa.Column('error_type', sa.String(50),
+                  server_default='', nullable=False)
+    )
     op.add_column(
         'hallucination_results',
         sa.Column('claim_text', sa.Text(),
@@ -100,12 +113,16 @@ def downgrade() -> None:
     op.drop_column('hallucination_results', 'matched_gt_field')
     op.drop_column('hallucination_results', 'subject_type')
     op.drop_column('hallucination_results', 'claim_text')
+    op.drop_column('hallucination_results', 'error_type')
 
     # QueryTemplate indexes and columns
     op.drop_index('ix_query_templates_template_level', table_name='query_templates')
     op.drop_index('ix_query_templates_question_type', table_name='query_templates')
     op.drop_column('query_templates', 'question_scope')
     op.drop_column('query_templates', 'template_level')
+    # brand_directed / hallucination_check_enabled / question_type added
+    # conditionally in upgrade; skip explicit drop to avoid errors on
+    # databases where they existed before this migration
 
     # CollectionRun indexes and columns
     op.drop_index('ix_collection_runs_report_publishable', table_name='collection_runs')
