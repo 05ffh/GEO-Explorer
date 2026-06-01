@@ -1,0 +1,64 @@
+schema_version: metric_template_mapping_v1
+mapping_version: phase_a_v1
+
+sov:
+  allowed: [category_recommendation, scenario_solution, user_recommendation]
+  conditional: {brand_comparison: target_brand_claim_only}
+  excluded: [generic_advice]
+
+first_rec_rate:
+  allowed: [category_recommendation, scenario_solution, user_recommendation]
+  conditional: {brand_comparison: target_brand_claim_only}
+  excluded: [generic_advice]
+
+brand_mention_rate:
+  allowed: [brand_definition, brand_attribute, brand_comparison, brand_trust, category_recommendation, scenario_solution, user_recommendation]
+  excluded: [generic_advice]
+
+information_accuracy:
+  allowed: [brand_definition, brand_attribute, brand_comparison, brand_trust]
+  conditional:
+    category_recommendation: target_brand_claim_only
+    scenario_solution: target_brand_claim_only
+    user_recommendation: target_brand_claim_only
+  excluded: [generic_advice]
+
+completeness_rate:
+  allowed: [brand_definition, brand_attribute]
+  conditional:
+    brand_comparison: target_brand_claim_only
+    brand_trust: target_brand_claim_only
+  excluded: [category_recommendation, scenario_solution, user_recommendation, generic_advice]
+
+citation_rate:
+  allowed: [brand_definition, brand_attribute, brand_comparison, brand_trust]
+  conditional:
+    category_recommendation: target_brand_claim_only
+    scenario_solution: target_brand_claim_only
+    user_recommendation: target_brand_claim_only
+  excluded: [generic_advice]
+
+competitor_accuracy:
+  allowed: [brand_comparison]
+  conditional: {category_recommendation: target_brand_claim_only}
+  excluded: [generic_advice]
+
+scenario_coverage:
+  allowed: [scenario_solution, user_recommendation]
+  conditional:
+    brand_attribute: target_brand_claim_only
+    category_recommendation: target_brand_claim_only
+  excluded: [generic_advice]
+
+trust_risk_rate:
+  allowed: [brand_trust]
+  conditional: {brand_comparison: target_brand_claim_only}
+  excluded: [generic_advice]
+
+hallucination_rate:
+  allowed: [brand_definition, brand_attribute, brand_comparison, brand_trust]
+  conditional:
+    category_recommendation: target_brand_claim_only
+    scenario_solution: target_brand_claim_only
+    user_recommendation: target_brand_claim_only
+  excluded: [generic_advice]
