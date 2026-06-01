@@ -30,8 +30,8 @@ async def deliver_all_reports(
     # 1. Fetch analysis data
     analysis = await _fetch_analysis_data(brand_id, collection_run_id, brand_name, db)
 
-    # 2. Diagnostic report (.md)
-    diag_path = _write_diagnostic(brand_name, analysis, deliver_dir)
+    # 2. Diagnostic report (.md + .docx + .pdf)
+    diag_result = _write_diagnostic(brand_name, analysis, deliver_dir)
 
     # 3. Optimization plan (.md + .docx + .pdf) — aligned with Content Packages
     opt_result = await _write_optimization(brand_name, analysis, deliver_dir)
@@ -45,11 +45,14 @@ async def deliver_all_reports(
     # ── Phase A: Format failure writeback ──
     import json as _json
     format_failures = []
-    for fmt_label, path in [("md", diag_path), ("docx", opt_result.get("docx")), ("pdf", opt_result.get("pdf"))]:
-        if not path or not os.path.exists(path):
-            format_failures.append(fmt_label)
-        elif os.path.getsize(path) == 0:
-            format_failures.append(fmt_label)
+    # Check all 3 formats for both diagnostic and optimization
+    for _report_name, _result in [("诊断报告", diag_result), ("优化方案", opt_result)]:
+        for fmt_label in ("md", "docx", "pdf"):
+            path = _result.get(fmt_label) if isinstance(_result, dict) else _result
+            if not path or not os.path.exists(path):
+                format_failures.append(f"{_report_name}.{fmt_label}")
+            elif os.path.getsize(path) == 0:
+                format_failures.append(f"{_report_name}.{fmt_label}")
 
     if format_failures:
         row = (await db.execute(text("""
@@ -70,20 +73,44 @@ async def deliver_all_reports(
             await db.execute(text("""
                 UPDATE collection_runs
                 SET report_publishable = FALSE,
-                    blocking_reasons_json = :br::jsonb,
-                    report_quality_summary_json = :qs::jsonb
+                    blocking_reasons_json = CAST(:br AS jsonb),
+                    report_quality_summary_json = CAST(:qs AS jsonb)
                 WHERE id = :rid
             """), {"rid": collection_run_id, "br": _json.dumps(br), "qs": _json.dumps(qs)})
             await db.commit()
 
+    else:
+        # All formats OK — auto-deliver to desktop
+        _copy_reports_to_desktop(brand_name, deliver_dir, diag_result, opt_result)
+
     return {
         "dir": os.path.abspath(deliver_dir),
-        "diagnostic_md": diag_path,
+        "diagnostic_md": diag_result.get("md"),
+        "diagnostic_docx": diag_result.get("docx"),
+        "diagnostic_pdf": diag_result.get("pdf"),
         "optimization_md": opt_result.get("md"),
         "optimization_docx": opt_result.get("docx"),
         "optimization_pdf": opt_result.get("pdf"),
         "content_pieces": len(cp_files),
     }
+
+
+def _copy_reports_to_desktop(brand_name: str, deliver_dir: str, diag_result: dict, opt_result: dict):
+    """Auto-copy all report formats to Windows desktop when quality passes."""
+    import shutil
+    desktop = os.path.expanduser("/mnt/c/Users/25468/Desktop")
+    if not os.path.isdir(desktop):
+        return
+    safe_name = brand_name.replace(" ", "_").replace("/", "_")
+    date_str = datetime.now().strftime("%Y%m%d")
+    dest = os.path.join(desktop, f"{safe_name}_{date_str}")
+    os.makedirs(dest, exist_ok=True)
+    for _result in (diag_result, opt_result):
+        for fmt_label in ("md", "docx", "pdf"):
+            src = _result.get(fmt_label) if isinstance(_result, dict) else _result
+            if src and os.path.exists(src):
+                shutil.copy2(src, os.path.join(dest, os.path.basename(src)))
+    logger.info("Reports auto-delivered to desktop: %s", dest)
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -139,12 +166,13 @@ async def _fetch_analysis_data(brand_id: str, collection_run_id: str, brand_name
     data["action_plans"] = [dict(r._mapping) for r in ap.fetchall()]
     data["ap_total"] = sum(a["c"] for a in data["action_plans"])
 
-    # Content Packages (already generated)
+    # Content Packages — deduplicate by theme, keep latest created
     cp = await db.execute(text("""
-        SELECT cp.content_items, cp.schema_items, cp.fact_check_report,
-               cp.publishing_checklist, cp.status
+        SELECT DISTINCT ON (cp.content_items->0->>'theme')
+               cp.content_items, cp.schema_items, cp.fact_check_report,
+               cp.publishing_checklist, cp.status, cp.created_at
         FROM content_packages cp WHERE cp.brand_id = :bid
-        ORDER BY cp.created_at
+        ORDER BY cp.content_items->0->>'theme', cp.created_at DESC
     """), {"bid": brand_id})
     data["content_packages"] = [dict(r._mapping) for r in cp.fetchall()]
 
@@ -187,8 +215,8 @@ def _render_quality_summary_section(analysis: dict) -> str:
     return "\n".join(lines)
 
 
-def _write_diagnostic(brand_name: str, data: dict, deliver_dir: str) -> str:
-    """Write 诊断报告.md."""
+def _write_diagnostic(brand_name: str, data: dict, deliver_dir: str) -> dict:
+    """Write 诊断报告.md + .docx + .pdf."""
     from src.schemas.ground_truth import KPI_DISPLAY_NAMES
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -246,10 +274,54 @@ def _write_diagnostic(brand_name: str, data: dict, deliver_dir: str) -> str:
     lines.append(f"## Content Packages: {len(data.get('content_packages',[]))} 个主题")
     lines.append("")
 
-    path = os.path.join(deliver_dir, "诊断报告.md")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
-    return path
+    md_path = os.path.join(deliver_dir, "诊断报告.md")
+    md_content = "\n".join(lines)
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(md_content)
+
+    # DOCX
+    import subprocess as _sp
+    docx_path = os.path.join(deliver_dir, "诊断报告.docx")
+    try:
+        from docx import Document as _Doc
+        from docx.shared import Pt as _Pt
+        _doc = _Doc()
+        _style = _doc.styles["Normal"]
+        _style.font.size = _Pt(11)
+        for _line in lines:
+            _line = _line.rstrip()
+            if _line.startswith("# ") and not _line.startswith("## "):
+                _p = _doc.add_paragraph(_line[2:])
+                _p.style = _doc.styles["Heading 1"]
+            elif _line.startswith("## "):
+                _p = _doc.add_paragraph(_line[3:])
+                _p.style = _doc.styles["Heading 2"]
+            elif _line == "":
+                _doc.add_paragraph("")
+            elif _line.startswith("|"):
+                pass  # skip tables for now — minimal viable
+            elif _line.startswith("> "):
+                _p = _doc.add_paragraph(_line[2:])
+                _p.style = _doc.styles["Quote"]
+            elif _line.startswith("---"):
+                pass
+            else:
+                _doc.add_paragraph(_line)
+        _doc.save(docx_path)
+    except Exception:
+        docx_path = None
+
+    # PDF
+    pdf_path = os.path.join(deliver_dir, "诊断报告.pdf")
+    try:
+        r = _sp.run(["md2pdf", os.path.abspath(md_path), os.path.abspath(pdf_path)],
+                    capture_output=True, text=True, timeout=30)
+        if r.returncode != 0:
+            pdf_path = None
+    except Exception:
+        pdf_path = None
+
+    return {"md": md_path, "docx": docx_path, "pdf": pdf_path}
 
 
 async def _write_optimization(brand_name: str, data: dict, deliver_dir: str) -> dict:
