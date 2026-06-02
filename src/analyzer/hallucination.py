@@ -339,6 +339,7 @@ class HallucinationDetector:
     async def detect(
         self, query_result: QueryResult, gt: GroundTruthVersion, db: AsyncSession,
         brand_name: str = "",
+        render_status: str = "ok",
     ) -> list[HallucinationResult]:
         gt_json = gt.ground_truth_json
         brand = brand_name or str(gt_json.get("official_name", ""))
@@ -348,6 +349,9 @@ class HallucinationDetector:
 
         # Only extract brand claims for brand_centric responses
         if relevance.relevance not in ("brand_centric", "brand_mentioned"):
+            verdict = "not_about_brand" if relevance.relevance != "category_general" else "generic_statement"
+            if render_status != "ok":
+                verdict = "template_invalid"
             return [HallucinationResult(
                 brand_id=query_result.brand_id,
                 query_result_id=query_result.id,
@@ -356,7 +360,7 @@ class HallucinationDetector:
                 field_name="",
                 field_level="Info",
                 severity="Info",
-                verdict="not_about_brand" if relevance.relevance != "category_general" else "generic_statement",
+                verdict=verdict,
                 ai_claim=relevance.evidence[0] if relevance.evidence else "",
                 ground_truth_value="",
                 error_type="",
