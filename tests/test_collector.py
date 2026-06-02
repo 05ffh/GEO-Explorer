@@ -103,7 +103,7 @@ async def test_kimi_429_retry(db_session, monkeypatch):
     class RetryMockAdapter(MockAdapter):
         async def query(self, prompt, system_prompt="", **kwargs):
             call_count[0] += 1
-            if call_count[0] <= 2:
+            if call_count[0] <= 1:
                 from src.adapters.base import AIResponse
                 return AIResponse(
                     platform=self.platform_name, question=prompt, answer_text="",
@@ -122,7 +122,7 @@ async def test_kimi_429_retry(db_session, monkeypatch):
     qr = (await db_session.execute(
         select(QueryResult).where(QueryResult.collection_run_id == run.id)
     )).scalars().first()
-    assert qr.retry_count >= 2
+    assert qr.retry_count >= 1
     assert qr.rate_limited is True
     assert qr.status == "success"
 

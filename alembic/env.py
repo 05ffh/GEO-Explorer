@@ -1,4 +1,5 @@
 import asyncio
+import os
 from logging.config import fileConfig
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
@@ -9,6 +10,11 @@ from src.models.base import Base
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# Support DATABASE_URL env override for targeting test DB
+_db_url_override = os.getenv("DATABASE_URL")
+if _db_url_override:
+    config.set_main_option("sqlalchemy.url", _db_url_override)
 
 target_metadata = Base.metadata
 
