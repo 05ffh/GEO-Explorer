@@ -43,6 +43,7 @@ async def build_report_quality_summary(
     p0_count = 0; p1_count = 0; p2_count = 0; confirmed = 0
     generic_count = 0; irrelevant_count = 0
     unsupported_count = 0; gt_insufficient_count = 0
+    template_invalid_count = 0
 
     try:
         rows = (await db.execute(
@@ -70,6 +71,7 @@ async def build_report_quality_summary(
             if verdict == "not_about_brand": irrelevant_count += cnt
             if verdict == "unsupported": unsupported_count += cnt
             if verdict == "gt_insufficient": gt_insufficient_count += cnt
+            if verdict == "template_invalid": template_invalid_count += cnt
     except Exception:
         logger.warning("Failed to aggregate hallucination results for %s", collection_run_id, exc_info=True)
 
@@ -86,7 +88,7 @@ async def build_report_quality_summary(
         "template_issue": {
             "invalid_template_count": th.get("invalid_templates", 0),
             "unresolved_variable_count": len(th.get("missing_variables", {})),
-            "affected_query_count": 0,
+            "affected_query_count": template_invalid_count,
         },
         "gt_insufficient": {
             "unsupported_claim_count": unsupported_count + gt_insufficient_count,
