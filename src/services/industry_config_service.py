@@ -5,7 +5,7 @@ from copy import deepcopy
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config.industry_profiles import IndustryCode, INDUSTRY_PROFILES
+from src.schemas.industry_profiles import IndustryCode, INDUSTRY_PROFILES
 from src.schemas.industry_config import (
     IndustryConfig, KpiWeightsConfig, HallucinationThresholdsConfig,
     TemplateStrategyConfig, CompetitorRulesConfig,
