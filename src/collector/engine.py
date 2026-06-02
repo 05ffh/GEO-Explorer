@@ -141,8 +141,8 @@ async def run_collection(
             self.question_type = qtype
 
     _gt_json = {}
-    if active_gt and active_gt.ground_truth_json:
-        _gt_json = active_gt.ground_truth_json
+    if active_gt:
+        _gt_json = active_gt.get_flat_json() if hasattr(active_gt, "get_flat_json") else active_gt.ground_truth_json
 
     def _expand_vars(text: str) -> str:
         for alias in brand.aliases or []:
@@ -213,8 +213,8 @@ async def run_collection(
     }
 
     _gt_json = {}
-    if active_gt and active_gt.ground_truth_json:
-        _gt_json = active_gt.ground_truth_json
+    if active_gt:
+        _gt_json = active_gt.get_flat_json() if hasattr(active_gt, "get_flat_json") else active_gt.ground_truth_json
 
     def _build_question(tmpl):
         question = tmpl.template_text

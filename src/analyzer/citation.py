@@ -18,7 +18,7 @@ async def compute_citation_rate(
             GroundTruthVersion.status == "active",
         )
     )).scalar_one_or_none()
-    domains = gt.ground_truth_json.get("official_domains", []) if gt else []
+    domains = (gt.get_flat_json() if hasattr(gt, "get_flat_json") else gt.ground_truth_json).get("official_domains", []) if gt else []
 
     results = await get_kpi_eligible_results("citation_rate", brand_id, collection_run_id, db)
     valid = [r for r in results if r.answer_text]

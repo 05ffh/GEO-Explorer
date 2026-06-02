@@ -26,7 +26,7 @@ async def compute_accuracy(
                 "sample_size": 0}
 
     all_text = "\n".join(r.answer_text for r in valid)
-    gt_json = gt.ground_truth_json
+    gt_json = gt.get_flat_json() if hasattr(gt, "get_flat_json") else gt.ground_truth_json
 
     evaluations = {}
     for field in GT_FIELD_LEVELS:

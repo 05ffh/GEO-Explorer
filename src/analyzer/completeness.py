@@ -26,7 +26,7 @@ async def compute_completeness(
                 "required_fields": 0, "sample_size": 0}
 
     all_text = "\n".join(r.answer_text for r in valid)
-    gt_json = gt.ground_truth_json
+    gt_json = gt.get_flat_json() if hasattr(gt, "get_flat_json") else gt.ground_truth_json
 
     required = [f for f in GT_REQUIRED_FOR_COMPLETENESS if f in gt_json]
     if not required:

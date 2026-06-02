@@ -220,7 +220,7 @@ async def _run_hallucination_detection(
     )).scalars().all()
     template_map = {t.id: t for t in template_rows}
 
-    gt_json_r = gt.ground_truth_json if gt else None
+    gt_json_r = gt.get_flat_json() if gt else None
     template_render_status = {}
     for tid, tmpl in template_map.items():
         template_render_status[tid] = check_template_render_status(
@@ -301,7 +301,7 @@ async def _generate_content_packages(
 
     brand = (await db.execute(select(Brand).where(Brand.id == brand_id))).scalar_one_or_none()
     brand_name = brand.name if brand else "Unknown"
-    gt_json = gt.ground_truth_json
+    gt_json = gt.get_flat_json()
 
     # Field → Content Theme mapping: group related fields into coherent content pieces
     CONTENT_THEMES = [

@@ -386,7 +386,7 @@ class HallucinationDetector:
         brand_name: str = "",
         render_status: str = "ok",
     ) -> list[HallucinationResult]:
-        gt_json = gt.ground_truth_json
+        gt_json = gt.get_flat_json() if hasattr(gt, "get_flat_json") else gt.ground_truth_json
         brand = brand_name or str(gt_json.get("official_name", ""))
 
         # Brand relevance pre-check (P0-4)
