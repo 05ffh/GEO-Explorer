@@ -454,6 +454,19 @@ class HallucinationDetector:
 
         for claim in claims:
             verification = self.verify_claim(claim, gt_json)
+            # P1-6: LLM-as-Judge fallback for borderline n-gram results
+            sim = verification.get("similarity_score")
+            if sim is not None and 0.05 < sim < 0.35 and claim.checkable:
+                try:
+                    llm_result = await self._llm_verify_claim(
+                        claim, gt_json.get(claim.field), GT_FIELD_LEVELS.get(claim.field, "P1"))
+                    if llm_result:
+                        verification["llm_verdict"] = llm_result["verdict"]
+                        verification["llm_confidence"] = llm_result["confidence"]
+                        verification["llm_reasoning"] = llm_result["reasoning"]
+                        verification["llm_platform"] = llm_result.get("llm_platform", "")
+                except Exception:
+                    pass
             reason = verification.get("reason", "")
             # P1-1: attach GT source evidence for contradicted claims
             if verification.get("verdict") == "contradicted" and hasattr(gt, "get_best_source_for_field"):
@@ -494,6 +507,51 @@ class HallucinationDetector:
             )
             results.append(h)
         return results
+
+
+    async def _llm_verify_claim(self, claim: Claim, gt_value, field_level: str) -> dict | None:
+        """P1-6: Use LLM as judge for semantic consistency when n-gram is ambiguous."""
+        import json as _json
+        gt_str = str(gt_value) if not isinstance(gt_value, list) else "、".join(str(v) for v in gt_value)
+        prompt = (
+            "你是一个品牌事实核验专家。请判断以下AI声明是否与Ground Truth一致。\n\n"
+            f"字段: {claim.field}\n"
+            f"Ground Truth: {gt_str}\n"
+            f"AI声明: {claim.claim_text}\n\n"
+            "请返回JSON格式（只返回JSON，不要其他内容）:\n"
+            '{"verdict": "supported|contradicted|unsupported", '
+            '"confidence": 0.0-1.0, "reasoning": "一句话解释"}\n\n'
+            "规则:\n"
+            "- supported: 声明与GT语义一致或GT包含声明内容\n"
+            "- contradicted: 声明明确与GT冲突（如说行业是X但GT说是Y）\n"
+            "- unsupported: GT信息不足以判断\n"
+        )
+        try:
+            from src.adapters import get_adapter
+            for platform in ["deepseek", "doubao", "kimi"]:
+                try:
+                    adapter = get_adapter(platform)
+                    response = await adapter.query(prompt)
+                    if not response.answer_text:
+                        continue
+                    text = response.answer_text.strip()
+                    if "```" in text:
+                        text = text.split("```")[1].split("```")[0]
+                        if text.startswith("json"):
+                            text = text[4:]
+                    result = _json.loads(text)
+                    if result.get("verdict") in ("supported", "contradicted", "unsupported"):
+                        return {
+                            "verdict": result["verdict"],
+                            "confidence": float(result.get("confidence", 0.5)),
+                            "reasoning": result.get("reasoning", ""),
+                            "llm_platform": platform,
+                        }
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return None
 
 
 def _infer_predicate_type(field_name: str) -> str:
