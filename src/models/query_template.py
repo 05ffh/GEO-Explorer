@@ -1,6 +1,6 @@
 import re
 import uuid
-from sqlalchemy import String, ForeignKey, Integer, Boolean, Text
+from sqlalchemy import String, ForeignKey, Integer, Float, Boolean, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from src.models.base import Base, TimestampMixin, UUIDMixin
 
@@ -27,7 +27,7 @@ class QueryTemplate(Base, UUIDMixin, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     question_type: Mapped[str] = mapped_column(String(50), default="brand_definition")
-    brand_directed: Mapped[bool] = mapped_column(Boolean, default=True)
+    brand_directed: Mapped[float] = mapped_column(Float, default=1.0)  # P1-4: 0/0.25/0.5/0.75/1.0
     hallucination_check_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     template_level: Mapped[str] = mapped_column(String(20), default="important")
