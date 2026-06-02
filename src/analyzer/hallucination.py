@@ -417,6 +417,12 @@ class HallucinationDetector:
 
         for claim in claims:
             verification = self.verify_claim(claim, gt_json)
+            reason = verification.get("reason", "")
+            # P1-1: attach GT source evidence for contradicted claims
+            if verification.get("verdict") == "contradicted" and hasattr(gt, "get_best_source_for_field"):
+                best_src = gt.get_best_source_for_field(claim.field, min_tier="B")
+                if best_src:
+                    reason += f" | GT source: [{best_src.get('tier','?')}] {best_src.get('title','') or best_src.get('url','')}"
             h = HallucinationResult(
                 brand_id=query_result.brand_id,
                 query_result_id=query_result.id,
@@ -432,7 +438,7 @@ class HallucinationDetector:
                 subject_type=claim.subject_type,
                 claim_text=claim.claim_text,
                 matched_gt_field=claim.field,
-                reason=verification.get("reason", ""),
+                reason=reason,
             )
             results.append(h)
         return results

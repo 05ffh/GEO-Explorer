@@ -225,3 +225,83 @@ def _compute_coverage(candidate: GroundTruthCandidate) -> float:
     if not required:
         return 1.0
     return len(have & required) / len(required)
+
+
+# ── P1-1: Single-field GT editing (v2-aware) ─────────────────────────────
+
+class FieldEditRequest(BaseModel):
+    field_type: Literal["string", "list", "number", "object"] | None = None
+    values: list[dict] = []
+    reason: str = ""
+
+
+@router.put("/gt/{gt_id}/fields/{field_name}")
+async def edit_gt_field(
+    gt_id: str,
+    field_name: str,
+    body: FieldEditRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    gt = (await db.execute(
+        select(GroundTruthVersion).where(GroundTruthVersion.id == gt_id)
+    )).scalar_one_or_none()
+    if not gt:
+        raise HTTPException(status_code=404, detail="GT version not found")
+
+    from src.schemas.gt_field_registry import validate_field_name
+    valid, reason = validate_field_name(field_name)
+    if not valid:
+        raise HTTPException(status_code=400, detail=f"Invalid field: {reason}")
+
+    from src.schemas.gt_v2 import detect_gt_schema_version, GroundTruthV2, GtField
+
+    gt_json = dict(gt.ground_truth_json or {})
+    v = detect_gt_schema_version(gt_json, gt.gt_schema_version)
+
+    if v == "v1":
+        # Upgrade to v2 on first field edit
+        from scripts.migrate_gt_to_v2 import migrate_one
+        v2_json, _ = migrate_one(gt_json, list(gt.source_urls or []))
+        gt_json = v2_json
+        gt.gt_schema_version = "gt_v2"
+
+    ft = body.field_type or "string"
+    gt_json.setdefault("fields", {})[field_name] = {
+        "field_type": ft,
+        "values": body.values,
+        "status": "reviewed",
+    }
+
+    from src.schemas.gt_v2 import compute_coverage_score, GroundTruthV2 as _V2
+    try:
+        _V2.model_validate(gt_json)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    gt_json["meta"] = gt_json.get("meta", {})
+    gt_json["meta"]["coverage_score"] = compute_coverage_score(gt_json.get("fields", {}))
+    gt_json["meta"]["last_reviewed_by"] = str(user.id)
+    gt_json["meta"]["last_reviewed_at"] = __import__("datetime").datetime.now(
+        __import__("datetime").timezone.utc).isoformat()
+
+    gt.ground_truth_json = gt_json
+    await db.commit()
+    return {"status": "updated", "gt_id": gt_id, "field": field_name}
+
+
+@router.get("/gt/{gt_id}/fields/{field_name}/sources")
+async def get_gt_field_sources(
+    gt_id: str,
+    field_name: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    gt = (await db.execute(
+        select(GroundTruthVersion).where(GroundTruthVersion.id == gt_id)
+    )).scalar_one_or_none()
+    if not gt:
+        raise HTTPException(status_code=404, detail="GT version not found")
+
+    sources = gt.get_field_sources(field_name)
+    return {"gt_id": gt_id, "field": field_name, "sources": sources}
