@@ -1,134 +1,280 @@
-# P1-10: 诊断有效样本数 — 设计规格
+# P1-10: 诊断有效样本数 — 设计规格（修订版）
 
 **日期:** 2026-06-03
-**状态:** 待审阅
+**状态:** 已确认（含审阅补齐清单）
 **父项:** P1 功能增强 (P1-10)
 
 ## 动机
 
-当前 `report_publishable` 判断是二值的——发布或不发布。但"不能发布"的原因被混在一起：采集完全失败（0 条 QueryResult）和采集部分成功但样本不够可靠分析是两种完全不同的情况。P1-10 使诊断系统能区分"无数据"和"数据不足"，并在报告质量摘要中提供细粒度样本充分度评估。
+`report_publishable` 是二值的，但不发布的原因被混在一起。P1-10 区分"无数据"和"数据不足"，按 platform × question_type × KPI 三维评估样本充分度。
 
-## 设计决策
+## 设计原则（11 条硬约束）
 
-| 决策 | 选择 |
-|------|------|
-| 样本充分度维度 | 按平台 × question_type × KPI 三个维度分别评估 |
-| 判定标准 | 可配置阈值：每平台 >= N 条成功、每 qtype >= M 条成功 |
-| 与现有系统关系 | 扩展 `report_quality_summary_json` 新增 `sample_sufficiency` 节，不影响现有 `report_publishable` |
-| 展示 | 报告首页显示样本充分度仪表盘，按维度标注 ✅/⚠️/❌ |
+1. **四层有效口径** — raw / success / valid_answer / metric_eligible 严格区分
+2. **reasoning_content / template_invalid / empty_response 不得计入 valid_answer**
+3. **KPI 分母复用 MetricResult.denominator_json** — 不另写逻辑
+4. **qtype 使用模板版本快照** — 不读当前 QueryTemplate
+5. **data_status 按 no_data → insufficient → partial → ok 状态机**计算
+6. **partial 发布规则** — critical platform/qtype/kpi 缺失不得发布
+7. **SampleSufficiencyConfig 接入 P1-9 IndustryConfig** — schema 校验
+8. **SampleSufficiencyResult 含 config_snapshot + blocking_dimensions + actions**
+9. **compute_report_publishable 转 blocking_reasons**
+10. **报告首页说明"样本不足不等于品牌表现差"**
+11. **API 默认读快照** — 行业配置更新不改变历史 run
 
 ---
 
-## 1. 数据模型
+## 1. 有效样本口径（P0-1）
 
-### 1.1 新增：SampleSufficiencyConfig
+```python
+# 四层口径
+raw_query_count        # 应采集的总 QueryResult 数
+successful_query_count # 平台成功返回 (无 timeout/auth/rate_limit/empty)
+valid_answer_count     # 有内容、template_valid、非系统错误
+metric_eligible_count   # 满足 KPI eligibility 过滤的样本
 
-`src/schemas/sample_sufficiency.py`:
+# 排除规则
+NOT valid_answer: reasoning_content | template_invalid | empty_response |
+                  content_filtered | system_error
+IS valid_answer:  answer_text 非空 AND template render_status=ok AND status=success
+IS metric_eligible: valid_answer AND passes KPI eligibility filter
+```
+
+| 维度 | 使用口径 |
+|------|---------|
+| platform_breakdown | valid_answer_count |
+| qtype_breakdown | valid_answer_count |
+| kpi_breakdown | metric_eligible per KPI |
+| total_valid_queries | valid_answer_count |
+
+---
+
+## 2. Pydantic Schema
+
+### 2.1 SampleSufficiencyConfig（P0-3）
 
 ```python
 class SampleSufficiencyConfig(BaseModel):
     schema_version: str = "sample_sufficiency_v1"
-    min_queries_per_platform: int = 3       # 每平台最少有效 QueryResult
-    min_queries_per_qtype: int = 2           # 每 question_type 最少有效
-    min_queries_per_kpi: int = 5             # 每 KPI 最少有效样本
-    min_total_queries: int = 10              # 全局最少有效 QueryResult
-    min_platforms: int = 2                   # 最少成功平台数
-    require_all_platforms: bool = False      # 是否要求所有平台都有数据
+    min_queries_per_platform: int = Field(default=3, ge=0)
+    min_queries_per_qtype: int = Field(default=2, ge=0)
+    min_queries_per_kpi_default: int = Field(default=5, ge=0)
+    min_queries_by_kpi: dict[str, int] = Field(default_factory=dict)    # P1-2
+    min_total_queries: int = Field(default=10, ge=0)
+    min_platforms: int = Field(default=2, ge=1)
+    require_all_platforms: bool = False
+    critical_platforms: list[str] = Field(default_factory=list)         # P0-8
+    critical_qtypes: list[str] = Field(default_factory=list)
+    critical_kpis: list[str] = Field(default_factory=list)
+    min_queries_by_platform: dict[str, int] = Field(default_factory=dict) # P1-3
+    min_queries_by_qtype: dict[str, int] = Field(default_factory=dict)   # P1-4
+    optional_platforms: list[str] = Field(default_factory=list)
 ```
 
-### 1.2 新增：SampleSufficiencyResult
+### 2.2 SampleSufficiencyResult（P0-2）
 
 ```python
 class SampleSufficiencyResult(BaseModel):
-    data_status: str          # "ok" | "no_data" | "insufficient" | "partial"
+    schema_version: str = "sample_sufficiency_result_v1"
+    generated_at: str
+    data_status: str  # ok | no_data | insufficient | partial
+    config_snapshot: SampleSufficiencyConfig
+    config_source: dict  # {industry_code, source_layers}
+    total_raw_queries: int
+    total_successful_queries: int
     total_valid_queries: int
+    total_metric_eligible_queries: int
     total_platforms: int
+    enabled_platforms: int
     successful_platforms: int
-    platform_breakdown: dict  # {platform: {success, error, total}}
-    qtype_breakdown: dict     # {qtype: {success, min_required, sufficient}}
-    kpi_breakdown: dict       # {kpi: {eligible_queries, min_required, sufficient}}
-    warnings: list[str]
-    recommendation: str       # human-readable recommendation
+    platform_breakdown: dict  # P0-4
+    qtype_breakdown: dict
+    kpi_breakdown: dict   # P0-6
+    blocking_dimensions: list[dict]
+    warnings: list[dict]
+    recommended_actions: list[dict]  # P0-10
+    recommendation_summary: str
 ```
 
-data_status 枚举:
-- `ok` — 所有维度达标
-- `no_data` — 无任何成功 QueryResult（采集完全失败或未开始）
-- `insufficient` — 有数据但至少一个关键维度不达标
-- `partial` — 部分平台无数据但其他平台达标
+### 2.3 SampleSufficiencyAction（P0-10）
+
+```python
+class SampleSufficiencyAction(BaseModel):
+    action_type: str  # retry_platform | add_templates | add_platform | collect_more | fix_auth | wait_rate_limit | review_gt
+    target: str | None
+    reason: str
+    priority: str  # high | medium | low
+```
 
 ---
 
-## 2. 集成点
+## 3. data_status 状态机（P0-7）
 
-### 2.1 `analyzer/pipeline.py` — `compute_and_save_metrics()` 末尾
-
+```python
+def compute_data_status(result, config) -> str:
+    if result.total_valid_queries == 0:
+        return "no_data"
+    if result.total_valid_queries < config.min_total_queries:
+        return "insufficient"
+    if result.successful_platforms < config.min_platforms:
+        return "insufficient"
+    if config.require_all_platforms and result.successful_platforms < result.enabled_platforms:
+        return "insufficient"
+    if any critical_qtype insufficient:
+        return "insufficient"
+    if any critical_kpi insufficient:
+        return "insufficient"
+    if any critical_platform missing:
+        return "insufficient"
+    if any non-critical platform/qtype insufficient:
+        return "partial"
+    return "ok"
 ```
-1. 收集所有 QueryResult (platform, status, template_id)
-2. 按 platform / question_type 聚合
-3. 应用 SampleSufficiencyConfig 判定
-4. 写入 run.report_quality_summary_json.sample_sufficiency
-```
-
-### 2.2 `analyzer/quality.py` — `compute_report_publishable()`
-
-- `data_status = no_data` → `report_publishable = false`，首要阻断原因
-- `data_status = insufficient` → `report_publishable = false`，附带详细维度说明
-- `data_status = partial` → `report_publishable` 取决于其他质量指标
-
-### 2.3 `reports/diagnostic.py` — 报告首页
-
-- 新增"样本充分度"区块
-- 显示 platform / qtype / KPI 三维度的 ✅⚠️❌
-- 推荐操作：补充采集 / 添加平台 / 当前可用
-
-### 2.4 `CollectionRun` 扩展
-
-- `report_quality_summary_json.sample_sufficiency` — 快照
 
 ---
 
-## 3. 阈值来源
+## 4. 各维度 breakdown
 
+### 4.1 platform_breakdown（P0-4）
+
+每平台:
+```json
+{
+  "enabled": true, "attempted": true,
+  "raw_queries": 23, "success_queries": 4, "valid_answer_queries": 3,
+  "metric_eligible_queries": 2, "error_queries": 19,
+  "error_breakdown": {"rate_limit": 19},
+  "sufficient": false, "min_required": 3,
+  "status": "rate_limited"
+}
 ```
-品牌级 industry_config_override.sample_sufficiency (最高优先级)
-  ↓
-行业配置 IndustryTemplate.sample_sufficiency
-  ↓
-全局默认 SampleSufficiencyConfig()
+status: ok | insufficient | not_attempted | disabled | rate_limited | timeout_heavy | auth_failed | no_valid_answer | partial
+
+### 4.2 qtype_breakdown（P0-5）
+
+- 优先: `QueryResult.template_version_id → QueryTemplateVersion.question_type`
+- Fallback: `CollectionRun.template_version_ids` snapshot
+- Legacy: `QueryTemplate.question_type` + "legacy_template_qtype" warning
+
+### 4.3 kpi_breakdown（P0-6）
+
+```json
+{
+  "information_accuracy": {
+    "denominator_type": "checkable_target_brand_claims",
+    "denominator": 12, "min_required": 5, "sufficient": true
+  }
+}
 ```
 
-通过 P1-9 的 `resolve_industry_config()` 统一读取。
+直接读取 `MetricResult.denominator_json`。不存在则预计算。
 
 ---
 
-## 4. API
+## 5. partial 发布规则（P0-8）
+
+**可发布**条件（全部满足）:
+- `metric_eligible_coverage >= 60%`
+- 核心 KPI denominator 全达标
+- `successful_platforms >= min_platforms`
+- 无 critical platform/qtype 缺失
+- 无其他 hard block
+
+**不可发布**: critical platform 缺失 | critical KPI 不足 | require_all_platforms 不满足
+
+---
+
+## 6. blocking_reasons / warnings（P0-9）
+
+| Code | Severity | 含义 |
+|------|----------|------|
+| NO_DATA | block | 无成功 QueryResult |
+| SAMPLE_TOTAL_TOO_LOW | block | total_valid < min_total |
+| SAMPLE_PLATFORM_TOO_LOW | block | successful_platforms < min |
+| SAMPLE_QTYPE_TOO_LOW | block | critical qtype 不足 |
+| SAMPLE_KPI_TOO_LOW | block | critical KPI 分母不足 |
+| SAMPLE_CRITICAL_PLATFORM_MISSING | block | critical 平台无数据 |
+| SAMPLE_PARTIAL_PLATFORM | warning | 非关键平台不足 |
+| SAMPLE_NON_CRITICAL_QTYPE_LOW | warning | 非关键 qtype 不足 |
+| SAMPLE_LEGACY_TEMPLATE_VERSION | warning | 使用旧模板版本 |
+
+---
+
+## 7. P1-9 集成（P1-1）
+
+`IndustryConfig` 新增:
+
+```python
+sample_sufficiency: SampleSufficiencyConfig = Field(default_factory=SampleSufficiencyConfig)
+```
+
+`resolve_industry_config(brand_id)` 返回合并后的 sample_sufficiency。
+
+---
+
+## 8. API
 
 ```
 GET /api/runs/{run_id}/sample-sufficiency
-→ SampleSufficiencyResult
+  → 默认读 report_quality_summary_json.sample_sufficiency 快照
+  → ?recompute=true 重新计算，标注 temporary，不覆盖快照
 ```
 
 ---
 
-## 5. Migration
+## 9. 集成点
 
-- `industry_templates` 新增 `sample_sufficiency JSONB`
-- `brands.industry_config_override` 已存在（P1-9），支持 `sample_sufficiency` 字段
-- 无需新列：`CollectionRun.report_quality_summary_json` 结构中新增 `sample_sufficiency` 键
+- `analyzer/pipeline.py`: `compute_and_save_metrics()` → 调用 assessor → 写 snapshot
+- `analyzer/quality.py`: `compute_report_publishable()` → data_status=no_data/insufficient → blocking
+- `reports/diagnostic.py`: 报告首页"样本充分度"仪表盘 + "样本不足不等于品牌表现差"
+- `CollectionRun.report_quality_summary_json.sample_sufficiency`
 
 ---
 
-## 6. 测试
+## 10. 实现顺序
 
-| 场景 | 覆盖点 |
-|------|--------|
-| 全平台全 qtype 达标 | `test_all_dimensions_sufficient` |
-| 0 QueryResult | `test_no_data_status` |
-| 仅 1 平台达标 | `test_insufficient_min_platforms` |
-| 某 qtype 样本不足 | `test_qtype_insufficient` |
-| KPI eligible 样本不足 | `test_kpi_insufficient_eligible` |
-| 行业配置覆盖阈值 | `test_industry_threshold_override` |
-| data_status=no_data 阻断发布 | `test_no_data_blocks_publish` |
-| data_status=insufficient 阻断发布 | `test_insufficient_blocks_publish` |
-| 报告页面展示样本仪表盘 | `test_report_shows_sufficiency_dashboard` |
+| Step | 内容 |
+|------|------|
+| 0 | SampleSufficiencyConfig / Result / Action schema |
+| 1 | 接入 P1-9 IndustryConfig |
+| 2 | 四层有效样本口径 + compute_valid_query_counts() |
+| 3 | platform_breakdown |
+| 4 | qtype_breakdown (template_version 优先) |
+| 5 | kpi_breakdown (复用 MetricResult.denominator_json) |
+| 6 | data_status 状态机 |
+| 7 | blocking_reasons / warnings / recommended_actions |
+| 8 | 写入 report_quality_summary_json.sample_sufficiency |
+| 9 | compute_report_publishable 接入 |
+| 10 | API + 报告首页 |
+| 11 | 测试 + 星巴克验证 |
+
+---
+
+## 11. 测试清单
+
+- Schema: config_valid, threshold_rejects, require_all_platforms, industry_override
+- 有效样本: reasoning_not_valid, template_invalid_not_valid, empty_not_valid, not_about_brand_valid_but_not_eligible
+- Platform: ok/rate_limited/disabled/critical_missing_blocks/optional_missing_warns
+- Qtype: template_version_used, legacy_fallback_warning, required_insufficient_blocks
+- KPI: uses_denominator_json, zero_insufficient, kpi_specific_min, accuracy_checkable_claims
+- Status: no_data → insufficient → partial → ok (5 cases)
+- Publishable: no_data_blocks, insufficient_blocks_with_dimensions, partial_publishable_with_warning, critical_missing_blocks
+- API: reads_snapshot, recompute_temporary
+- Report: sufficiency_dashboard, explains_insufficient_not_brand_bad, recommended_actions
+
+---
+
+## 12. Done Definition
+
+1. Schema 完成
+2. P1-9 IndustryConfig 集成
+3. 四层有效样本口径统一
+4. platform/qtype/kpi breakdown 完成
+5. data_status 状态机 + 测试
+6. blocking_reasons / warnings / actions
+7. report_quality_summary_json.sample_sufficiency 快照
+8. compute_report_publishable 接入
+9. API 读快照
+10. 报告首页仪表盘 + 解释文案
+11. 全部测试通过
+12. 星巴克区分"平台限流导致样本不足" vs "品牌表现差"
