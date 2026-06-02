@@ -99,7 +99,7 @@ class ClaimVerification:
 
 # Keywords that signal a factual claim about each GT field
 FIELD_SIGNALS = {
-    "industry": ["行业", "领域", "属于", "产业", "垂直"],
+    "industry": ["行业", "领域", "属于", "产业", "垂直", "是一家"],
     "category": ["品类", "类别", "类型", "细分", "分类"],
     "positioning": ["定位", "核心", "主打", "专注于", "致力于"],
     "target_users": ["用户", "客户", "消费者", "面向", "人群", "服务"],
@@ -107,7 +107,7 @@ FIELD_SIGNALS = {
     "core_features": ["功能", "特性", "特点", "能力", "支持"],
     "key_differentiators": ["优势", "不同", "区别", "特色", "独特", "差异化"],
     "target_competitors": ["竞品", "竞争", "对手", "替代", "同行"],
-    "official_name": ["公司", "企业", "品牌", "集团", "平台"],
+    "official_name": ["公司", "企业", "品牌", "集团", "平台", "名称", "官方", "全称", "名为", "称为", "叫做"],
     "core_scenarios": ["场景", "用途", "应用", "解决", "需求"],
     "forbidden_claims": ["领先", "第一", "最大", "最好", "唯一", "最强", "最"],
 }
@@ -137,12 +137,21 @@ class HallucinationDetector:
 
     def _classify_relevance(self, response: str, brand_name: str, gt_json: dict) -> BrandRelevanceResult:
         """Classify whether an AI response is about the target brand (P0-4)."""
-        # Check if brand name or official_name appears as the subject
         official = str(gt_json.get("official_name", ""))
         industry = str(gt_json.get("industry", ""))
         evidence = []
 
-        brand_mentions = brand_name in response or (official and official in response)
+        # Build brand name variants: full name, short name (before parens), official name
+        _brand_variants = {brand_name, official}
+        _short = re.split(r'[（(]', brand_name)[0].strip()
+        if _short:
+            _brand_variants.add(_short)
+        _short_o = re.split(r'[（(]', official)[0].strip()
+        if _short_o:
+            _brand_variants.add(_short_o)
+        _brand_variants.discard("")
+
+        brand_mentions = any(v in response for v in _brand_variants)
         if brand_mentions:
             evidence.append(f"品牌名出现: {brand_name}")
 
@@ -153,11 +162,10 @@ class HallucinationDetector:
             sent = sent.strip()
             if not sent:
                 continue
-            # Brand name appears early in sentence (likely subject)
-            if brand_name in sent and sent.index(brand_name) < min(len(sent) / 3, 20):
-                brand_subject_count += 1
-            elif official and official in sent and sent.index(official) < min(len(sent) / 3, 20):
-                brand_subject_count += 1
+            for _v in _brand_variants:
+                if _v in sent and sent.index(_v) < min(len(sent) / 3, 20):
+                    brand_subject_count += 1
+                    break
 
         # If brand is the subject of multiple sentences, it's brand_centric
         if brand_subject_count >= 2:
@@ -192,15 +200,18 @@ class HallucinationDetector:
     def _infer_subject_type(self, claim_text: str, brand_name: str, gt_json: dict) -> str:
         """Infer whether a claim is about the target brand, a competitor, or generic."""
         official = str(gt_json.get("official_name", ""))
-        if brand_name in claim_text or (official and official in claim_text):
+        _variants = {brand_name, official}
+        _s = re.split(r'[（(]', brand_name)[0].strip()
+        if _s: _variants.add(_s)
+        _s2 = re.split(r'[（(]', official)[0].strip()
+        if _s2: _variants.add(_s2)
+        _variants.discard("")
+        if any(v in claim_text for v in _variants):
             return "target_brand"
         competitors = gt_json.get("target_competitors", [])
         for comp in (competitors if isinstance(competitors, list) else []):
             if str(comp) in claim_text:
                 return "competitor"
-        # Check if claim uses brand as subject implicitly
-        if any(kw in claim_text for kw in ["星巴克", "品牌", "该公司", "其"]):
-            return "target_brand"
         return "generic"
 
     def extract_claims(self, response: str, brand_name: str = "", gt_json: dict | None = None) -> list[Claim]:
@@ -276,6 +287,18 @@ class HallucinationDetector:
                     "ai_claim": claim.claim_text, "ground_truth_value": ""}
 
         gt_str = str(gt_value) if not isinstance(gt_value, list) else " ".join(gt_value)
+
+        # Pre-check: literal substring containment
+        claim_lower = claim.claim_text.lower()
+        gt_lower = gt_str.lower()
+        if gt_lower and len(gt_lower) >= 2:
+            if gt_lower in claim_lower or claim_lower in gt_lower:
+                return {"verdict": "supported", "severity": field_level,
+                        "error_type": None, "needs_human_review": False,
+                        "similarity_score": 1.0,
+                        "reason": "Exact string match in claim",
+                        "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
+
         claim_tokens = _tokenize(claim.claim_text)
         gt_tokens = _tokenize(gt_str)
 
@@ -289,6 +312,28 @@ class HallucinationDetector:
         claim_coverage = len(overlap) / len(claim_tokens) if claim_tokens else 0
         gt_coverage = len(overlap) / len(gt_tokens) if gt_tokens else 0
         similarity_score = (claim_coverage + gt_coverage) / 2
+
+        # Near-miss detection for short identity fields
+        # N-gram overlap alone can miss contradictions (e.g., Starbacks vs Starbucks)
+        _identity_fields = {"official_name", "industry", "category"}
+        if claim.field in _identity_fields and gt_coverage >= 0.3 and claim_coverage >= 0.2:
+            claim_clean = re.sub(r'[^a-zA-Z0-9一-鿿]', '', claim.claim_text.lower())
+            gt_clean = re.sub(r'[^a-zA-Z0-9一-鿿]', '', gt_str.lower())
+            if gt_clean not in claim_clean and claim_clean not in gt_clean \
+               and max(len(gt_clean), len(claim_clean)) <= 50:
+                from difflib import SequenceMatcher
+                char_sim = SequenceMatcher(None, claim_clean, gt_clean).ratio()
+                if char_sim < 0.85:
+                    return {"verdict": "contradicted", "severity": "P0",
+                            "error_type": "identity_error" if claim.field == "official_name"
+                            else "category_error",
+                            "needs_human_review": True,
+                            "similarity_score": round(similarity_score, 3),
+                            "reason": (
+                                f"Near-miss identity: n-gram overlap high but "
+                                f"char similarity {char_sim:.2f} suggests contradiction"
+                            ),
+                            "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
 
         # Supported: strong overlap both ways
         if gt_coverage >= 0.3 and claim_coverage >= 0.2:
