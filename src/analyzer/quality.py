@@ -13,6 +13,13 @@ HARD_BLOCK_CODES = {
     "METRIC_COVERAGE_LOW": "metric_eligible_coverage < 60%",
     "COVERAGE_DATA_MISSING": "缺少覆盖率数据",
     "TEMPLATE_HEALTH_MISSING": "缺少模板健康度数据",
+    # P1-10: sample sufficiency
+    "NO_DATA": "无成功 QueryResult，采集完全失败",
+    "SAMPLE_TOTAL_TOO_LOW": "有效样本总数不足",
+    "SAMPLE_PLATFORM_TOO_LOW": "成功平台数不足",
+    "SAMPLE_QTYPE_TOO_LOW": "关键问题类型样本不足",
+    "SAMPLE_KPI_TOO_LOW": "关键 KPI 分母不足",
+    "SAMPLE_CRITICAL_PLATFORM_MISSING": "关键平台无数据",
     "METRIC_DATA_MISSING": "缺少 KPI 指标数据",
     "QUALITY_SCHEMA_MISSING": "quality_summary 缺少 schema_version",
     "TEMPLATE_ERROR_AS_P0": "template_error 被计入 P0",

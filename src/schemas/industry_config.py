@@ -71,3 +71,8 @@ class IndustryConfig(BaseModel):
     )
     template_strategy: TemplateStrategyConfig = Field(default_factory=TemplateStrategyConfig)
     competitor_rules: CompetitorRulesConfig = Field(default_factory=CompetitorRulesConfig)
+    sample_sufficiency: "SampleSufficiencyConfig" = Field(default_factory=lambda: SampleSufficiencyConfig())
+
+# Lazy import for circular dependency
+from src.schemas.sample_sufficiency import SampleSufficiencyConfig
+IndustryConfig.model_rebuild()
