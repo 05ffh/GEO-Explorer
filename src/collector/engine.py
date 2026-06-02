@@ -191,6 +191,20 @@ async def run_collection(
         "qtype_distribution": qtype_counts,
     }
     await db.flush()
+
+    # --- P0-8: Template health blocking gate ---
+    if not health_report.get("can_collect", True):
+        run.collection_status = "failed"
+        run.collection_completed_at = datetime.utcnow()
+        run.collection_error_summary = {
+            "reason": "template_health_threshold",
+            "invalid_ratio": health_report["invalid_ratio"],
+            "invalid_templates": health_report["invalid_templates"],
+            "total_templates": health_report["total_templates"],
+            "threshold": 0.20,
+        }
+        await db.commit()
+        return run
     # --- End preflight ---
 
     _platform_semaphores = {
