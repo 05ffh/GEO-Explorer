@@ -71,10 +71,10 @@ class TestTemplateInvalidNotHallucination:
     @pytest.mark.parametrize("sample", load_samples("starbucks_template_invalid.jsonl"))
     async def test_template_invalid_not_hallucination(self, sample, detector, starbucks_gt, db_session):
         qr = _make_query_result_mock(sample)
-        results = await detector.detect(qr, starbucks_gt, db_session)
+        results = await detector.detect(qr, starbucks_gt, db_session, render_status="missing_variable")
         for r in results:
-            assert r.verdict not in ("contradicted",), \
-                f"{sample['sample_id']}: template invalid wrongly marked contradicted"
+            assert r.verdict == "template_invalid", \
+                f"{sample['sample_id']}: expected template_invalid, got {r.verdict}"
             assert r.severity != "P0", \
                 f"{sample['sample_id']}: template invalid wrongly marked P0"
 
@@ -90,3 +90,6 @@ class TestTrueCoreFactErrorDetected:
         if "expected_matched_gt_field" in sample:
             assert any(r.field_name == sample["expected_matched_gt_field"] for r in p0_results), \
                 f"{sample['sample_id']}: expected GT field '{sample['expected_matched_gt_field']}' not matched"
+        for r in p0_results:
+            assert r.subject_type == "target_brand", \
+                f"{sample['sample_id']}: P0 result should have subject_type=target_brand, got '{r.subject_type}'"

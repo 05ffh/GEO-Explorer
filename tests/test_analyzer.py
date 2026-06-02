@@ -80,20 +80,20 @@ class TestHallucinationDetector:
         claim = Claim(field="industry", claim_text="旅游科技公司", context="...", confidence=0.7)
         gt = {"industry": "旅游科技", "official_name": "TestBrand"}
         result = self.detector.verify_claim(claim, gt)
-        assert result["verdict"] in ("correct", "uncertain", "not_checkable")
+        assert result["verdict"] in ("supported", "gt_insufficient", "ambiguous", "not_checkable")
 
     def test_verify_claim_contradiction(self):
         claim = Claim(field="industry", claim_text="CRM软件公司", context="...", confidence=0.7)
         gt = {"industry": "旅游科技", "official_name": "TestBrand"}
         result = self.detector.verify_claim(claim, gt)
-        assert result["verdict"] in ("incorrect", "not_mentioned", "uncertain", "not_checkable")
+        assert result["verdict"] in ("contradicted", "unsupported", "ambiguous", "not_checkable")
 
     def test_verify_claim_missing_gt_field(self):
         claim = Claim(field="industry", claim_text="旅游科技公司", context="...", confidence=0.7)
         gt = {"official_name": "TestBrand"}
         result = self.detector.verify_claim(claim, gt)
         # GT field missing → uncertain or not_checkable
-        assert result["verdict"] in ("uncertain", "not_checkable")
+        assert result["verdict"] in ("gt_insufficient", "not_checkable", "ambiguous")
 
 
 def test_field_evaluation_dataclass():
