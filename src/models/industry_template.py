@@ -1,7 +1,7 @@
 """GEO Explorer — Industry Template & Query Template models."""
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, ForeignKey, DateTime, Text, Float, Boolean
+from sqlalchemy import String, ForeignKey, DateTime, Text, Float, Boolean, Integer
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from src.models.base import Base, TimestampMixin, UUIDMixin
@@ -33,6 +33,9 @@ class IndustryTemplate(Base, UUIDMixin, TimestampMixin):
     kpi_weights: Mapped[dict] = mapped_column(JSONB, default=dict)
     # 竞品
     competitor_rules: Mapped[dict] = mapped_column(JSONB, default=dict)
+    hallucination_thresholds: Mapped[dict] = mapped_column(JSONB, default=dict)
+    template_strategy: Mapped[dict] = mapped_column(JSONB, default=dict)
+    config_version: Mapped[int] = mapped_column(Integer, default=1)
     # 风险
     risk_rules: Mapped[list] = mapped_column(JSONB, default=list)
     compliance_constraints: Mapped[dict] = mapped_column(JSONB, default=dict)
