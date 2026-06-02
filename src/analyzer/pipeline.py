@@ -272,13 +272,38 @@ async def _run_hallucination_detection(
     if not query_results:
         return
 
-    from src.analyzer.hallucination import HallucinationDetector
+    from src.analyzer.hallucination import HallucinationDetector, check_template_render_status
+    from src.models.query_template import QueryTemplate as QT
+
+    brand_row = (await db.execute(
+        select(Brand).where(Brand.id == brand_id)
+    )).scalar_one_or_none()
+    bname = brand_row.name if brand_row else ""
+    bindustry = brand_row.industry if brand_row else ""
+
+    template_ids = list({qr.template_id for qr in query_results})
+    template_rows = (await db.execute(
+        select(QT).where(QT.id.in_(template_ids))
+    )).scalars().all()
+    template_map = {t.id: t for t in template_rows}
+
+    gt_json_r = gt.ground_truth_json if gt else None
+    template_render_status = {}
+    for tid, tmpl in template_map.items():
+        template_render_status[tid] = check_template_render_status(
+            tmpl.template_text,
+            brand_name=bname,
+            brand_industry=bindustry,
+            gt_json=gt_json_r,
+        )
+
     detector = HallucinationDetector()
     all_hallucinations = []
 
     for qr in query_results:
         try:
-            results = await detector.detect(qr, gt, db)
+            render_status = template_render_status.get(qr.template_id, "ok")
+            results = await detector.detect(qr, gt, db, render_status=render_status)
             for h in results:
                 db.add(h)
             all_hallucinations.extend(results)
@@ -288,7 +313,7 @@ async def _run_hallucination_detection(
     await db.flush()
 
     # Generate action plans from hallucinations
-    incorrect_hallucinations = [h for h in all_hallucinations if h.verdict == "incorrect"]
+    incorrect_hallucinations = [h for h in all_hallucinations if h.verdict == "contradicted"]
     if incorrect_hallucinations:
         TRIGGER_MAP = {
             "P0": {"action_type": "definition_correction", "content_type": "FAQ"},
