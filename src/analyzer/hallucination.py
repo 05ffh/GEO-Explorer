@@ -262,29 +262,37 @@ class HallucinationDetector:
         """Verify claim against GT with expanded verdict states (P0-6)."""
         field_level = GT_FIELD_LEVELS.get(claim.field, "P1")
 
+        def _evidence(path: str, **kw) -> dict:
+            return {"decision_path": path, "field": claim.field,
+                    "field_level": field_level, "subject_type": claim.subject_type, **kw}
+
         # Non-checkable claims
         if not claim.checkable:
             if claim.subject_type == "generic":
                 return {"verdict": "generic_statement", "severity": "Info",
                         "error_type": None, "needs_human_review": False,
                         "reason": "Generic statement, not a brand-specific claim",
-                        "ai_claim": claim.claim_text, "ground_truth_value": ""}
+                        "ai_claim": claim.claim_text, "ground_truth_value": "",
+                        "evidence": _evidence("not_checkable:generic")}
             if claim.subject_type == "competitor":
                 return {"verdict": "not_checkable", "severity": "Info",
                         "error_type": None, "needs_human_review": False,
                         "reason": "Claim about competitor, not target brand",
-                        "ai_claim": claim.claim_text, "ground_truth_value": ""}
+                        "ai_claim": claim.claim_text, "ground_truth_value": "",
+                        "evidence": _evidence("not_checkable:competitor")}
             return {"verdict": "not_checkable", "severity": "Info",
                     "error_type": None, "needs_human_review": False,
                     "reason": f"Subject type '{claim.subject_type}' not checkable against brand GT",
-                    "ai_claim": claim.claim_text, "ground_truth_value": ""}
+                    "ai_claim": claim.claim_text, "ground_truth_value": "",
+                    "evidence": _evidence("not_checkable:unknown_subject")}
 
         gt_value = gt_json.get(claim.field)
         if not gt_value:
             return {"verdict": "gt_insufficient", "severity": "Info",
                     "error_type": None, "needs_human_review": False,
                     "reason": f"GT field '{claim.field}' not defined, cannot verify",
-                    "ai_claim": claim.claim_text, "ground_truth_value": ""}
+                    "ai_claim": claim.claim_text, "ground_truth_value": "",
+                    "evidence": _evidence("gt_insufficient:field_missing")}
 
         gt_str = str(gt_value) if not isinstance(gt_value, list) else " ".join(gt_value)
 
@@ -297,7 +305,8 @@ class HallucinationDetector:
                         "error_type": None, "needs_human_review": False,
                         "similarity_score": 1.0,
                         "reason": "Exact string match in claim",
-                        "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
+                        "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
+                        "evidence": _evidence("literal_substring_match", similarity_score=1.0)}
 
         claim_tokens = _tokenize(claim.claim_text)
         gt_tokens = _tokenize(gt_str)
@@ -306,15 +315,17 @@ class HallucinationDetector:
             return {"verdict": "ambiguous", "severity": "Info",
                     "error_type": None, "needs_human_review": False,
                     "reason": "Insufficient tokens for comparison",
-                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
+                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
+                    "evidence": _evidence("ambiguous:no_tokens")}
 
         overlap = claim_tokens & gt_tokens
         claim_coverage = len(overlap) / len(claim_tokens) if claim_tokens else 0
         gt_coverage = len(overlap) / len(gt_tokens) if gt_tokens else 0
         similarity_score = (claim_coverage + gt_coverage) / 2
+        extra_tokens = claim_tokens - gt_tokens
+        missing_tokens = gt_tokens - claim_tokens
 
         # Near-miss detection for short identity fields
-        # N-gram overlap alone can miss contradictions (e.g., Starbacks vs Starbucks)
         _identity_fields = {"official_name", "industry", "category"}
         if claim.field in _identity_fields and gt_coverage >= 0.3 and claim_coverage >= 0.2:
             claim_clean = re.sub(r'[^a-zA-Z0-9一-鿿]', '', claim.claim_text.lower())
@@ -333,7 +344,12 @@ class HallucinationDetector:
                                 f"Near-miss identity: n-gram overlap high but "
                                 f"char similarity {char_sim:.2f} suggests contradiction"
                             ),
-                            "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
+                            "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
+                            "evidence": _evidence("near_miss_identity",
+                                similarity_score=round(similarity_score, 3),
+                                char_similarity=round(char_sim, 3),
+                                overlap_tokens=sorted(overlap)[:5],
+                                extra_tokens=sorted(extra_tokens)[:5])}
 
         # Supported: strong overlap both ways
         if gt_coverage >= 0.3 and claim_coverage >= 0.2:
@@ -341,10 +357,14 @@ class HallucinationDetector:
                     "error_type": None, "needs_human_review": False,
                     "similarity_score": round(similarity_score, 3),
                     "reason": f"Token match: claim={claim_coverage:.0%} gt={gt_coverage:.0%}",
-                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
+                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
+                    "evidence": _evidence("token_match",
+                        claim_coverage=round(claim_coverage, 3),
+                        gt_coverage=round(gt_coverage, 3),
+                        similarity_score=round(similarity_score, 3),
+                        overlap_tokens=sorted(overlap)[:5])}
 
         # Overclaim / contradicted
-        extra_tokens = claim_tokens - gt_tokens
         forbidden = {"领先", "第一", "最大", "最好", "唯一", "最强", "顶级", "绝对"}
         hit_forbidden = [t for t in extra_tokens if t in forbidden]
 
@@ -353,20 +373,29 @@ class HallucinationDetector:
                     "error_type": "overclaim", "needs_human_review": True,
                     "similarity_score": round(similarity_score, 3),
                     "reason": f"Forbidden claim: {hit_forbidden}",
-                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
+                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
+                    "evidence": _evidence("forbidden_claim",
+                        forbidden_tokens=hit_forbidden,
+                        similarity_score=round(similarity_score, 3))}
 
         if extra_tokens and gt_coverage < 0.15:
             error_type = _classify_error_type(claim.field, claim.claim_text, gt_str)
             needs_review = field_level == "P0" or claim.field in (
                 "official_name", "category", "positioning")
-            # Only P0 if core identity fields contradicted
             severity = "P0" if field_level == "P0" and claim.field in (
                 "official_name", "industry", "category", "core_products") else field_level
             return {"verdict": "contradicted", "severity": severity,
                     "error_type": error_type, "needs_human_review": needs_review,
                     "similarity_score": round(similarity_score, 3),
                     "reason": f"Tokens not in GT: {sorted(extra_tokens)[:5]}",
-                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
+                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
+                    "evidence": _evidence("contradicted:extra_tokens",
+                        error_type=error_type,
+                        claim_coverage=round(claim_coverage, 3),
+                        gt_coverage=round(gt_coverage, 3),
+                        similarity_score=round(similarity_score, 3),
+                        extra_tokens=sorted(extra_tokens)[:5],
+                        missing_tokens=sorted(missing_tokens)[:5])}
 
         # Unsupported / ambiguous
         if overlap:
@@ -374,12 +403,20 @@ class HallucinationDetector:
                     "error_type": None, "needs_human_review": False,
                     "similarity_score": round(similarity_score, 3),
                     "reason": "Partial match — GT cannot fully confirm",
-                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
+                    "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
+                    "evidence": _evidence("unsupported:partial_match",
+                        claim_coverage=round(claim_coverage, 3),
+                        gt_coverage=round(gt_coverage, 3),
+                        similarity_score=round(similarity_score, 3),
+                        overlap_tokens=sorted(overlap)[:5])}
 
         return {"verdict": "ambiguous", "severity": "Info",
                 "error_type": None, "needs_human_review": False,
                 "reason": "No meaningful overlap with GT",
-                "ai_claim": claim.claim_text, "ground_truth_value": gt_str}
+                "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
+                "evidence": _evidence("ambiguous:no_overlap",
+                    claim_coverage=round(claim_coverage, 3),
+                    gt_coverage=round(gt_coverage, 3))}
 
     async def detect(
         self, query_result: QueryResult, gt: GroundTruthVersion, db: AsyncSession,
@@ -423,6 +460,21 @@ class HallucinationDetector:
                 best_src = gt.get_best_source_for_field(claim.field, min_tier="B")
                 if best_src:
                     reason += f" | GT source: [{best_src.get('tier','?')}] {best_src.get('title','') or best_src.get('url','')}"
+            # P1-5: append debug evidence summary
+            ev = verification.get("evidence", {})
+            if ev:
+                path = ev.get("decision_path", "?")
+                sim = ev.get("similarity_score")
+                parts = [f"path={path}"]
+                if sim is not None:
+                    parts.append(f"sim={sim:.3f}")
+                if "char_similarity" in ev:
+                    parts.append(f"char_sim={ev['char_similarity']:.3f}")
+                if "overlap_tokens" in ev:
+                    parts.append(f"overlap={ev['overlap_tokens'][:3]}")
+                if "extra_tokens" in ev:
+                    parts.append(f"extra={ev['extra_tokens'][:3]}")
+                reason += " | " + " ".join(parts)
             h = HallucinationResult(
                 brand_id=query_result.brand_id,
                 query_result_id=query_result.id,
