@@ -116,7 +116,7 @@ async def run_collection(
         trigger_type=trigger_type,
         collection_status="running",
         started_at=datetime.utcnow(),
-        total_queries=len(PLATFORMS) * len(templates),
+        total_queries=0,  # computed after preflight
     )
     db.add(run)
     await db.flush()
@@ -130,6 +130,11 @@ async def run_collection(
         "{竞品}": "target_competitors",
         "{场景}": "core_scenarios",
         "{目标用户}": "target_users",
+    }
+
+    _MULTI_VALUE_VARS = {
+        "{竞品}": "target_competitors",
+        "{场景}": "core_scenarios",
     }
 
     class _PreflightResult:
@@ -205,6 +210,35 @@ async def run_collection(
         }
         await db.commit()
         return run
+
+    def _build_questions(tmpl) -> list[str]:
+        """Build one or more questions from a template, expanding multi-value vars."""
+        question = tmpl.template_text
+        for alias in brand.aliases or []:
+            question = question.replace(f"{{{alias}}}", alias)
+        question = question.replace("{品牌}", brand.name)
+        question = question.replace("{行业}", brand.industry or "")
+        for _var, _gt_key in _GT_VAR_MAP.items():
+            if _var in _MULTI_VALUE_VARS:
+                continue
+            _val = _gt_json.get(_gt_key, "")
+            if isinstance(_val, list):
+                _val = "、".join(str(v) for v in _val)
+            question = question.replace(_var, str(_val) if _val else _var)
+        multi_var = next((v for v in _MULTI_VALUE_VARS if v in question), None)
+        if multi_var:
+            gt_key = _MULTI_VALUE_VARS[multi_var]
+            values = _gt_json.get(gt_key, [])
+            if isinstance(values, list) and values:
+                return [question.replace(multi_var, str(v)) for v in values]
+        return [question]
+
+    # Compute actual total_queries with multi-value expansion
+    _total = 0
+    for _t in templates:
+        _total += len(_build_questions(_t))
+    run.total_queries = len(PLATFORMS) * _total
+    await db.flush()
     # --- End preflight ---
 
     _platform_semaphores = {
@@ -216,22 +250,9 @@ async def run_collection(
     if active_gt:
         _gt_json = active_gt.get_flat_json() if hasattr(active_gt, "get_flat_json") else active_gt.ground_truth_json
 
-    def _build_question(tmpl):
-        question = tmpl.template_text
-        for alias in brand.aliases or []:
-            question = question.replace(f"{{{alias}}}", alias)
-        question = question.replace("{品牌}", brand.name)
-        question = question.replace("{行业}", brand.industry or "")
-        for _var, _gt_key in _GT_VAR_MAP.items():
-            _val = _gt_json.get(_gt_key, "")
-            if isinstance(_val, list):
-                _val = "、".join(str(v) for v in _val)
-            question = question.replace(_var, str(_val) if _val else _var)
-        return question
-
     system = active_prompt.system_prompt if active_prompt else "你是一个诚实的AI助手。"
 
-    async def query_one(platform_name, tmpl):
+    async def query_one(platform_name, tmpl, question):
         sem = _platform_semaphores[platform_name]
         retry_cfg = settings.platform_retry_config.get(
             platform_name, {"max_retries": 2, "backoff_seconds": [1, 2]}
@@ -240,8 +261,6 @@ async def run_collection(
         backoffs = retry_cfg["backoff_seconds"]
 
         adapter = get_adapter(platform_name)
-        question = _build_question(tmpl)
-
         retry_count = 0
         rate_limited = False
         final_error_code = ""
@@ -271,7 +290,12 @@ async def run_collection(
             "final_error_code": final_error_code,
         }
 
-    jobs = [query_one(p, t) for p in PLATFORMS for t in templates]
+    jobs = [
+        query_one(p, t, q)
+        for p in PLATFORMS
+        for t in templates
+        for q in _build_questions(t)
+    ]
     responses = await asyncio.gather(*jobs, return_exceptions=True)
 
     for result in responses:
