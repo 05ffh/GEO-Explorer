@@ -4,6 +4,7 @@ from src.models.user import User
 from src.models.brand import Brand
 from src.models.ground_truth import GroundTruthVersion
 from src.models.query_template import QueryTemplate
+from src.models.query_template_version import QueryTemplateVersion
 from src.models.prompt_version import PromptVersion
 from src.models.collection_run import CollectionRun
 from src.models.query_result import QueryResult
@@ -47,7 +48,7 @@ __all__ = [
     "Base", "TimestampMixin", "UUIDMixin",
     "Organization", "User",
     "Brand", "GroundTruthVersion",
-    "QueryTemplate", "PromptVersion",
+    "QueryTemplate", "QueryTemplateVersion", "PromptVersion",
     "CollectionRun",
     "QueryResult", "ApiUsage",
     "MetricsSnapshot", "HallucinationResult",

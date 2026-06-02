@@ -97,6 +97,34 @@ async def run_collection(
         )
     )).scalars().all()
 
+    # P1-7: Pin template versions at collection start (P0-8 atomic pinning)
+    from src.models.query_template_version import QueryTemplateVersion
+    from src.services.query_template_versioning import _build_version_snapshot, CHANGE_CREATE
+    _pinned = {}
+    _pinned_snapshot = []
+    for _t in templates:
+        _ver = (await db.execute(
+            select(QueryTemplateVersion).where(
+                QueryTemplateVersion.template_id == _t.id,
+                QueryTemplateVersion.version == _t.current_version,
+            )
+        )).scalar_one_or_none()
+        if _ver is None:
+            # Auto-heal: legacy templates missing v1 get one created on the fly
+            _ver = _build_version_snapshot(_t, _t.current_version or 1, CHANGE_CREATE, _t.created_by)
+            db.add(_ver)
+            await db.flush()
+        _pinned[_t.id] = _ver
+        _pinned_snapshot.append({
+            "template_id": str(_ver.template_id),
+            "version": _ver.version,
+            "version_id": str(_ver.id),
+            "dimension": _ver.dimension,
+            "question_type": _ver.question_type,
+            "template_level": _ver.template_level,
+            "question_scope": _ver.question_scope,
+        })
+
     active_prompt = (await db.execute(
         select(PromptVersion).where(PromptVersion.status == "active")
     )).scalars().first()
@@ -308,6 +336,7 @@ async def run_collection(
             collection_run_id=run.id,
             platform=platform_name,
             template_id=tmpl.id,
+            template_version_id=_pinned[tmpl.id].id,
             prompt_version_id=active_prompt.id if active_prompt else None,
             question=response.question,
             answer_text=response.answer_text,
@@ -353,6 +382,11 @@ async def run_collection(
         else "partial"
     )
     run.collection_completed_at = datetime.utcnow()
+    run.template_version_ids = {
+        "schema_version": "template_versions_snapshot_v1",
+        "pinned_at": datetime.utcnow().isoformat(),
+        "templates": _pinned_snapshot,
+    }
     await db.commit()
 
     if auto_analyze and run.collection_status in ("completed", "partial"):

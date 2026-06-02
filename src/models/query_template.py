@@ -20,6 +20,13 @@ _UNRESOLVED_RE = re.compile(r"\{[^{}]+\}")
 
 class QueryTemplate(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "query_templates"
+
+    VERSIONED_FIELDS = (
+        "dimension", "template_text", "priority", "question_type",
+        "brand_directed", "hallucination_check_enabled",
+        "template_level", "question_scope",
+    )
+
     organization_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("organizations.id"), nullable=True)
     dimension: Mapped[str] = mapped_column(String(100), nullable=False)
     template_text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -32,6 +39,7 @@ class QueryTemplate(Base, UUIDMixin, TimestampMixin):
 
     template_level: Mapped[str] = mapped_column(String(20), default="important")
     question_scope: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    current_version: Mapped[int] = mapped_column(Integer, default=1)
 
     @property
     def required_variables(self) -> list[str]:

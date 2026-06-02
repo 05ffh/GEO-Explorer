@@ -13,6 +13,7 @@ class QueryResult(Base, UUIDMixin):
     collection_run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("collection_runs.id"), nullable=False, index=True)
     platform: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     template_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("query_templates.id"), nullable=False)
+    template_version_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("query_template_versions.id"), nullable=True)
     prompt_version_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("prompt_versions.id"), nullable=True)
     question: Mapped[str] = mapped_column(Text, default="")
     system_prompt: Mapped[str] = mapped_column(Text, default="")

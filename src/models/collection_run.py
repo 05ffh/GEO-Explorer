@@ -36,6 +36,7 @@ class CollectionRun(Base, UUIDMixin, TimestampMixin):
     coverage_report_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     analysis_skipped_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    template_version_ids: Mapped[dict] = mapped_column(JSONB, default=dict)
     preflight_summary_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     report_quality_summary_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     template_health_report_json: Mapped[dict] = mapped_column(JSONB, default=dict)
