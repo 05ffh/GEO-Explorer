@@ -11,7 +11,7 @@ from src.config import settings
 from src.api.deps import get_current_user, get_org_brand_or_404
 from src.models.user import User
 from src.models.brand import Brand
-from src.api import auth, brands, metrics, collection_runs, hallucinations, actions, dashboard, ground_truth, tasks, publishing, saas, platform, template_versions
+from src.api import auth, brands, metrics, collection_runs, hallucinations, actions, dashboard, ground_truth, tasks, publishing, saas, platform, template_versions, reclassifications
 from src.schemas.ground_truth import KPI_DISPLAY_NAMES
 
 app = FastAPI(title="GEO Explorer", version="0.1.0")
@@ -26,7 +26,7 @@ for router in [
     auth.router, brands.router, metrics.router,
     collection_runs.router, hallucinations.router,
     actions.router, dashboard.router, ground_truth.router,
-    tasks.router, publishing.router, saas.router, platform.router, template_versions.router,
+    tasks.router, publishing.router, saas.router, platform.router, template_versions.router, reclassifications.router,
 ]:
     app.include_router(router)
 

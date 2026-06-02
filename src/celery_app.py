@@ -64,3 +64,5 @@ app.conf.beat_schedule = {
 app.conf.timezone = "Asia/Shanghai"
 
 app.autodiscover_tasks(['src.collector', 'src.queue', 'src.benchmark'])
+
+celery_app = app  # alias for direct import

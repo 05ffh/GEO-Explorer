@@ -42,3 +42,9 @@ class CollectionRun(Base, UUIDMixin, TimestampMixin):
     template_health_report_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     report_publishable: Mapped[bool] = mapped_column(Boolean, default=False)
     blocking_reasons_json: Mapped[list] = mapped_column(JSONB, default=list)
+
+    # P1-8: reclassification
+    reclassified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    latest_reclassification_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("reclassification_runs.id"), nullable=True)
+    original_report_quality_summary_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    latest_reclassified_quality_summary_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

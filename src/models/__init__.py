@@ -11,6 +11,12 @@ from src.models.query_result import QueryResult
 from src.models.api_usage import ApiUsage
 from src.models.metrics_snapshot import MetricsSnapshot
 from src.models.hallucination import HallucinationResult
+from src.models.reclassification_run import (
+    ReclassificationRun, RECLASSIFICATION_STATUSES, RECLASSIFICATION_MODES,
+    RESULT_ORIGINAL, RESULT_RECLASSIFIED,
+    STATUS_QUEUED, STATUS_RUNNING, STATUS_COMPLETED, STATUS_PARTIAL_FAILED,
+    STATUS_FAILED, STATUS_CANCELLED, MODE_DRY_RUN, MODE_WRITE_RESULTS,
+)
 from src.models.action_plan import ActionPlan, VALID_TRANSITIONS
 from src.models.content_library import ContentLibrary
 from src.models.competitor_set import CompetitorSet
@@ -66,6 +72,10 @@ __all__ = [
     "PlatformTrendIncident", "ImpactEvent", "ModelEvent",
     "ReportBranding", "ReportSchedule", "ReportScheduleRun", "ReportSubscription",
     "ReportDeliveryAttempt", "ReportDownloadLink", "ReportDownloadEvent", "ReportBatch",
+    "ReclassificationRun", "RECLASSIFICATION_STATUSES", "RECLASSIFICATION_MODES",
+    "RESULT_ORIGINAL", "RESULT_RECLASSIFIED",
+    "STATUS_QUEUED", "STATUS_RUNNING", "STATUS_COMPLETED", "STATUS_PARTIAL_FAILED",
+    "STATUS_FAILED", "STATUS_CANCELLED", "MODE_DRY_RUN", "MODE_WRITE_RESULTS",
     "PlanDefinition", "OrgSubscription", "ApiKey", "ApiKeyUsageLog",
     "OrgInvite", "DataExport", "DataDeletionRequest", "DeletionReceipt",
     "UsageEvent", "UsageSnapshot", "UsageMeterDefinition",

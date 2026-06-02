@@ -30,3 +30,11 @@ class HallucinationResult(Base, UUIDMixin, TimestampMixin):
     matched_gt_field: Mapped[str] = mapped_column(String(100), default="")
     reason: Mapped[str] = mapped_column(Text, default="")
     needs_human_review: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # P1-8: reclassification tracking
+    source_query_result_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("query_results.id"), nullable=True)
+    source_hallucination_result_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("hallucination_results.id"), nullable=True)
+    reclassification_of: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("hallucination_results.id"), nullable=True)
+    result_origin: Mapped[str] = mapped_column(String(32), default="original")
+    reclassification_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("reclassification_runs.id"), nullable=True)
+    is_current_reclassification: Mapped[bool] = mapped_column(Boolean, default=False)
