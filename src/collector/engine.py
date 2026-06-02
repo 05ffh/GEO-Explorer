@@ -122,8 +122,7 @@ async def run_collection(
     await db.flush()
 
     # --- Preflight: template health + coverage ---
-    import re
-    _UNRESOLVED_RE = re.compile(r"\{[^{}]+\}")
+    from src.analyzer.hallucination import _UNRESOLVED_VAR_RE
 
     # GT-derived variable expansion
     _GT_VAR_MAP = {
@@ -160,7 +159,7 @@ async def run_collection(
     preflight_results = []
     for _t in templates:
         _question = _expand_vars(_t.template_text)
-        _unresolved = _UNRESOLVED_RE.findall(_question)
+        _unresolved = _UNRESOLVED_VAR_RE.findall(_question)
         _status = "ok" if not _unresolved else "missing_variable"
         preflight_results.append(_PreflightResult(
             template=_t, status=_status,

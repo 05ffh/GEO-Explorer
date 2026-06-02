@@ -21,6 +21,38 @@ from src.schemas.ground_truth import GT_FIELD_LEVELS
 SERIOUS_CONTROVERSY = {"contradicted", "unsupported"}
 NON_HALLUCINATION = {"not_about_brand", "generic_statement", "template_invalid", "not_checkable"}
 
+_UNRESOLVED_VAR_RE = re.compile(r"\{[^{}]+\}")
+
+
+def check_template_render_status(
+    template_text: str,
+    brand_name: str = "",
+    brand_industry: str = "",
+    gt_json: dict | None = None,
+) -> str:
+    """Check whether a template can be fully rendered.
+
+    Returns 'ok' if all variables resolve, 'missing_variable' otherwise.
+    """
+    _GT_VAR_MAP = {
+        "{品类}": "category",
+        "{竞品}": "target_competitors",
+        "{场景}": "core_scenarios",
+        "{目标用户}": "target_users",
+    }
+    text = template_text
+    text = text.replace("{品牌}", brand_name)
+    text = text.replace("{行业}", brand_industry or "")
+    gt = gt_json or {}
+    for var, gt_key in _GT_VAR_MAP.items():
+        val = gt.get(gt_key, "")
+        if isinstance(val, list):
+            val = "、".join(str(v) for v in val)
+        text = text.replace(var, str(val) if val else var)
+    remaining = _UNRESOLVED_VAR_RE.findall(text)
+    return "missing_variable" if remaining else "ok"
+
+
 HALLUCINATION_ERROR_TYPES = {
     "identity_error": "品牌身份错误",
     "category_error": "行业/品类错误",
@@ -348,6 +380,10 @@ class HallucinationDetector:
                 ai_claim=verification.get("ai_claim", claim.claim_text),
                 ground_truth_value=verification.get("ground_truth_value", ""),
                 error_type=verification.get("error_type") or "",
+                subject_type=claim.subject_type,
+                claim_text=claim.claim_text,
+                matched_gt_field=claim.field,
+                reason=verification.get("reason", ""),
             )
             results.append(h)
         return results
