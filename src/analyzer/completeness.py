@@ -1,8 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from src.models.query_result import QueryResult
 from src.models.ground_truth import GroundTruthVersion
 from src.analyzer.evaluator import evaluate_field, Verdict
+from src.analyzer.metric_mapping import get_kpi_eligible_results
 from src.schemas.ground_truth import GT_REQUIRED_FOR_COMPLETENESS
 
 
@@ -19,13 +19,7 @@ async def compute_completeness(
         return {"completeness_rate": 0.0, "complete_fields": 0,
                 "required_fields": 0, "error": "no active ground truth"}
 
-    q = select(QueryResult).where(
-        QueryResult.brand_id == brand_id, QueryResult.status == "success",
-    )
-    if collection_run_id:
-        q = q.where(QueryResult.collection_run_id == collection_run_id)
-
-    results = (await db.execute(q)).scalars().all()
+    results = await get_kpi_eligible_results("completeness_rate", brand_id, collection_run_id, db)
     valid = [r for r in results if r.answer_text]
     if not valid:
         return {"completeness_rate": 0.0, "complete_fields": 0,

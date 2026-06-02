@@ -21,74 +21,7 @@ from src.analyzer.recommendation_quality import compute_recommendation_quality
 
 logger = logging.getLogger(__name__)
 
-import yaml
-from pathlib import Path
-
-_MAPPING = None
-
-
-def load_metric_mapping() -> dict:
-    global _MAPPING
-    if _MAPPING is None:
-        path = Path(__file__).parent.parent.parent / "config" / "metric_template_mapping.yaml"
-        with open(path) as f:
-            _MAPPING = yaml.safe_load(f)
-    return _MAPPING
-
-
-def validate_metric_mapping(mapping: dict) -> list[str]:
-    """Validate mapping config. Returns list of error strings."""
-    from src.analyzer.enums import QuestionType
-    errors = []
-    known_kpis = {
-        "sov", "first_rec_rate", "brand_mention_rate", "information_accuracy",
-        "completeness_rate", "citation_rate", "competitor_accuracy",
-        "scenario_coverage", "trust_risk_rate", "hallucination_rate",
-    }
-    known_qtypes = {e.value for e in QuestionType}
-    core_kpis = {"information_accuracy", "completeness_rate", "citation_rate",
-                 "hallucination_rate", "brand_mention_rate"}
-
-    for kpi_key, cfg in mapping.items():
-        if kpi_key in ("schema_version", "mapping_version"):
-            continue
-        if kpi_key not in known_kpis:
-            errors.append(f"Unknown KPI key: {kpi_key}")
-        for qt in cfg.get("allowed", []):
-            if qt not in known_qtypes:
-                errors.append(f"{kpi_key}.allowed: unknown question_type '{qt}'")
-        for qt, cond in cfg.get("conditional", {}).items():
-            if qt not in known_qtypes:
-                errors.append(f"{kpi_key}.conditional: unknown question_type '{qt}'")
-            if cond != "target_brand_claim_only":
-                errors.append(f"{kpi_key}.conditional[{qt}]: unknown condition '{cond}'")
-        for qt in cfg.get("excluded", []):
-            if qt not in known_qtypes:
-                errors.append(f"{kpi_key}.excluded: unknown question_type '{qt}'")
-        if kpi_key in core_kpis and "generic_advice" not in cfg.get("excluded", []):
-            errors.append(f"{kpi_key}: generic_advice must be excluded")
-        all_q = set(cfg.get("allowed", [])) | set(cfg.get("conditional", {}).keys()) | set(cfg.get("excluded", []))
-        expected = len(cfg.get("allowed", [])) + len(cfg.get("conditional", {})) + len(cfg.get("excluded", []))
-        if len(all_q) != expected:
-            errors.append(f"{kpi_key}: duplicate question_type across allowed/conditional/excluded")
-
-    for kpi in known_kpis:
-        if kpi not in mapping:
-            errors.append(f"Missing KPI: {kpi}")
-    return errors
-
-
-def is_query_eligible_for_kpi(template, kpi_key: str) -> tuple[bool, str | None]:
-    """Returns (eligible, condition)."""
-    mapping = load_metric_mapping().get(kpi_key, {})
-    qt = getattr(template, 'question_type', 'brand_definition')
-    if qt in mapping.get("excluded", []):
-        return False, f"excluded question_type: {qt}"
-    if qt in mapping.get("allowed", []):
-        return True, None
-    if qt in mapping.get("conditional", {}):
-        return True, mapping["conditional"][qt]
-    return False, f"unmapped question_type: {qt}"
+from src.analyzer.metric_mapping import load_metric_mapping, validate_metric_mapping, is_query_eligible_for_kpi, get_kpi_eligible_results  # noqa: E402, F401
 
 
 async def compute_and_save_metrics(

@@ -1,9 +1,9 @@
 import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from src.models.query_result import QueryResult
 from src.models.brand import Brand
 from src.models.ground_truth import GroundTruthVersion
+from src.analyzer.metric_mapping import get_kpi_eligible_results
 
 
 async def compute_citation_rate(
@@ -20,13 +20,7 @@ async def compute_citation_rate(
     )).scalar_one_or_none()
     domains = gt.ground_truth_json.get("official_domains", []) if gt else []
 
-    q = select(QueryResult).where(
-        QueryResult.brand_id == brand_id, QueryResult.status == "success",
-    )
-    if collection_run_id:
-        q = q.where(QueryResult.collection_run_id == collection_run_id)
-
-    results = (await db.execute(q)).scalars().all()
+    results = await get_kpi_eligible_results("citation_rate", brand_id, collection_run_id, db)
     valid = [r for r in results if r.answer_text]
 
     mentioned = 0

@@ -1,9 +1,8 @@
 import re
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from src.models.query_result import QueryResult
 from src.models.brand import Brand
-from src.models.query_template import QueryTemplate
+from src.analyzer.metric_mapping import get_kpi_eligible_results
 
 FIRST_REC_PATTERNS = [
     r'(?:首选|最推荐|优先考虑|强烈推荐|最值得|第一名)[^。\n]{0,20}({brand})',
@@ -16,19 +15,7 @@ async def compute_first_rec(
 ) -> dict:
     brand = (await db.execute(select(Brand).where(Brand.id == brand_id))).scalar_one()
 
-    rec_template_ids = (await db.execute(
-        select(QueryTemplate.id).where(QueryTemplate.dimension == "场景推荐")
-    )).scalars().all()
-
-    q = select(QueryResult).where(
-        QueryResult.brand_id == brand_id,
-        QueryResult.status == "success",
-        QueryResult.template_id.in_(rec_template_ids),
-    )
-    if collection_run_id:
-        q = q.where(QueryResult.collection_run_id == collection_run_id)
-
-    results = (await db.execute(q)).scalars().all()
+    results = await get_kpi_eligible_results("first_rec_rate", brand_id, collection_run_id, db)
     valid = [r for r in results if r.answer_text]
 
     first_count = 0

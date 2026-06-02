@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from src.models.query_result import QueryResult
 from src.models.brand import Brand
+from src.analyzer.metric_mapping import get_kpi_eligible_results
 
 
 async def compute_sov(
@@ -10,13 +10,7 @@ async def compute_sov(
     brand = (await db.execute(select(Brand).where(Brand.id == brand_id))).scalar_one()
     aliases = [brand.name] + (brand.aliases or [])
 
-    q = select(QueryResult).where(
-        QueryResult.brand_id == brand_id, QueryResult.status == "success",
-    )
-    if collection_run_id:
-        q = q.where(QueryResult.collection_run_id == collection_run_id)
-
-    results = (await db.execute(q)).scalars().all()
+    results = await get_kpi_eligible_results("sov", brand_id, collection_run_id, db)
     valid = [r for r in results if r.answer_text]
     failed = len(results) - len(valid)
 
