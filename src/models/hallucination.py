@@ -38,6 +38,17 @@ class HallucinationResult(Base, UUIDMixin, TimestampMixin):
     # P2-2: multi-evidence consensus
     evidence_consensus_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
+    # P2-4: human review closed loop
+    review_status: Mapped[str] = mapped_column(String(20), default="pending")
+    review_notes: Mapped[str] = mapped_column(Text, default="")
+    corrected_value: Mapped[str] = mapped_column(Text, default="")
+    claimed_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    claim_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_priority: Mapped[str] = mapped_column(String(10), default="medium")
+    review_reason: Mapped[str] = mapped_column(String(50), default="")
+    review_decision: Mapped[str] = mapped_column(String(50), default="")
+
     # P1-8: reclassification tracking
     source_query_result_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("query_results.id"), nullable=True)
     source_hallucination_result_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("hallucination_results.id"), nullable=True)
