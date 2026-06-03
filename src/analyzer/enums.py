@@ -64,7 +64,7 @@ class Severity(str, Enum):
     P0 = "P0"
     P1 = "P1"
     P2 = "P2"
-    INFO = "info"
+    INFO = "Info"
 
 
 class DenominatorType(str, Enum):

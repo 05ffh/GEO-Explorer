@@ -31,7 +31,7 @@ class TrendInsight(Base, UUIDMixin, TimestampMixin):
     # cliff_drop / sustained_improvement / sustained_decline / platform_shift /
     # model_update_impact / anomaly / stability_assessment
     kpi_key: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
-    severity: Mapped[str] = mapped_column(String(20), default="info")  # info/warning/critical
+    severity: Mapped[str] = mapped_column(String(20), default="Info")  # Info/warning/critical
     status: Mapped[str] = mapped_column(String(20), default="open", index=True)
     # open / acknowledged / resolved / dismissed / superseded
     title: Mapped[str] = mapped_column(String(500), nullable=False)
