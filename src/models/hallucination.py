@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import String, ForeignKey, Text, DateTime, Boolean
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from src.models.base import Base, TimestampMixin, UUIDMixin
 
@@ -34,6 +34,9 @@ class HallucinationResult(Base, UUIDMixin, TimestampMixin):
     # P2-1: claim nature taxonomy
     claim_type: Mapped[str] = mapped_column(String(20), default="unknown", server_default="unknown")
     predicate_type: Mapped[str] = mapped_column(String(30), default="other", server_default="other")
+
+    # P2-2: multi-evidence consensus
+    evidence_consensus_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # P1-8: reclassification tracking
     source_query_result_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("query_results.id"), nullable=True)

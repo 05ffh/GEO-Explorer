@@ -165,6 +165,13 @@ async def _fetch_data(brand: dict, collection_run_id: str, db: AsyncSession) -> 
         cn_matrix[cn][ver] = cn_matrix[cn].get(ver, 0) + row["c"]
     data["claim_nature_verdict_matrix"] = cn_matrix
 
+    # P2-2: evidence strength summary from quality_summary
+    cr_qs = (await db.execute(text("""
+        SELECT report_quality_summary_json FROM collection_runs WHERE id = :rid
+    """), {"rid": collection_run_id})).scalar()
+    if cr_qs and isinstance(cr_qs, dict):
+        data["evidence_strength"] = cr_qs.get("evidence_strength", {})
+
     # Action themes
     act = await db.execute(text("""
         SELECT id, theme_name, priority, summary, target_kpis, suggested_content_type

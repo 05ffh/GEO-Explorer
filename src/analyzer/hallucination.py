@@ -7,6 +7,7 @@ from src.models.hallucination import HallucinationResult
 from src.schemas.ground_truth import GT_FIELD_LEVELS
 from src.analyzer.claim_taxonomy import classify_claim_nature
 from src.analyzer.enums import ClaimNature
+from src.services.evidence_cross_validator import EvidenceCrossValidator, EvidenceStrengthLevel, ConflictLevel
 
 
 # ── Expanded verdict states (P0-6) ──────────────────────────────────────────
@@ -555,8 +556,19 @@ class HallucinationDetector:
         claims = self.extract_claims(query_result.answer_text, brand, gt_json)
         results = []
 
+        # P2-2: multi-evidence cross-validator (cached per field)
+        evidence_validator = EvidenceCrossValidator(gt)
+
         for claim in claims:
             verification = self.verify_claim(claim, gt_json)
+            # P2-2: compute evidence consensus for this claim
+            base_verdict = verification["verdict"]
+            try:
+                consensus = evidence_validator.cross_validate_claim(
+                    claim.field, base_verdict)
+                evidence_json = consensus.to_json()
+            except Exception:
+                evidence_json = None
             # P2-1: Adjust speculation claims — not inherently wrong
             if getattr(claim, "claim_nature", "unknown") == "speculation":
                 verification = self._adjust_speculation_severity(verification, claim)
@@ -612,7 +624,20 @@ class HallucinationDetector:
                 reason=reason,
                 claim_type=getattr(claim, "claim_nature", "unknown"),
                 predicate_type=getattr(claim, "predicate_type", "other"),
+                evidence_consensus_json=evidence_json,
             )
+            # P2-2: disputed or critical conflict → not hallucination, evidence risk
+            if evidence_json:
+                strength = evidence_json.get("evidence_strength_level", "")
+                cl = evidence_json.get("conflict_level", "none")
+                if strength == "disputed" or cl in ("strong_conflict", "critical_conflict"):
+                    h.needs_human_review = True
+                    if cl == "critical_conflict":
+                        h.reason += " | evidence:critical_conflict(GT来源S/A级冲突,需人工裁定)"
+                    elif cl == "strong_conflict":
+                        h.reason += " | evidence:strong_conflict(GT来源严重分歧)"
+                    else:
+                        h.reason += " | evidence:disputed(GT证据有争议,不计入AI幻觉)"
             # P2-1: auto-mark for human review on low-confidence / UNKNOWN / high-risk speculation
             if not h.needs_human_review:
                 nc = getattr(claim, "claim_nature_confidence", 1.0)

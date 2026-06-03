@@ -18,6 +18,11 @@ HARD_BLOCK_CODES = {
     "EXCESSIVE_SPECULATION": "推测声明超过阻断阈值",
     "HIGH_OPINION_RATIO": "观点声明占比过高",
     "HIGH_UNKNOWN_RATIO": "无法分类声明占比过高",
+    # P2-2: evidence strength
+    "CRITICAL_EVIDENCE_CONFLICT": "关键字段 GT 来源严重冲突(S/A级来源不一致)",
+    "EVIDENCE_STRONG_CONFLICT": "GT 来源存在较强冲突",
+    "WEAK_EVIDENCE_DOMINANCE": "弱证据占比过高(C/D级来源为主)",
+    "INSUFFICIENT_EVIDENCE_FIELDS": "关键字段缺乏有效来源",
     # P1-10: sample sufficiency
     "NO_DATA": "无成功 QueryResult，采集完全失败",
     "SAMPLE_TOTAL_TOO_LOW": "有效样本总数不足",
@@ -157,9 +162,57 @@ async def build_report_quality_summary(
             "total_classified": total_claim_count,
             "breakdown": claim_type_breakdown,
         },
+        # P2-2: evidence strength
+        "evidence_strength": {
+            "schema_version": "evidence_strength_v1",
+            "strong_evidence_claims": 0,
+            "moderate_evidence_claims": 0,
+            "weak_evidence_claims": 0,
+            "disputed_claims": 0,
+            "insufficient_evidence_claims": 0,
+            "fields_with_conflict": [],
+            "critical_fields_with_conflict": [],
+            "avg_agreement_ratio": 0.0,
+        },
         "report_publishable": False,
         "blocking_reasons": [],
     }
+    # P2-2: evidence strength aggregation (query evidence_consensus_json from results)
+    try:
+        ev_rows = (await db.execute(
+            select(HallucinationResult.evidence_consensus_json).where(
+                HallucinationResult.collection_run_id == collection_run_id,
+                HallucinationResult.evidence_consensus_json.isnot(None),
+            )
+        )).fetchall()
+
+        ev_counts = {"strong": 0, "moderate": 0, "weak": 0, "disputed": 0, "insufficient_evidence": 0}
+        cfields = []
+        ccrit = []
+        for (ev_json,) in ev_rows:
+            if not isinstance(ev_json, dict):
+                continue
+            level = ev_json.get("evidence_strength_level", "")
+            if level in ev_counts:
+                ev_counts[level] += 1
+            if ev_json.get("conflict_level") in ("strong_conflict", "critical_conflict"):
+                fn = ev_json.get("field_name", "")
+                if fn and fn not in cfields:
+                    cfields.append(fn)
+                if ev_json.get("conflict_level") == "critical_conflict" and fn not in ccrit:
+                    ccrit.append(fn)
+        summary["evidence_strength"].update({
+            "strong_evidence_claims": ev_counts["strong"],
+            "moderate_evidence_claims": ev_counts["moderate"],
+            "weak_evidence_claims": ev_counts["weak"],
+            "disputed_claims": ev_counts["disputed"],
+            "insufficient_evidence_claims": ev_counts["insufficient_evidence"],
+            "fields_with_conflict": cfields,
+            "critical_fields_with_conflict": ccrit,
+        })
+    except Exception:
+        logger.warning("Failed to aggregate evidence strength for %s", collection_run_id, exc_info=True)
+
     return summary
 
 
@@ -244,6 +297,21 @@ def compute_report_publishable(
 
         if unknown_ratio > max_unknown:
             _block("HIGH_UNKNOWN_RATIO", severity="warning")
+
+    # P2-2: evidence strength checks
+    ev = qs.get("evidence_strength", {})
+    if ev.get("critical_fields_with_conflict"):
+        _block("CRITICAL_EVIDENCE_CONFLICT")
+    elif ev.get("fields_with_conflict"):
+        _block("EVIDENCE_STRONG_CONFLICT", severity="warning")
+    weak_ratio = (ev.get("weak_evidence_claims", 0) + ev.get("insufficient_evidence_claims", 0))
+    total_ev = (ev.get("strong_evidence_claims", 0) + ev.get("moderate_evidence_claims", 0)
+                + weak_ratio)
+    if total_ev > 0 and weak_ratio / total_ev > 0.60:
+        _block("WEAK_EVIDENCE_DOMINANCE", severity="warning")
+    if ev.get("insufficient_evidence_claims", 0) > 0 and len(
+        ev.get("critical_fields_with_conflict", [])) > 2:
+        _block("INSUFFICIENT_EVIDENCE_FIELDS", severity="warning")
 
     has_hard_block = any(b["severity"] == "block" for b in blocking)
     return (not has_hard_block, blocking)

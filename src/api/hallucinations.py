@@ -22,6 +22,7 @@ async def list_hallucinations(
     verdict: str | None = Query(None),
     claim_type: str | None = Query(None, description="fact|opinion|speculation|unknown"),
     predicate_type: str | None = Query(None, description="identity|industry|product|positioning|..."),
+    evidence_strength: str | None = Query(None, description="strong|moderate|weak|disputed|insufficient_evidence"),
     human_reviewed: bool | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
