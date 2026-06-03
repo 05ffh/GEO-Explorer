@@ -145,6 +145,12 @@ async def compute_and_save_metrics(
     except Exception:
         logger.exception("Insight generation failed for collection %s", collection_run_id)
 
+    # P2-FRONTEND: Generate Content Packages from action plans
+    try:
+        await _generate_content_packages(brand_id=str(brand_id), org_id=str(org_id), db=db)
+    except Exception:
+        logger.exception("Content package generation failed for collection %s", collection_run_id)
+
     # Unified report delivery (diagnostic + optimization 3-format + content pieces)
     try:
         from src.reports import deliver_all_reports
