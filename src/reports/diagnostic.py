@@ -121,7 +121,13 @@ async def generate_diagnostic_report(
         lines.append(f"| 严重度 | 判定 | 数量 |")
         lines.append(f"|--------|------|------|")
         sev_label = {"P0": "致命", "P1": "重要", "P2": "改善"}
-        v_label = {"correct": "✓ 正确", "incorrect": "✗ 错误", "uncertain": "? 不确定"}
+        v_label = {
+            "supported": "✓ 支持", "contradicted": "✗ 矛盾", "unsupported": "? 无支撑",
+            "not_about_brand": "— 非品牌", "generic_statement": "— 通用陈述",
+            "template_invalid": "⚠ 模板错误", "gt_insufficient": "? GT不足",
+            "ambiguous": "? 模糊", "not_checkable": "— 不可核验",
+            "incorrect": "✗ 错误", "correct": "✓ 正确", "uncertain": "? 不确定",
+        }
         for h in hallucinations:
             sl = sev_label.get(h["severity"], h["severity"])
             vl = v_label.get(h["verdict"], h["verdict"])
@@ -142,7 +148,7 @@ async def generate_diagnostic_report(
     p0_rows = await db.execute(text("""
         SELECT field_name, ai_claim, ground_truth_value, severity
         FROM hallucination_results
-        WHERE collection_run_id=:rid AND verdict='incorrect' AND severity='P0'
+        WHERE collection_run_id=:rid AND verdict IN ('contradicted','unsupported') AND severity='P0'
         LIMIT 10
     """), {"rid": collection_run_id})
     p0s = [dict(r._mapping) for r in p0_rows.fetchall()]
@@ -172,7 +178,7 @@ async def generate_diagnostic_report(
     lines.append(f"2. **首次推荐率**: {frr:.1%} — {'AI 倾向于优先推荐该品牌' if frr > 0.3 else '在非品牌场景中很少被优先推荐，需要场景化内容布局'}")
     lines.append(f"3. **准确率**: {acc:.1%} — {'AI 描述与品牌事实高度一致' if acc > 0.5 else 'AI 描述与 GT 存在显著差异，需要纠正'}")
     lines.append(f"4. **语义锚点稳定度**: {ss:.1%} — {'各平台对品牌描述一致' if ss > 0.5 else '各平台对品牌认知碎片化严重，需要统一品牌信息投放'}")
-    lines.append(f"5. **幻觉检测**: 共发现 {total_hall} 条声明，其中 {sum(h['c'] for h in hallucinations if h['verdict']=='incorrect')} 条与事实不符")
+    lines.append(f"5. **幻觉检测**: 共发现 {total_hall} 条声明，其中 {sum(h['c'] for h in hallucinations if h['verdict'] in ('contradicted','unsupported'))} 条与事实不符")
     lines.append(f"")
 
     # Save

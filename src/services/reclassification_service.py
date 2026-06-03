@@ -108,15 +108,15 @@ class ReclassificationService:
                 r.verdict for r in old_results
                 if r.query_result_id == qr.id
             ]
-            old_incorrect = "incorrect" in old_verdicts if old_verdicts else False
+            old_error = any(v in ("incorrect", "contradicted", "unsupported") for v in old_verdicts) if old_verdicts else False
 
-            if old_incorrect and new_layer != "ai_hallucination":
+            if old_error and new_layer != "ai_hallucination":
                 changes[new_layer] = changes.get(new_layer, 0) + 1
                 if len(sample_diffs) < MAX_SAMPLE_DIFFS:
                     sample_diffs.append({
                         "collection_run_id": str(run.id),
                         "query_result_id": str(qr.id),
-                        "old_verdict": "incorrect",
+                        "old_verdict": old_verdicts[0] if old_verdicts else "unknown",
                         "new_layer": new_layer,
                     })
 
@@ -173,8 +173,8 @@ class ReclassificationService:
                     HallucinationResult.result_origin == "original",
                 )
             )).scalars().all()
-            old_incorrect = any(r.verdict == "incorrect" for r in old_results)
-            if old_incorrect and new_layer != "ai_hallucination":
+            old_error = any(r.verdict in ("incorrect", "contradicted", "unsupported") for r in old_results)
+            if old_error and new_layer != "ai_hallucination":
                 changes[new_layer] = changes.get(new_layer, 0) + 1
 
         batch.query_results_processed += len(qrs)

@@ -1,0 +1,22 @@
+{
+  "confirmed_target_brand_p0": 0,
+  "template_error_p0": 9,
+  "generic_statement_p0": 192,
+  "gt_insufficient_p0": 84,
+  "template_skipped": 9,
+  "ai_hallucination": {
+    "p0_count": 285,
+    "p1_count": 36,
+    "p2_count": 0
+  },
+  "false_positive_p0_count": 285,
+  "template_issue": {
+    "invalid_template_count": 9
+  },
+  "gt_insufficient": {
+    "unsupported_claim_count": 0
+  },
+  "not_about_brand": {
+    "generic_statement_count": 0
+  }
+}

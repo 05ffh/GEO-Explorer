@@ -1,8 +1,11 @@
 """Unified delivery orchestrator — produces a single folder with all reports for any brand."""
 
+import logging
 import os
 import shutil
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
@@ -156,7 +159,8 @@ async def _fetch_analysis_data(brand_id: str, collection_run_id: str, brand_name
     """), {"rid": collection_run_id})
     data["hallucinations"] = [dict(r._mapping) for r in hall.fetchall()]
     data["hall_total"] = sum(h["c"] for h in data["hallucinations"])
-    data["hall_incorrect"] = sum(h["c"] for h in data["hallucinations"] if h["verdict"] == "incorrect")
+    data["hall_incorrect"] = sum(h["c"] for h in data["hallucinations"]
+                                  if h["verdict"] in ("contradicted", "unsupported"))
 
     # Action plans
     ap = await db.execute(text("""
@@ -265,7 +269,12 @@ def _write_diagnostic(brand_name: str, data: dict, deliver_dir: str) -> dict:
         lines.append("| 严重度 | 判定 | 数量 |")
         lines.append("|--------|------|------|")
         sev = {"P0":"致命","P1":"重要","P2":"改善"}
-        vl = {"correct":"✓","incorrect":"✗","uncertain":"?"}
+        vl = {
+            "supported":"✓","contradicted":"✗","unsupported":"?",
+            "not_about_brand":"—","generic_statement":"—","template_invalid":"⚠",
+            "gt_insufficient":"?","ambiguous":"?","not_checkable":"—",
+            "correct":"✓","incorrect":"✗","uncertain":"?",
+        }
         for h in data["hallucinations"]:
             lines.append(f"| {sev.get(h['severity'],h['severity'])} | {vl.get(h['verdict'],h['verdict'])} | {h['c']} |")
     lines.append("")

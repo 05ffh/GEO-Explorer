@@ -15,7 +15,7 @@ class HallucinationResult(Base, UUIDMixin, TimestampMixin):
     field_name: Mapped[str] = mapped_column(String(100), nullable=False)
     field_level: Mapped[str] = mapped_column(String(10), nullable=False)
     severity: Mapped[str] = mapped_column(String(10), default="P1")
-    verdict: Mapped[str] = mapped_column(String(50), default="uncertain")
+    verdict: Mapped[str] = mapped_column(String(50), default="ambiguous")
     error_type: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     ai_claim: Mapped[str] = mapped_column(Text, default="")
     ground_truth_value: Mapped[str] = mapped_column(Text, default="")

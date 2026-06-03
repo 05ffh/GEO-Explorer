@@ -22,7 +22,7 @@ async def generate_action_plans(
         select(HallucinationResult).where(
             HallucinationResult.brand_id == brand_id,
             HallucinationResult.human_reviewed == True,  # noqa: E712
-            HallucinationResult.verdict == "incorrect",
+            HallucinationResult.verdict == "contradicted",
         )
     )).scalars().all()
 

@@ -133,14 +133,15 @@ async def _fetch_data(brand: dict, collection_run_id: str, db: AsyncSession) -> 
     """), {"rid": collection_run_id})
     data["hallucinations"] = [dict(r._mapping) for r in hall.fetchall()]
     data["hall_total"] = sum(h["c"] for h in data["hallucinations"])
-    data["hall_incorrect"] = sum(h["c"] for h in data["hallucinations"] if h["verdict"] == "incorrect")
+    data["hall_incorrect"] = sum(h["c"] for h in data["hallucinations"]
+                                  if h["verdict"] in ("contradicted", "unsupported"))
     data["p0_hall_count"] = sum(h["c"] for h in data["hallucinations"] if h["severity"] == "P0")
 
     # Hallucination examples for report
     hall_ex = await db.execute(text("""
         SELECT field_name, ai_claim, ground_truth_value, severity
         FROM hallucination_results
-        WHERE collection_run_id=:rid AND verdict='incorrect' AND severity IN ('P0','P1')
+        WHERE collection_run_id=:rid AND verdict IN ('contradicted','unsupported') AND severity IN ('P0','P1')
         ORDER BY CASE severity WHEN 'P0' THEN 0 ELSE 1 END LIMIT 5
     """), {"rid": collection_run_id})
     data["hall_examples"] = [dict(r._mapping) for r in hall_ex.fetchall()]

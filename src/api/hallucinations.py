@@ -25,7 +25,7 @@ def _can_batch(user: User) -> bool:
 
 
 class ReviewRequest(BaseModel):
-    verdict: str = ""  # correct | incorrect | uncertain | ignored
+    verdict: str = ""  # supported | contradicted | unsupported | not_about_brand | generic_statement | template_invalid | gt_insufficient | ambiguous | not_checkable
     notes: str = ""
     decision: str = ""  # review_decision enum
     corrected_value: str = ""

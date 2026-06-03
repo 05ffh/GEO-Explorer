@@ -1,0 +1,29 @@
+{
+  "confirmed_target_brand_p0": 0,
+  "template_error_p0": 0,
+  "generic_statement_p0": 0,
+  "gt_insufficient_p0": 0,
+  "template_skipped": 0,
+  "ai_hallucination": {
+    "p0_count": 0,
+    "p1_count": 0,
+    "p2_count": 0,
+    "p0_explanation": "\u4ec5\u7edf\u8ba1\u76ee\u6807\u54c1\u724c\u6838\u5fc3\u4e8b\u5b9e\u4e0e GT \u660e\u786e\u51b2\u7a81\u7684\u58f0\u660e",
+    "excluded_explanation": "\u6a21\u677f\u95ee\u9898\u3001GT \u4e0d\u8db3\u3001\u56de\u7b54\u65e0\u5173\u4e0d\u8ba1\u5165 AI \u5e7b\u89c9",
+    "confirmed_claim_count": 0
+  },
+  "false_positive_p0_count": 0,
+  "template_issue": {
+    "affected_query_count": 0,
+    "invalid_template_count": 0,
+    "unresolved_variable_count": 0
+  },
+  "gt_insufficient": {
+    "missing_gt_fields": [],
+    "unsupported_claim_count": 84
+  },
+  "not_about_brand": {
+    "generic_statement_count": 192,
+    "irrelevant_response_count": 36
+  }
+}
