@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}模板管理 - GEO Explorer{% endblock %}
+
+{% block content %}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-5 gap-3">
+    <div>
+        <h1 class="font-heading text-2xl font-bold text-text">模板管理</h1>
+        <p class="text-sm text-slate-500 mt-0.5">管理 QueryTemplate 生命周期：创建、编辑、审核、发布</p>
+    </div>
+    {% if vm.permissions.can_edit %}
+    <button onclick="location.href='/templates/new'"
+            class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-light transition-colors">
+        + 新建模板
+    </button>
+    {% endif %}
+</div>
+
+<!-- Filters -->
+<div class="flex flex-wrap gap-2 mb-4">
+    <select id="filter-qtype" onchange="applyFilters()"
+            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white">
+        <option value="">全部类型</option>
+        {% for qt in vm.question_types %}
+        <option value="{{ qt }}">{{ qt }}</option>
+        {% endfor %}
+    </select>
+    <select id="filter-level" onchange="applyFilters()"
+            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white">
+        <option value="">全部级别</option>
+        {% for lv in vm.template_levels %}
+        <option value="{{ lv }}">{{ lv }}</option>
+        {% endfor %}
+    </select>
+    <select id="filter-status" onchange="applyFilters()"
+            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white">
+        <option value="">全部状态</option>
+        {% for st in vm.statuses %}
+        <option value="{{ st }}">{{ st }}</option>
+        {% endfor %}
+    </select>
+</div>
+
+<!-- Template table -->
+<div class="bg-white rounded-lg border overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="bg-gray-50 text-gray-500 text-left">
+                    <th class="px-4 py-3 font-medium">模板文本</th>
+                    <th class="px-4 py-3 font-medium">类型</th>
+                    <th class="px-4 py-3 font-medium">级别</th>
+                    <th class="px-4 py-3 font-medium">状态</th>
+                    <th class="px-4 py-3 font-medium">版本</th>
+                    <th class="px-4 py-3 font-medium">范围</th>
+                    <th class="px-4 py-3 font-medium">更新时间</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in vm.templates %}
+                <tr class="border-t hover:bg-gray-50 cursor-pointer"
+                    onclick="location.href='/templates/{{ t.id }}'">
+                    <td class="px-4 py-3 max-w-xs truncate" title="{{ t.template_text_preview }}">
+                        {{ t.template_text_preview }}
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="inline-block px-2 py-0.5 rounded text-xs bg-blue-50 text-blue-700">{{ t.question_type }}</span>
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if t.template_level == 'critical' %}
+                        <span class="inline-block px-2 py-0.5 rounded text-xs bg-red-50 text-red-700">critical</span>
+                        {% elif t.template_level == 'important' %}
+                        <span class="inline-block px-2 py-0.5 rounded text-xs bg-amber-50 text-amber-700">important</span>
+                        {% else %}
+                        <span class="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">optional</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3">
+                        {% if t.status == 'active' %}
+                        <span class="inline-block px-2 py-0.5 rounded text-xs bg-green-100 text-green-700">active</span>
+                        {% elif t.status == 'draft' %}
+                        <span class="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">draft</span>
+                        {% elif t.status == 'in_review' %}
+                        <span class="inline-block px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700">in_review</span>
+                        {% elif t.status == 'archived' %}
+                        <span class="inline-block px-2 py-0.5 rounded text-xs bg-red-100 text-red-700">archived</span>
+                        {% else %}
+                        <span class="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">{{ t.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-gray-500">v{{ t.current_version }}</td>
+                    <td class="px-4 py-3">
+                        {% if t.is_global %}
+                        <span class="inline-block px-2 py-0.5 rounded text-xs bg-purple-50 text-purple-700">全局</span>
+                        {% else %}
+                        <span class="inline-block px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">组织</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-gray-400 text-xs">{{ t.updated_at[:16] }}</td>
+                </tr>
+                {% endfor %}
+                {% if not vm.templates %}
+                <tr>
+                    <td colspan="7" class="px-4 py-12 text-center text-gray-400">暂无模板</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if vm.total_count %}
+<div class="text-xs text-gray-400 mt-2">共 {{ vm.total_count }} 个模板</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyFilters() {
+    const qtype = document.getElementById('filter-qtype').value;
+    const level = document.getElementById('filter-level').value;
+    const status = document.getElementById('filter-status').value;
+    let url = '/templates?';
+    if (qtype) url += 'question_type=' + qtype + '&';
+    if (level) url += 'template_level=' + level + '&';
+    if (status) url += 'status=' + status + '&';
+    location.href = url;
+}
+</script>
+{% endblock %}

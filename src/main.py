@@ -11,7 +11,7 @@ from src.config import settings
 from src.api.deps import get_current_user, get_org_brand_or_404
 from src.models.user import User
 from src.models.brand import Brand
-from src.api import auth, brands, metrics, collection_runs, hallucinations, actions, dashboard, ground_truth, tasks, publishing, saas, platform, template_versions, reclassifications
+from src.api import auth, brands, metrics, collection_runs, hallucinations, actions, dashboard, ground_truth, tasks, publishing, saas, platform, template_versions, reclassifications, templates
 from src.schemas.ground_truth import KPI_DISPLAY_NAMES
 
 app = FastAPI(title="GEO Explorer", version="0.1.0")
@@ -20,13 +20,14 @@ app = FastAPI(title="GEO Explorer", version="0.1.0")
 from src.middleware.request_id import RequestIdMiddleware
 app.add_middleware(RequestIdMiddleware)
 app.mount("/static", StaticFiles(directory="src/static"), name="static")
-templates = Jinja2Templates(directory="src/templates")
+tpl = Jinja2Templates(directory="src/templates")
 
 for router in [
     auth.router, brands.router, metrics.router,
     collection_runs.router, hallucinations.router,
     actions.router, dashboard.router, ground_truth.router,
-    tasks.router, publishing.router, saas.router, platform.router, template_versions.router, reclassifications.router,
+    tasks.router, publishing.router, saas.router, platform.router,
+    template_versions.router, reclassifications.router, templates.router,
 ]:
     app.include_router(router)
 
@@ -60,7 +61,7 @@ def _page_context(request: Request, current_page: str, brands: list,
 def _render(request: Request, name: str, context: dict | None = None,
             status_code: int = 200) -> HTMLResponse:
     """Render a Jinja2 template. Starlette 1.1+ signature: (request, name, context)."""
-    return templates.TemplateResponse(request, name, context or {}, status_code=status_code)
+    return tpl.TemplateResponse(request, name, context or {}, status_code=status_code)
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -484,3 +485,46 @@ async def download_report(brand_id: str,
         return {"detail": "File not found on disk"}, 404
 
     return FileResponse(artifact.file_path, filename=os.path.basename(artifact.file_path))
+
+
+# ── Template Review Workbench (P2-3) ────────────────────────────────────────
+
+@app.get("/templates", response_class=HTMLResponse)
+async def templates_list_page(request: Request, user: User = Depends(get_current_user),
+                               db: AsyncSession = Depends(get_db),
+                               question_type: str | None = Query(None),
+                               template_level: str | None = Query(None),
+                               status: str | None = Query(None)):
+    """Template list page."""
+    from src.view_models.template_review import build_template_list_vm
+    filters = {}
+    if question_type: filters["question_type"] = question_type
+    if template_level: filters["template_level"] = template_level
+    if status: filters["status"] = status
+    vm = await build_template_list_vm(user, db, filters)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "templates/index.html", _page_context(
+        request, "templates", org_brands, vm=vm))
+
+
+@app.get("/templates/new", response_class=HTMLResponse)
+async def templates_new_page(request: Request, user: User = Depends(get_current_user)):
+    """New template page — redirects to editor with empty template."""
+    org_brands = await _get_org_brands(user, db=None)
+    # Return a simple create form that POSTs to the API
+    return _render(request, "templates/editor.html", _page_context(
+        request, "templates", org_brands, vm={
+            "error": "请使用 API POST /api/templates 创建模板，或从列表页点击「新建模板」",
+        }))
+
+
+@app.get("/templates/{template_id}", response_class=HTMLResponse)
+async def templates_editor_page(request: Request, template_id: str,
+                                  user: User = Depends(get_current_user),
+                                  db: AsyncSession = Depends(get_db)):
+    """Template editor page."""
+    from src.view_models.template_review import build_template_editor_vm
+    vm = await build_template_editor_vm(template_id, user, db)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "templates/editor.html", _page_context(
+        request, "templates", org_brands, vm=vm))

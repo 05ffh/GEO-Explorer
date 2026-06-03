@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+{% block title %}模板编辑 - {{ vm.template.dimension or vm.template.id[:8] }} - GEO Explorer{% endblock %}
+
+{% block content %}
+{% if vm.error %}
+<div class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+    <p class="text-red-700">{{ vm.error }}</p>
+    <a href="/templates" class="text-blue-600 hover:underline text-sm mt-2 inline-block">← 返回列表</a>
+</div>
+{% else %}
+
+<div class="flex items-center justify-between mb-5">
+    <div>
+        <a href="/templates" class="text-sm text-blue-600 hover:underline mb-1 inline-block">← 模板列表</a>
+        <h1 class="font-heading text-2xl font-bold text-text">
+            模板编辑: {{ vm.template.dimension or vm.template.id[:8] }}
+        </h1>
+    </div>
+    <div class="flex gap-2">
+        <!-- Status badge -->
+        {% if vm.template.status == 'active' %}
+        <span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">Active v{{ vm.template.current_version }}</span>
+        {% elif vm.template.status == 'draft' %}
+        <span class="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm font-medium">Draft v{{ vm.template.current_version }}</span>
+        {% elif vm.template.status == 'in_review' %}
+        <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">In Review v{{ vm.template.current_version }}</span>
+        {% else %}
+        <span class="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm font-medium">{{ vm.template.status }} v{{ vm.template.current_version }}</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- Left: Editor form -->
+    <div class="lg:col-span-2 space-y-4">
+        <div class="bg-white rounded-lg border p-5">
+            <h2 class="font-heading text-lg font-semibold text-text mb-4">模板内容</h2>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Dimension</label>
+                    <input id="fld-dimension" type="text" value="{{ vm.template.dimension }}"
+                           class="w-full border rounded-lg px-3 py-2 text-sm" placeholder="如: 品牌定义认知">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">Template Text <span class="text-red-400">*</span></label>
+                    <textarea id="fld-text" rows="6"
+                              class="w-full border rounded-lg px-3 py-2 text-sm font-mono"
+                              placeholder="对{品牌}进行{品类}诊断...">{{ vm.template.template_text }}</textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Question Type</label>
+                        <select id="fld-qtype" class="w-full border rounded-lg px-3 py-2 text-sm">
+                            {% for qt in vm.question_types %}
+                            <option value="{{ qt }}" {% if qt == vm.template.question_type %}selected{% endif %}>{{ qt }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Template Level</label>
+                        <select id="fld-level" class="w-full border rounded-lg px-3 py-2 text-sm">
+                            {% for lv in vm.template_levels %}
+                            <option value="{{ lv }}" {% if lv == vm.template.template_level %}selected{% endif %}>{{ lv }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Question Scope</label>
+                        <select id="fld-scope" class="w-full border rounded-lg px-3 py-2 text-sm">
+                            {% for sc in vm.question_scopes %}
+                            <option value="{{ sc }}" {% if sc == vm.template.question_scope %}selected{% endif %}>{{ sc or '(无)' }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Brand Directed</label>
+                        <select id="fld-bd" class="w-full border rounded-lg px-3 py-2 text-sm">
+                            {% for bd in vm.brand_directed_options %}
+                            <option value="{{ bd }}" {% if bd == vm.template.brand_directed %}selected{% endif %}>{{ bd }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Priority</label>
+                        <input id="fld-priority" type="number" value="{{ vm.template.priority }}"
+                               class="w-full border rounded-lg px-3 py-2 text-sm" min="0" max="100">
+                    </div>
+                    <div class="flex items-end pb-2">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input id="fld-hallcheck" type="checkbox" {% if vm.template.hallucination_check_enabled %}checked{% endif %} class="rounded">
+                            <span class="text-sm text-gray-600">幻觉检测启用</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Validation Report -->
+        <div id="validation-section" class="hidden bg-white rounded-lg border p-5">
+            <h2 class="font-heading text-lg font-semibold text-text mb-3">校验报告</h2>
+            <div id="validation-errors"></div>
+            <div id="validation-warnings"></div>
+            <div id="validation-vars"></div>
+        </div>
+
+        <!-- Render Preview -->
+        <div id="preview-section" class="hidden bg-white rounded-lg border p-5">
+            <h2 class="font-heading text-lg font-semibold text-text mb-3">渲染预览</h2>
+            <div class="mb-3">
+                <label class="block text-xs font-medium text-gray-500 mb-1">示例品牌名</label>
+                <input id="preview-brand" type="text" value="星巴克" class="border rounded-lg px-3 py-2 text-sm w-48">
+            </div>
+            <button onclick="renderPreview()" class="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm hover:bg-blue-200 mb-3">预览渲染</button>
+            <div id="preview-result" class="p-3 bg-gray-50 rounded-lg font-mono text-sm"></div>
+            <div id="preview-warnings" class="mt-2"></div>
+        </div>
+
+        <!-- Version History -->
+        <div class="bg-white rounded-lg border p-5">
+            <h2 class="font-heading text-lg font-semibold text-text mb-3">版本历史</h2>
+            {% if vm.versions %}
+            <div class="space-y-2 max-h-60 overflow-y-auto">
+                {% for v in vm.versions %}
+                <div class="flex items-center justify-between px-3 py-2 bg-gray-50 rounded text-sm">
+                    <div>
+                        <span class="font-medium">v{{ v.version }}</span>
+                        <span class="text-gray-500 ml-3">{{ v.change_type }}</span>
+                        {% if v.change_reason %}<span class="text-gray-400 ml-2">— {{ v.change_reason[:60] }}</span>{% endif %}
+                    </div>
+                    <span class="text-gray-400 text-xs">{{ v.created_at[:16] }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-gray-400 text-sm">暂无版本记录</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Right: Config panel -->
+    <div class="space-y-4">
+        <!-- Actions -->
+        <div class="bg-white rounded-lg border p-5">
+            <h2 class="font-heading text-base font-semibold text-text mb-3">操作</h2>
+            <div class="space-y-2">
+                {% if vm.permissions.can_edit and vm.template.status != 'active' %}
+                <button onclick="saveTemplate()" class="w-full px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-light">保存草稿</button>
+                {% endif %}
+                {% if vm.permissions.can_edit %}
+                <button onclick="validateAndPreview()" class="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">校验 & 预览</button>
+                {% endif %}
+                {% if vm.permissions.can_review and vm.template.status in ('draft', 'in_review') %}
+                <button onclick="changeStatus('active')" class="w-full px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">发布 Active</button>
+                {% endif %}
+                {% if vm.template.status == 'active' and vm.permissions.can_edit %}
+                <button onclick="changeStatus('draft_revision')" class="w-full px-4 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm hover:bg-amber-200">创建 Draft Revision</button>
+                {% endif %}
+                {% if vm.permissions.can_review and vm.template.status == 'active' %}
+                <button onclick="changeStatus('archived')" class="w-full px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm hover:bg-red-200">归档</button>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- KPI Binding -->
+        <div class="bg-white rounded-lg border p-5">
+            <h2 class="font-heading text-base font-semibold text-text mb-3">KPI 绑定建议</h2>
+            <div class="space-y-1 text-xs">
+                {% if vm.kpi_matrix.recommended %}
+                <p class="text-green-600 font-medium">推荐:</p>
+                {% for kpi in vm.kpi_matrix.recommended %}
+                <span class="inline-block px-2 py-0.5 rounded bg-green-50 text-green-700 mr-1 mb-1">{{ kpi }}</span>
+                {% endfor %}
+                {% endif %}
+                {% if vm.kpi_matrix.allowed %}
+                <p class="text-gray-500 font-medium mt-2">允许:</p>
+                {% for kpi in vm.kpi_matrix.allowed %}
+                <span class="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-600 mr-1 mb-1">{{ kpi }}</span>
+                {% endfor %}
+                {% endif %}
+                {% if vm.kpi_matrix.blocked %}
+                <p class="text-red-500 font-medium mt-2">禁止:</p>
+                {% for kpi in vm.kpi_matrix.blocked %}
+                <span class="inline-block px-2 py-0.5 rounded bg-red-50 text-red-600 mr-1 mb-1">{{ kpi }}</span>
+                {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Status transitions -->
+        <div class="bg-white rounded-lg border p-5">
+            <h2 class="font-heading text-base font-semibold text-text mb-3">状态流转</h2>
+            <div class="text-xs text-gray-500 space-y-1">
+                <p>当前: <strong>{{ vm.template.status }}</strong></p>
+                <p>允许流转:</p>
+                {% set allowed = vm.status_transitions.get(vm.template.status, []) %}
+                {% if allowed %}
+                <ul class="list-disc pl-4">
+                    {% for s in allowed %}
+                    <li>{{ s }}</li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-gray-400">无可用流转</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TID = "{{ vm.template.id }}";
+const CURRENT_VERSION = {{ vm.template.current_version }};
+
+async function saveTemplate() {
+    const reason = prompt('变更原因 (必填):');
+    if (!reason) return;
+
+    const changes = {
+        dimension: document.getElementById('fld-dimension').value,
+        template_text: document.getElementById('fld-text').value,
+        question_type: document.getElementById('fld-qtype').value,
+        template_level: document.getElementById('fld-level').value,
+        question_scope: document.getElementById('fld-scope').value,
+        brand_directed: parseFloat(document.getElementById('fld-bd').value),
+        priority: parseInt(document.getElementById('fld-priority').value),
+        hallucination_check_enabled: document.getElementById('fld-hallcheck').checked,
+    };
+
+    const resp = await fetch(`/api/templates/${TID}`, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('geo_token')},
+        body: JSON.stringify({expected_current_version: CURRENT_VERSION, change_reason: reason, changes}),
+    });
+    if (resp.ok) {
+        location.reload();
+    } else {
+        const err = await resp.json();
+        alert('保存失败: ' + JSON.stringify(err.detail || err));
+    }
+}
+
+async function validateAndPreview() {
+    const body = {
+        template_text: document.getElementById('fld-text').value,
+        question_type: document.getElementById('fld-qtype').value,
+        template_level: document.getElementById('fld-level').value,
+        question_scope: document.getElementById('fld-scope').value,
+        brand_directed: parseFloat(document.getElementById('fld-bd').value),
+    };
+
+    const resp = await fetch('/api/templates/validate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('geo_token')},
+        body: JSON.stringify(body),
+    });
+    const report = await resp.json();
+    const sec = document.getElementById('validation-section');
+    sec.classList.remove('hidden');
+
+    let errHtml = '';
+    if (report.errors && report.errors.length) {
+        errHtml = '<div class="space-y-1 mb-3">' + report.errors.map(e =>
+            '<div class="px-3 py-2 bg-red-50 border border-red-200 rounded text-sm text-red-700">' +
+            '<span class="font-medium">' + e.code + '</span>: ' + e.message + '</div>'
+        ).join('') + '</div>';
+    } else {
+        errHtml = '<p class="text-green-600 text-sm mb-3">✓ 无错误</p>';
+    }
+    document.getElementById('validation-errors').innerHTML = errHtml;
+
+    let warnHtml = '';
+    if (report.warnings && report.warnings.length) {
+        warnHtml = '<div class="space-y-1">' + report.warnings.map(w =>
+            '<div class="px-3 py-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-700">⚠ ' + w.message + '</div>'
+        ).join('') + '</div>';
+    }
+    document.getElementById('validation-warnings').innerHTML = warnHtml;
+
+    if (report.extracted_variables) {
+        document.getElementById('validation-vars').innerHTML =
+            '<p class="text-sm text-gray-500 mt-3">变量: ' +
+            report.extracted_variables.map(v => '<code class="bg-gray-100 px-1 rounded">{' + v + '}</code>').join(', ') + '</p>';
+    }
+
+    // Show preview section
+    document.getElementById('preview-section').classList.remove('hidden');
+}
+
+async function renderPreview() {
+    const body = {
+        template_text: document.getElementById('fld-text').value,
+        brand_name: document.getElementById('preview-brand').value,
+        industry: '餐饮连锁',
+    };
+    const resp = await fetch('/api/templates/render-preview', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('geo_token')},
+        body: JSON.stringify(body),
+    });
+    const r = await resp.json();
+    document.getElementById('preview-result').textContent = r.rendered_question;
+    let wh = '';
+    if (r.warnings && r.warnings.length) {
+        wh = '<div class="space-y-1">' + r.warnings.map(w =>
+            '<p class="text-amber-600 text-xs">⚠ ' + w + '</p>').join('') + '</div>';
+    }
+    if (r.missing_variables && r.missing_variables.length) {
+        wh += '<p class="text-red-600 text-xs mt-1">缺失变量: ' + r.missing_variables.join(', ') + '</p>';
+    }
+    document.getElementById('preview-warnings').innerHTML = wh;
+}
+
+async function changeStatus(newStatus) {
+    const reason = prompt('操作原因 (必填):');
+    if (!reason) return;
+    const resp = await fetch(`/api/templates/${TID}/status`, {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('geo_token')},
+        body: JSON.stringify({expected_current_version: CURRENT_VERSION, new_status: newStatus, reason}),
+    });
+    if (resp.ok) {
+        location.reload();
+    } else {
+        const err = await resp.json();
+        alert('状态变更失败: ' + JSON.stringify(err.detail || err));
+    }
+}
+</script>
+{% endblock %}
