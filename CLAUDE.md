@@ -6,20 +6,21 @@
 
 ## 项目状态
 
-**Phase A + P0 7-10 + P1 1-10 全部完成。527 tests (0 failures)。GitHub: https://github.com/05ffh/GEO-Explorer**
+**Phase A + P0 7-10 + P1 1-10 + P2-1 全部完成。555 tests (0 failures)。GitHub: https://github.com/05ffh/GEO-Explorer**
 
 完整链路:
 ```
 GT采集(含S/A/B/C/D来源等级) → GT审核(证据+人工双重阻断) → 品牌GEO采集
 → 模板健康前置门槛(P0-8) → 模板版本钉定(P1-7) → 5KPI(模板→指标绑定P0-9)
 → 4层幻觉分类(P0-7) → LLM-as-Judge(P1-6) → Debug Evidence(P1-5)
+→ Claim Taxonomy(P2-1): FACT/OPINION/SPECULATION 三分类 + 独立风险判定
 → 行业KPI权重+阈值(P1-9) → 样本充分度评估(P1-10)
 → Action Theme聚合 → Content Package(风险分级+状态机)
 → 报告质量Summary → Go/No-Go → 报告(.md/.docx/.pdf)
 → 历史重归因(P1-8): original vs corrected 双视图
 ```
 
-**下一步:** P2-1 Claim Taxonomy
+**下一步:** P2-2 多证据 GT
 
 **P1/P2 推进流程:** spec → 发桌面审阅 → 用户发回补齐清单 → 完全吸收 → Build → 有效性验证
 
