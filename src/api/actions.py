@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -6,10 +6,11 @@ from src.database import get_db
 from src.api.deps import get_current_user, get_org_brand_or_404
 from src.models.user import User
 from src.models.action_plan import ActionPlan
+from src.models.action_theme import ActionTheme, THEME_TRANSITIONS
 from src.actions.engine import update_action_status, generate_action_plans
 from src.actions.executor import generate_content_package
 from src.actions.content_package import export_content_package
-from src.models.content_package import ContentPackage
+from src.models.content_package import ContentPackage, CONTENT_PACKAGE_TRANSITIONS
 
 router = APIRouter(tags=["actions"])
 
@@ -131,3 +132,60 @@ async def list_content_packages(
         .order_by(ContentPackage.created_at.desc())
     )).scalars().all()
     return {"items": packages}
+
+
+# ── P2-FRONTEND: Theme transition + Content transition ──────────────────────
+
+class ThemeTransition(BaseModel):
+    to_status: str
+    notes: str = ""
+
+
+@router.post("/api/action-themes/{theme_id}/transition")
+async def transition_theme(
+    theme_id: str,
+    body: ThemeTransition,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Transition an ActionTheme to a new status."""
+    theme = (await db.execute(
+        select(ActionTheme).where(ActionTheme.id == theme_id)
+    )).scalar_one_or_none()
+    if not theme:
+        raise HTTPException(404, "ActionTheme not found")
+    allowed = THEME_TRANSITIONS.get(theme.status, [])
+    if body.to_status not in allowed:
+        raise HTTPException(400, f"非法状态流转: {theme.status} → {body.to_status}，允许: {allowed}")
+    if user.role not in ("admin", "analyst", "gt_reviewer", "content_editor", "legal_reviewer"):
+        raise HTTPException(403, "无权操作")
+    theme.status = body.to_status
+    await db.commit()
+    return {"id": str(theme.id), "status": theme.status}
+
+
+class ContentTransition(BaseModel):
+    status: str
+
+
+@router.post("/api/content-packages/{package_id}/transition")
+async def transition_content_package(
+    package_id: str,
+    body: ContentTransition,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Transition a ContentPackage status."""
+    pkg = (await db.execute(
+        select(ContentPackage).where(ContentPackage.id == package_id)
+    )).scalar_one_or_none()
+    if not pkg:
+        raise HTTPException(404, "ContentPackage not found")
+    allowed = CONTENT_PACKAGE_TRANSITIONS.get(pkg.status, [])
+    if body.status not in allowed:
+        raise HTTPException(400, f"非法状态流转: {pkg.status} → {body.status}，允许: {allowed}")
+    if user.role not in ("admin", "content_editor", "legal_reviewer", "gt_reviewer"):
+        raise HTTPException(403, "无权操作")
+    pkg.status = body.status
+    await db.commit()
+    return {"id": str(pkg.id), "status": pkg.status}

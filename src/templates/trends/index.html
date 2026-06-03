@@ -1,15 +1,19 @@
 {% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
 {% block title %}{{ vm.brand.name }} — 趋势归因{% endblock %}
 {% block content %}
-<h1 class="font-heading text-2xl font-bold text-text mb-5">{{ vm.brand.name }} — 趋势与归因</h1>
-<div class="flex items-center gap-3 mb-4">
-    <div class="flex bg-slate-100 rounded-lg p-0.5">
-        {% for r, rk in [('周','week'),('月','month'),('季','quarter')] %}
-        <button class="px-4 py-1.5 text-sm rounded-md cursor-pointer transition-colors duration-150
-                       {% if vm.range == rk %}bg-white shadow-sm text-text{% else %}text-slate-600 hover:bg-slate-200{% endif %}"
-                hx-get="/brands/{{ vm.brand.id }}/trends-fragment?range_str={{ rk }}"
-                hx-target="#trends-content" hx-swap="innerHTML">{{ r }}</button>
-        {% endfor %}
+<div class="flex items-center justify-between mb-5">
+    <div>
+        <h1 class="font-heading text-2xl font-bold text-text">{{ vm.brand.name }} — 趋势与归因</h1>
+        <p class="text-sm text-slate-500 mt-0.5">KPI 变化追踪 · 归因分析 · 事件标记</p>
+    </div>
+    <div class="flex bg-slate-100 rounded-lg p-0.5 gap-0.5">
+        <button class="px-4 py-1.5 text-sm rounded-md cursor-pointer {% if vm.range == 'week' %}bg-white shadow-sm text-text{% else %}text-slate-600{% endif %}"
+                hx-get="/brands/{{ vm.brand.id }}/trends-fragment?range_str=week" hx-target="#trends-content" hx-swap="innerHTML">周</button>
+        <button class="px-4 py-1.5 text-sm rounded-md cursor-pointer {% if vm.range == 'month' %}bg-white shadow-sm text-text{% else %}text-slate-600{% endif %}"
+                hx-get="/brands/{{ vm.brand.id }}/trends-fragment?range_str=month" hx-target="#trends-content" hx-swap="innerHTML">月</button>
+        <button class="px-4 py-1.5 text-sm rounded-md cursor-pointer {% if vm.range == 'quarter' %}bg-white shadow-sm text-text{% else %}text-slate-600{% endif %}"
+                hx-get="/brands/{{ vm.brand.id }}/trends-fragment?range_str=quarter" hx-target="#trends-content" hx-swap="innerHTML">季</button>
     </div>
 </div>
 <div id="trends-content">
