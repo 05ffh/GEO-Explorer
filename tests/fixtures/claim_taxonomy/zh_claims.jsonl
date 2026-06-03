@@ -1,0 +1,14 @@
+{"text": "星巴克成立于1971年", "expected_claim_nature": "fact", "expected_signal": "成立于", "industry": "restaurant_chain"}
+{"text": "在全球拥有38,000家门店", "expected_claim_nature": "fact", "expected_signal": "拥有", "industry": "restaurant_chain"}
+{"text": "2025年营收达到$36B", "expected_claim_nature": "fact", "expected_signal": null, "industry": "restaurant_chain"}
+{"text": "总部位于西雅图", "expected_claim_nature": "fact", "expected_signal": "总部", "industry": "restaurant_chain"}
+{"text": "提供最好的咖啡体验", "expected_claim_nature": "opinion", "expected_signal": "最好", "industry": "restaurant_chain"}
+{"text": "行业领先的移动应用和会员体系", "expected_claim_nature": "opinion", "expected_signal": "领先", "industry": "restaurant_chain"}
+{"text": "一流的产品品质", "expected_claim_nature": "opinion", "expected_signal": "一流", "industry": "restaurant_chain"}
+{"text": "深受消费者喜爱", "expected_claim_nature": "opinion", "expected_signal": "受欢迎", "industry": "restaurant_chain"}
+{"text": "星巴克可能扩展到更多低线城市", "expected_claim_nature": "speculation", "expected_signal": "可能", "industry": "restaurant_chain"}
+{"text": "预计明年将推出新产品线", "expected_claim_nature": "speculation", "expected_signal": "预计", "industry": "restaurant_chain"}
+{"text": "正在探索新业务模式", "expected_claim_nature": "speculation", "expected_signal": "探索", "industry": "restaurant_chain"}
+{"text": "未来有望成为市场领先者", "expected_claim_nature": "speculation", "expected_signal": "有望", "industry": "restaurant_chain"}
+{"text": "可能成为最好的品牌", "expected_claim_nature": "speculation", "expected_signal": "可能", "industry": "restaurant_chain"}
+{"text": "这是一个普通句子", "expected_claim_nature": "unknown", "expected_signal": null, "industry": "restaurant_chain"}

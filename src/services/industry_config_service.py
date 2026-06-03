@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.schemas.industry_profiles import IndustryCode, INDUSTRY_PROFILES
 from src.schemas.industry_config import (
     IndustryConfig, KpiWeightsConfig, HallucinationThresholdsConfig,
-    TemplateStrategyConfig, CompetitorRulesConfig,
+    TemplateStrategyConfig, CompetitorRulesConfig, ClaimNatureThresholdsConfig,
 )
 from src.models.brand import Brand
 from src.models.industry_template import IndustryTemplate
@@ -79,6 +79,15 @@ DEFAULT_CONFIGS: dict[IndustryCode, IndustryConfig] = {
         template_strategy=TemplateStrategyConfig(
             min_questions_per_qtype=4, max_questions_per_qtype=8,
             required_qtypes=["brand_definition", "brand_trust", "brand_attribute"],
+        ),
+        # P2-1: stricter claim nature thresholds for regulated industry
+        claim_nature_thresholds=ClaimNatureThresholdsConfig(
+            max_unknown_ratio=0.10,
+            max_speculation_ratio=0.15,
+            speculation_block_threshold=0.30,
+            block_speculation_for_predicates=["financial_performance", "regulatory_status", "risk", "pricing"],
+            warning_speculation_for_predicates=["identity", "core_product"],
+            regulated_industry_mode=True,
         ),
     ),
 }

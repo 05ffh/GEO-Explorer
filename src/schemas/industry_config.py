@@ -63,6 +63,26 @@ class CompetitorRulesConfig(BaseModel):
     exclude_self_brands: bool = True
 
 
+class ClaimNatureThresholdsConfig(BaseModel):
+    """P2-1: Per-industry thresholds for claim nature distribution."""
+    max_unknown_ratio: float = Field(default=0.20, ge=0, le=1)
+    max_speculation_ratio: float = Field(default=0.30, ge=0, le=1)
+    speculation_block_threshold: float = Field(default=0.50, ge=0, le=1)
+    max_opinion_ratio: float = Field(default=0.60, ge=0, le=1)
+    block_speculation_for_predicates: list[str] = Field(default_factory=list)
+    warning_speculation_for_predicates: list[str] = Field(default_factory=list)
+    regulated_industry_mode: bool = False
+
+    @model_validator(mode="after")
+    def validate_thresholds(self) -> "ClaimNatureThresholdsConfig":
+        if self.max_speculation_ratio > self.speculation_block_threshold:
+            raise ValueError(
+                f"max_speculation_ratio ({self.max_speculation_ratio}) must be <= "
+                f"speculation_block_threshold ({self.speculation_block_threshold})"
+            )
+        return self
+
+
 class IndustryConfig(BaseModel):
     schema_version: str = "industry_config_v1"
     kpi_weights: KpiWeightsConfig = Field(default_factory=KpiWeightsConfig)
@@ -72,6 +92,9 @@ class IndustryConfig(BaseModel):
     template_strategy: TemplateStrategyConfig = Field(default_factory=TemplateStrategyConfig)
     competitor_rules: CompetitorRulesConfig = Field(default_factory=CompetitorRulesConfig)
     sample_sufficiency: "SampleSufficiencyConfig" = Field(default_factory=lambda: SampleSufficiencyConfig())
+    claim_nature_thresholds: ClaimNatureThresholdsConfig = Field(
+        default_factory=ClaimNatureThresholdsConfig
+    )
 
 # Lazy import for circular dependency
 from src.schemas.sample_sufficiency import SampleSufficiencyConfig

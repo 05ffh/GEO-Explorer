@@ -20,6 +20,8 @@ async def list_hallucinations(
     brand_id: str,
     severity: str | None = Query(None),
     verdict: str | None = Query(None),
+    claim_type: str | None = Query(None, description="fact|opinion|speculation|unknown"),
+    predicate_type: str | None = Query(None, description="identity|industry|product|positioning|..."),
     human_reviewed: bool | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -34,6 +36,10 @@ async def list_hallucinations(
         q = q.where(HallucinationResult.severity == severity)
     if verdict:
         q = q.where(HallucinationResult.verdict == verdict)
+    if claim_type:
+        q = q.where(HallucinationResult.claim_type == claim_type)
+    if predicate_type:
+        q = q.where(HallucinationResult.predicate_type == predicate_type)
     if human_reviewed is not None:
         q = q.where(HallucinationResult.human_reviewed == human_reviewed)
     q = q.order_by(desc(HallucinationResult.created_at))

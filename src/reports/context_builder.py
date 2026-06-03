@@ -145,6 +145,26 @@ async def _fetch_data(brand: dict, collection_run_id: str, db: AsyncSession) -> 
     """), {"rid": collection_run_id})
     data["hall_examples"] = [dict(r._mapping) for r in hall_ex.fetchall()]
 
+    # P2-1: claim nature distribution
+    cn_rows = await db.execute(text("""
+        SELECT claim_type, severity, verdict, COUNT(*) c
+        FROM hallucination_results
+        WHERE collection_run_id=:rid
+        GROUP BY claim_type, severity, verdict
+        ORDER BY claim_type, severity, verdict
+    """), {"rid": collection_run_id})
+    cn_data = [dict(r._mapping) for r in cn_rows.fetchall()]
+    data["claim_nature_distribution"] = cn_data
+    # Build claim_nature × verdict matrix
+    cn_matrix = {}
+    for row in cn_data:
+        cn = row["claim_type"] or "unknown"
+        ver = row["verdict"]
+        if cn not in cn_matrix:
+            cn_matrix[cn] = {}
+        cn_matrix[cn][ver] = cn_matrix[cn].get(ver, 0) + row["c"]
+    data["claim_nature_verdict_matrix"] = cn_matrix
+
     # Action themes
     act = await db.execute(text("""
         SELECT id, theme_name, priority, summary, target_kpis, suggested_content_type

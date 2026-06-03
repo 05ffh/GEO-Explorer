@@ -48,6 +48,18 @@ class HallucinationVerdict(str, Enum):
     AMBIGUOUS = "ambiguous"
 
 
+class ClaimNature(str, Enum):
+    """声明认知性质 (epistemological nature of a claim).
+
+    DB column is claim_type for readability but represents claim NATURE,
+    not subject type or predicate domain.
+    """
+    FACT = "fact"              # 事实 — 可验证的客观陈述
+    OPINION = "opinion"        # 观点 — 主观判断/评价
+    SPECULATION = "speculation"  # 推测 — 前瞻性/未经证实的声明
+    UNKNOWN = "unknown"        # 无法判定
+
+
 class Severity(str, Enum):
     P0 = "P0"
     P1 = "P1"

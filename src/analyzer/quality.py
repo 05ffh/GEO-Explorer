@@ -13,6 +13,11 @@ HARD_BLOCK_CODES = {
     "METRIC_COVERAGE_LOW": "metric_eligible_coverage < 60%",
     "COVERAGE_DATA_MISSING": "缺少覆盖率数据",
     "TEMPLATE_HEALTH_MISSING": "缺少模板健康度数据",
+    # P2-1: claim nature thresholds
+    "HIGH_SPECULATION_RATIO": "推测声明占比过高",
+    "EXCESSIVE_SPECULATION": "推测声明超过阻断阈值",
+    "HIGH_OPINION_RATIO": "观点声明占比过高",
+    "HIGH_UNKNOWN_RATIO": "无法分类声明占比过高",
     # P1-10: sample sufficiency
     "NO_DATA": "无成功 QueryResult，采集完全失败",
     "SAMPLE_TOTAL_TOO_LOW": "有效样本总数不足",
@@ -51,6 +56,10 @@ async def build_report_quality_summary(
     generic_count = 0; irrelevant_count = 0
     unsupported_count = 0; gt_insufficient_count = 0
     template_invalid_count = 0
+    # P2-1: claim nature counts
+    fact_count = 0; opinion_count = 0; speculation_count = 0; unknown_count = 0
+    total_claim_count = 0
+    claim_type_breakdown = {"fact": {}, "opinion": {}, "speculation": {}, "unknown": {}}
 
     try:
         rows = (await db.execute(
@@ -82,6 +91,40 @@ async def build_report_quality_summary(
     except Exception:
         logger.warning("Failed to aggregate hallucination results for %s", collection_run_id, exc_info=True)
 
+    # P2-1: claim type breakdown (separate query to avoid disrupting existing aggregation)
+    try:
+        ct_rows = (await db.execute(
+            select(
+                HallucinationResult.claim_type,
+                HallucinationResult.severity,
+                func.count().label("cnt"),
+            ).where(
+                HallucinationResult.collection_run_id == collection_run_id,
+                HallucinationResult.verdict == "contradicted",
+                HallucinationResult.subject_type == "target_brand",
+            ).group_by(
+                HallucinationResult.claim_type,
+                HallucinationResult.severity,
+            )
+        )).fetchall()
+
+        for ct, sev, cnt in ct_rows:
+            ct_val = ct or "unknown"
+            if ct_val == "fact":
+                fact_count += cnt
+            elif ct_val == "opinion":
+                opinion_count += cnt
+            elif ct_val == "speculation":
+                speculation_count += cnt
+            else:
+                unknown_count += cnt
+            if ct_val not in claim_type_breakdown:
+                claim_type_breakdown[ct_val] = {}
+            claim_type_breakdown[ct_val][sev or "Info"] = cnt
+        total_claim_count = fact_count + opinion_count + speculation_count + unknown_count
+    except Exception:
+        logger.warning("Failed to aggregate claim type for %s", collection_run_id, exc_info=True)
+
     th = template_health or {}
     summary = {
         "schema_version": "report_quality_summary_v1",
@@ -104,6 +147,15 @@ async def build_report_quality_summary(
         "not_about_brand": {
             "generic_statement_count": generic_count,
             "irrelevant_response_count": irrelevant_count,
+        },
+        # P2-1: claim nature breakdown
+        "claim_nature": {
+            "fact_count": fact_count,
+            "opinion_count": opinion_count,
+            "speculation_count": speculation_count,
+            "unknown_count": unknown_count,
+            "total_classified": total_claim_count,
+            "breakdown": claim_type_breakdown,
         },
         "report_publishable": False,
         "blocking_reasons": [],
@@ -166,6 +218,32 @@ def compute_report_publishable(
     qs_gt = qs.get("gt_insufficient", {})
     if qs_gt.get("unsupported_claim_count", 0) > 100:
         _block("HIGH_GT_UNSUPPORTED", severity="warning")
+
+    # P2-1: claim nature ratio checks
+    cn = qs.get("claim_nature", {})
+    total_cn = cn.get("total_classified", 0)
+    if total_cn > 0:
+        spec_ratio = cn.get("speculation_count", 0) / total_cn
+        opin_ratio = cn.get("opinion_count", 0) / total_cn
+        unknown_ratio = cn.get("unknown_count", 0) / total_cn
+
+        # Read thresholds from industry config if available
+        thresholds = metrics.get("_claim_nature_thresholds", {}) if metrics else {}
+        max_spec = thresholds.get("max_speculation_ratio", 0.30)
+        spec_block = thresholds.get("speculation_block_threshold", 0.50)
+        max_opin = thresholds.get("max_opinion_ratio", 0.60)
+        max_unknown = thresholds.get("max_unknown_ratio", 0.20)
+
+        if spec_ratio > spec_block:
+            _block("EXCESSIVE_SPECULATION")
+        elif spec_ratio > max_spec:
+            _block("HIGH_SPECULATION_RATIO", severity="warning")
+
+        if opin_ratio > max_opin:
+            _block("HIGH_OPINION_RATIO", severity="warning")
+
+        if unknown_ratio > max_unknown:
+            _block("HIGH_UNKNOWN_RATIO", severity="warning")
 
     has_hard_block = any(b["severity"] == "block" for b in blocking)
     return (not has_hard_block, blocking)

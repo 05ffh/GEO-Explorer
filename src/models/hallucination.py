@@ -31,6 +31,10 @@ class HallucinationResult(Base, UUIDMixin, TimestampMixin):
     reason: Mapped[str] = mapped_column(Text, default="")
     needs_human_review: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # P2-1: claim nature taxonomy
+    claim_type: Mapped[str] = mapped_column(String(20), default="unknown", server_default="unknown")
+    predicate_type: Mapped[str] = mapped_column(String(30), default="other", server_default="other")
+
     # P1-8: reclassification tracking
     source_query_result_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("query_results.id"), nullable=True)
     source_hallucination_result_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("hallucination_results.id"), nullable=True)

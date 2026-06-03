@@ -5,6 +5,8 @@ from src.models.query_result import QueryResult
 from src.models.ground_truth import GroundTruthVersion
 from src.models.hallucination import HallucinationResult
 from src.schemas.ground_truth import GT_FIELD_LEVELS
+from src.analyzer.claim_taxonomy import classify_claim_nature
+from src.analyzer.enums import ClaimNature
 
 
 # ── Expanded verdict states (P0-6) ──────────────────────────────────────────
@@ -84,6 +86,9 @@ class Claim:
     predicate_type: str = "other"   # identity | industry | product | positioning | target_user | scenario | competitor | reputation | recommendation | other
     checkable: bool = False
     source_sentence: str = ""
+    claim_nature: str = "unknown"            # fact | opinion | speculation | unknown (ClaimNature enum value)
+    claim_nature_confidence: float = 0.0     # classifier confidence
+    claim_nature_reason: str = ""            # classifier explanation
 
 
 @dataclass
@@ -244,6 +249,9 @@ class HallucinationDetector:
                     predicate_type = _infer_predicate_type(field_name)
                     checkable = subject_type in ("target_brand", "competitor")
 
+                    # P2-1: Classify claim nature (fact/opinion/speculation)
+                    nature_result = classify_claim_nature(fragment, predicate_type)
+
                     claims.append(Claim(
                         field=field_name,
                         claim_text=fragment[:150],
@@ -253,14 +261,22 @@ class HallucinationDetector:
                         predicate_type=predicate_type,
                         checkable=checkable,
                         source_sentence=sent[:300],
+                        claim_nature=nature_result.claim_nature.value,
+                        claim_nature_confidence=nature_result.confidence,
+                        claim_nature_reason=nature_result.reason,
                     ))
                     break
 
         return claims
 
     def verify_claim(self, claim: Claim, gt_json: dict) -> dict:
-        """Verify claim against GT with expanded verdict states (P0-6)."""
+        """Verify claim against GT with expanded verdict states (P0-6).
+
+        P2-1: claim_nature-aware — OPINION defaults to not_checkable (does not
+        enter fact accuracy); SPECULATION gets independent risk tiering.
+        """
         field_level = GT_FIELD_LEVELS.get(claim.field, "P1")
+        claim_nature = getattr(claim, "claim_nature", "unknown")
 
         def _evidence(path: str, **kw) -> dict:
             return {"decision_path": path, "field": claim.field,
@@ -285,6 +301,10 @@ class HallucinationDetector:
                     "reason": f"Subject type '{claim.subject_type}' not checkable against brand GT",
                     "ai_claim": claim.claim_text, "ground_truth_value": "",
                     "evidence": _evidence("not_checkable:unknown_subject")}
+
+        # P2-1: OPINION claims — don't enter fact accuracy contradiction
+        if claim_nature == "opinion":
+            return self._verify_opinion_claim(claim, gt_json, _evidence)
 
         gt_value = gt_json.get(claim.field)
         if not gt_value:
@@ -418,6 +438,87 @@ class HallucinationDetector:
                     claim_coverage=round(claim_coverage, 3),
                     gt_coverage=round(gt_coverage, 3))}
 
+    # ── P2-1: OPINION / SPECULATION claim handling ──────────────────────────
+
+    def _verify_opinion_claim(self, claim: Claim, gt_json: dict, _evidence) -> dict:
+        """Verify OPINION claim — subjective; don't enter fact accuracy contradiction.
+
+        OPINION claims default to not_checkable / Info.
+        Exception: absolute high-risk expressions escalate to P1 and human review.
+        """
+        # Absolute claim keywords that escalate opinion to risk
+        absolute_kw = ["唯一", "第一", "最安全", "100%", "绝对", "官方认证最好",
+                       "唯一获得", "唯一通过", "唯一拥有"]
+        has_absolute = any(kw in claim.claim_text for kw in absolute_kw)
+
+        # Check if GT has contradictory evidence for the absolute claim
+        field_level = GT_FIELD_LEVELS.get(claim.field, "P1")
+
+        if has_absolute:
+            # Absolute opinion claims in high-risk fields get elevated severity
+            high_risk_fields = {"official_name", "industry", "category",
+                                "core_products", "core_features"}
+            severity = "P1" if claim.field in high_risk_fields else "P2"
+            return {"verdict": "not_checkable", "severity": severity,
+                    "error_type": "opinion_absolute_claim",
+                    "needs_human_review": True,
+                    "reason": f"观点声明包含绝对化表达: {claim.claim_text[:80]}",
+                    "ai_claim": claim.claim_text, "ground_truth_value": "",
+                    "evidence": _evidence("opinion:absolute_claim",
+                        claim_nature="opinion")}
+
+        return {"verdict": "not_checkable", "severity": "Info",
+                "error_type": "opinion_claim",
+                "needs_human_review": False,
+                "reason": "观点类声明，不进入事实准确率判定",
+                "ai_claim": claim.claim_text, "ground_truth_value": "",
+                "evidence": _evidence("opinion:subjective",
+                    claim_nature="opinion")}
+
+    def _adjust_speculation_severity(
+        self, verification: dict, claim: Claim) -> dict:
+        """Adjust verdict/severity for SPECULATION claims (P2-1).
+
+        SPECULATION is not inherently wrong — risk depends on sources, industry,
+        and predicate type. Lowers severity for low-risk speculation;
+        elevates for high-risk (financial, regulatory, etc.).
+        """
+        risk_level = getattr(claim, "claim_nature_reason", "")
+        # Extract risk level from claim nature classifier result
+        from src.analyzer.claim_taxonomy import HIGH_RISK_PREDICATES
+
+        predicate = getattr(claim, "predicate_type", "other")
+        is_high_risk = predicate in HIGH_RISK_PREDICATES
+
+        current_severity = verification.get("severity", "P1")
+        current_verdict = verification.get("verdict", "unsupported")
+
+        if is_high_risk:
+            # Financial/regulatory/health speculation: elevate severity
+            if current_verdict in ("contradicted", "unsupported"):
+                verification["severity"] = "P0" if current_severity == "P0" else "P1"
+                verification["needs_human_review"] = True
+                verification["error_type"] = f"high_risk_speculation_{predicate}"
+                ev = verification.get("evidence", {})
+                ev["speculation_risk"] = "high"
+                ev["claim_nature"] = "speculation"
+                verification["evidence"] = ev
+        else:
+            # Low/medium risk speculation: lower severity
+            if current_verdict == "contradicted":
+                verification["severity"] = "P2"
+                verification["error_type"] = "low_risk_speculation"
+            elif current_verdict == "unsupported" and current_severity == "P0":
+                verification["severity"] = "P1"
+
+        # Tag verification with claim nature
+        ev = verification.get("evidence", {})
+        ev["claim_nature"] = "speculation"
+        verification["evidence"] = ev
+        return verification
+
+    # ── End P2-1 helpers ────────────────────────────────────────────────────
+
     async def detect(
         self, query_result: QueryResult, gt: GroundTruthVersion, db: AsyncSession,
         brand_name: str = "",
@@ -446,6 +547,8 @@ class HallucinationDetector:
                 ai_claim=relevance.evidence[0] if relevance.evidence else "",
                 ground_truth_value="",
                 error_type="",
+                claim_type="unknown",
+                predicate_type="other",
             )]
 
         # Extract claims with brand awareness
@@ -454,6 +557,9 @@ class HallucinationDetector:
 
         for claim in claims:
             verification = self.verify_claim(claim, gt_json)
+            # P2-1: Adjust speculation claims — not inherently wrong
+            if getattr(claim, "claim_nature", "unknown") == "speculation":
+                verification = self._adjust_speculation_severity(verification, claim)
             # P1-6: LLM-as-Judge fallback for borderline n-gram results
             sim = verification.get("similarity_score")
             if sim is not None and 0.05 < sim < 0.35 and claim.checkable:
@@ -504,7 +610,23 @@ class HallucinationDetector:
                 claim_text=claim.claim_text,
                 matched_gt_field=claim.field,
                 reason=reason,
+                claim_type=getattr(claim, "claim_nature", "unknown"),
+                predicate_type=getattr(claim, "predicate_type", "other"),
             )
+            # P2-1: auto-mark for human review on low-confidence / UNKNOWN / high-risk speculation
+            if not h.needs_human_review:
+                nc = getattr(claim, "claim_nature_confidence", 1.0)
+                cn = getattr(claim, "claim_nature", "unknown")
+                pt = getattr(claim, "predicate_type", "other")
+                if nc < 0.6 and cn != "unknown":
+                    h.needs_human_review = True
+                    h.reason += f" | human_review: low_classifier_confidence({nc:.2f})"
+                elif cn == "unknown":
+                    h.needs_human_review = True
+                    h.reason += " | human_review: unknown_claim_nature"
+                elif cn == "speculation" and pt in ("identity", "core_product", "financial_performance"):
+                    h.needs_human_review = True
+                    h.reason += f" | human_review: high_risk_speculation({pt})"
             results.append(h)
         return results
 
