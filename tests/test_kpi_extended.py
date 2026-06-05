@@ -65,7 +65,7 @@ async def test_all_extended_kpis_return_consistent_structure(db_session, monkeyp
     from src.models.collection_run import CollectionRun
     from src.models.query_template import QueryTemplate
     from src.models.query_result import QueryResult
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     org = Organization(name="TestOrg")
     db_session.add(org)
@@ -95,7 +95,7 @@ async def test_all_extended_kpis_return_consistent_structure(db_session, monkeyp
             question=f"Question {i}",
             answer_text=f"TestBrand is a great company with unique features. Sample answer {i}.",
             status="success",
-            collected_at=datetime.utcnow(),
+            collected_at=datetime.now(timezone.utc),
         )
         db_session.add(qr)
     await db_session.commit()

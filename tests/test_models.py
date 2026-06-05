@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from src.models.organization import Organization
 from src.models.user import User
 from src.models.brand import Brand
@@ -75,7 +75,7 @@ async def test_collection_lineage(db_session):
     qr = QueryResult(brand_id=brand.id, organization_id=org.id, collection_run_id=run.id,
                      platform="deepseek", template_id=tmpl.id, question="什么是LineageBrand？",
                      answer_text="LineageBrand is a tech company.", status="success",
-                     collected_at=datetime.utcnow())
+                     collected_at=datetime.now(timezone.utc))
     db_session.add(qr)
     await db_session.commit()
 

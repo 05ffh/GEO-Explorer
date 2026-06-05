@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import String, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -16,4 +16,4 @@ class InsightSummary(Base, UUIDMixin, TimestampMixin):
     key_findings_json: Mapped[dict] = mapped_column(JSONB, default=list)
     data_reliability_json: Mapped[dict] = mapped_column(JSONB, default=dict)
     confidence_level: Mapped[str] = mapped_column(String(20), default="low")
-    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.utcnow())
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

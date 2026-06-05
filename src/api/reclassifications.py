@@ -1,6 +1,6 @@
 """P1-8: Reclassification API — trigger, status, progress, history, diff, cancel, retry."""
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +10,7 @@ from src.database import get_db
 from src.api.deps import get_current_user
 from src.models.user import User
 from src.models.reclassification_run import (
-    ReclassificationRun, STATUS_QUEUED,
+    ReclassificationRun, STATUS_QUEUED, STATUS_COMPLETED,
 )
 from src.services.reclassification_service import ReclassificationService
 
@@ -140,6 +140,70 @@ async def get_reclassification_diff(
     }
 
 
+class ApplyRequest(BaseModel):
+    reason: str = Field(..., min_length=1)
+    idempotency_key: str | None = None
+
+
+@router.post("/reclassifications/{batch_id}/apply")
+async def apply_reclassification(
+    batch_id: uuid.UUID,
+    body: ApplyRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Apply a completed dry-run reclassification — creates write batch."""
+    source = (await db.execute(
+        select(ReclassificationRun).where(ReclassificationRun.id == batch_id)
+    )).scalar_one_or_none()
+    if source is None:
+        raise HTTPException(status_code=404)
+    if source.organization_id != user.organization_id and user.platform_role not in ("system_admin", "system_owner"):
+        raise HTTPException(status_code=403)
+    if not source.dry_run:
+        raise HTTPException(status_code=400, detail="Only dry-run batches can be applied")
+    if source.status != STATUS_COMPLETED:
+        raise HTTPException(status_code=400, detail="Dry-run must be completed before applying")
+    if user.role not in ("admin", "owner") and user.platform_role not in ("system_admin", "system_owner"):
+        raise HTTPException(status_code=403, detail="需要品牌管理员权限才能正式写入")
+
+    # Check concurrent
+    active = (await db.execute(
+        select(ReclassificationRun).where(
+            ReclassificationRun.organization_id == user.organization_id,
+            ReclassificationRun.brand_id == source.brand_id,
+            ReclassificationRun.status.in_([STATUS_QUEUED, "running"]),
+        )
+    )).scalar_one_or_none()
+    if active:
+        raise HTTPException(status_code=409, detail=f"已有运行中的批次: {active.id}")
+
+    # Create apply batch from dry-run
+    apply_batch = await ReclassificationService.create_batch(
+        db,
+        organization_id=user.organization_id,
+        brand_id=source.brand_id,
+        from_date=source.from_date,
+        to_date=source.to_date,
+        dry_run=False,
+        mode="write_new_results",
+        gt_version_strategy=source.gt_version_strategy,
+        reason=body.reason,
+        triggered_by=user.id,
+        idempotency_key=body.idempotency_key,
+    )
+    await db.commit()
+
+    from src.services.reclassification_task import run_reclassification
+    run_reclassification.delay(str(apply_batch.id))
+
+    return {
+        "reclassification_run_id": str(apply_batch.id),
+        "status": apply_batch.status,
+        "source_dry_run_id": str(source.id),
+    }
+
+
 @router.post("/reclassifications/{batch_id}/cancel")
 async def cancel_reclassification(
     batch_id: uuid.UUID,
@@ -154,7 +218,7 @@ async def cancel_reclassification(
     if batch.organization_id != user.organization_id and user.platform_role not in ("system_admin", "system_owner"):
         raise HTTPException(status_code=403)
     batch.status = "cancelled"
-    batch.cancelled_at = datetime.utcnow()
+    batch.cancelled_at = datetime.now(timezone.utc)
     await db.commit()
     return {"status": "cancelled"}
 

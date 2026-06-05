@@ -191,9 +191,12 @@ class ReviewService:
     # ── Batch dry-run ──────────────────────────────────────────────────
 
     async def batch_dry_run(self, db: AsyncSession, result_ids: list[str]) -> dict:
+        import uuid as _uuid
+        from datetime import datetime, timezone
         affected = 0
         blocked = []
         sev_count = {}
+        allowed_ids = []
         for rid in result_ids:
             try:
                 r = await self._get_or_404(db, rid)
@@ -205,22 +208,58 @@ class ReviewService:
                     continue
                 affected += 1
                 sev_count[r.severity] = sev_count.get(r.severity, 0) + 1
+                allowed_ids.append(rid)
             except Exception:
                 blocked.append({"id": rid, "reason": "不存在"})
-        return {"affected_count": affected, "severity_breakdown": sev_count, "blocked_items": blocked}
+        token = str(_uuid.uuid4())
+        # Store token → allowed_ids mapping in memory (TTL 5 min)
+        if not hasattr(self, '_dry_run_tokens'):
+            self._dry_run_tokens = {}
+        self._dry_run_tokens[token] = {
+            "allowed_ids": allowed_ids, "action": "skip",
+            "created_at": datetime.now(timezone.utc),
+        }
+        return {
+            "dry_run_token": token,
+            "affected_count": affected, "severity_breakdown": sev_count,
+            "blocked_items": blocked,
+        }
 
     # ── Batch skip ─────────────────────────────────────────────────────
 
-    async def batch_skip(self, db: AsyncSession, result_ids: list[str], user: User, reason: str) -> dict:
+    async def batch_skip(self, db: AsyncSession, result_ids: list[str], user: User,
+                         reason: str, dry_run_token: str = "",
+                         idempotency_key: str = "") -> dict:
+        # Validate dry_run_token
+        if dry_run_token and hasattr(self, '_dry_run_tokens'):
+            token_data = self._dry_run_tokens.get(dry_run_token)
+            if not token_data:
+                raise ValueError("dry_run_token 无效或已过期，请重新预览")
+            if token_data["action"] != "skip":
+                raise ValueError("dry_run_token action 不匹配")
+            # Clean up token
+            del self._dry_run_tokens[dry_run_token]
+
+        # Idempotency check
+        if idempotency_key and hasattr(self, '_batch_idem_keys'):
+            if idempotency_key in self._batch_idem_keys:
+                return {"skipped": 0, "idempotent": True, "message": "已处理过，跳过"}
+        if not hasattr(self, '_batch_idem_keys'):
+            self._batch_idem_keys = set()
+
         dry = await self.batch_dry_run(db, result_ids)
         if dry["blocked_items"]:
             raise ValueError(f"存在 {len(dry['blocked_items'])} 项阻塞，请先执行 dry-run")
+        skipped = 0
         for rid in result_ids:
             try:
                 await self.skip_review(db, rid, user, reason)
+                skipped += 1
             except Exception:
                 pass
-        return {"skipped": dry["affected_count"]}
+        if idempotency_key:
+            self._batch_idem_keys.add(idempotency_key)
+        return {"skipped": skipped, "idempotent": False}
 
     # ── Feedback generation ───────────────────────────────────────────
 

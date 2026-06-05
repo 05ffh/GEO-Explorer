@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import String, ForeignKey, DateTime, Boolean, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from src.models.base import Base, UUIDMixin
@@ -19,4 +19,4 @@ class GroundTruthEvidence(Base, UUIDMixin):
     confidence: Mapped[str] = mapped_column(String(20), default="low")
     human_confirmed: Mapped[bool] = mapped_column(Boolean, default=False)
     review_status: Mapped[str] = mapped_column(String(20), default="pending")  # pending/reviewed/flagged
-    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.utcnow())
+    collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

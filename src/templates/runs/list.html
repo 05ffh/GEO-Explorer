@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
+{% from "partials/components/status_badge.html" import status_badge %}
+
+{% block title %}采集记录 — {{ vm_brand_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="flex items-center justify-between mb-5">
+        <div>
+            <h1 class="font-heading text-2xl font-bold text-text">采集记录</h1>
+            <p class="text-sm text-slate-500 mt-0.5">{{ vm_brand_name }}</p>
+        </div>
+        <a href="/brands/{{ vm_brand_id }}/preflight"
+           class="px-4 py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer">
+            启动新诊断
+        </a>
+    </div>
+
+    {% if not vm.has_runs %}
+        {{ empty_state("暂无采集记录", "启动一次 GEO 诊断来采集 AI 平台数据", "/brands/" ~ vm_brand_id ~ "/preflight", "启动诊断") }}
+    {% else %}
+    <div class="space-y-3">
+        {% for run in vm.runs %}
+        <div class="bg-white border border-gray-200 rounded-lg p-4 hover:border-primary-light/20 transition-colors">
+            <div class="flex items-start justify-between gap-4">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-3 mb-2">
+                        <span class="font-mono text-xs text-slate-400">#{{ run.id[:8] }}</span>
+                        {% if run.status == "running" or run.status == "pending" %}
+                        <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-700">采集中</span>
+                        {% elif run.status == "completed" %}
+                        <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">已完成</span>
+                        {% elif run.status == "failed" %}
+                        <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">失败</span>
+                        {% elif run.status == "partial" %}
+                        <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">部分成功</span>
+                        {% elif run.status == "cancelled" %}
+                        <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 text-slate-600">已取消</span>
+                        {% else %}
+                        <span class="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 text-slate-600">{{ run.status }}</span>
+                        {% endif %}
+                        <span class="text-xs text-slate-400">{{ run.trigger_type }}</span>
+                    </div>
+
+                    <div class="flex items-center gap-4 text-sm">
+                        <div class="flex items-center gap-2 flex-1 max-w-xs">
+                            <div class="flex-1 bg-slate-200 rounded-full h-1.5">
+                                <div class="h-1.5 rounded-full {% if run.progress_pct == 100 %}bg-green-500{% elif run.progress_pct > 0 %}bg-primary-light{% else %}bg-red-400{% endif %}"
+                                     style="width: {{ run.progress_pct }}%"></div>
+                            </div>
+                            <span class="text-xs text-slate-500 flex-shrink-0">{{ run.success_count }}/{{ run.total_queries }}</span>
+                        </div>
+                        <span class="text-xs text-slate-400">{{ run.started_at }}</span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <a href="/brands/{{ vm_brand_id }}/runs/{{ run.id }}"
+                       class="px-3 py-1.5 text-xs font-medium text-primary border border-primary/20 rounded-md hover:bg-primary/5 transition-colors cursor-pointer">
+                        查看详情
+                    </a>
+                    {% if run.is_running %}
+                    <button onclick="cancelRun('{{ run.id }}', this)"
+                            class="cancel-run-btn px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-md hover:bg-red-50 transition-colors cursor-pointer">
+                        取消
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if vm.total_pages > 1 %}
+    <div class="flex items-center justify-between mt-5 pt-4 border-t border-gray-200">
+        <p class="text-sm text-slate-500">共 {{ vm.total }} 条记录</p>
+        <div class="flex gap-1">
+            {% if vm.page > 1 %}
+            <a href="/brands/{{ vm_brand_id }}/runs?page={{ vm.page - 1 }}"
+               class="px-3 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors cursor-pointer">上一页</a>
+            {% endif %}
+            {% for p in range(1, vm.total_pages + 1) %}
+                {% if p >= vm.page - 2 and p <= vm.page + 2 %}
+                <a href="/brands/{{ vm_brand_id }}/runs?page={{ p }}"
+                   class="w-8 h-8 text-sm rounded-md flex items-center justify-center transition-colors cursor-pointer
+                          {% if p == vm.page %}bg-primary text-white{% else %}text-slate-600 hover:bg-slate-100{% endif %}">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if vm.page < vm.total_pages %}
+            <a href="/brands/{{ vm_brand_id }}/runs?page={{ vm.page + 1 }}"
+               class="px-3 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors cursor-pointer">下一页</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function cancelRun(runId, btn) {
+    if (!confirm('确定要取消这个采集任务吗？')) return;
+    var origHTML = btn.innerHTML;
+    btn.innerHTML = '取消中...';
+    btn.disabled = true;
+
+    try {
+        var data = await geoFetch('/api/collections/' + runId + '/cancel', { method: 'POST' });
+        if (data.accepted || data.status === 'cancelled' || data.status === 'revoked') {
+            showToast('采集已取消', 'success');
+            setTimeout(function() { window.location.reload(); }, 1000);
+        } else {
+            showToast('取消失败: ' + (data.message || '未知错误'), 'error');
+            btn.innerHTML = origHTML;
+            btn.disabled = false;
+        }
+    } catch (err) {
+        showToast('取消请求失败', 'error');
+        btn.innerHTML = origHTML;
+        btn.disabled = false;
+    }
+}
+</script>
+{% endblock %}

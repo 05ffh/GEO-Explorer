@@ -6,79 +6,53 @@
 
 ## 项目状态
 
-**Phase A + P0 7-10 + P1 1-10 + P2 1-4 全部完成。593 tests (0 failures)。GitHub: https://github.com/05ffh/GEO-Explorer**
+**全部完成。631 tests (0 failures)。集成审计通过，完整管道跑通。GitHub: https://github.com/05ffh/GEO-Explorer**
 
-完整链路:
+Phase A + P0 7-10 + P1 1-10 + P2 1-4 + 前端架构补齐 + ClaimNature v2 + 5模块前端补齐 + 集成审计。
+
+完整链路 (已验证端到端):
 ```
-GT采集(含S/A/B/C/D来源等级) → GT审核(证据+人工双重阻断) → 品牌GEO采集
-→ 模板健康前置门槛(P0-8) → 模板版本钉定(P1-7) → 5KPI(模板→指标绑定P0-9)
-→ 4层幻觉分类(P0-7) → LLM-as-Judge(P1-6) → Debug Evidence(P1-5)
-→ Claim Taxonomy(P2-1): FACT/OPINION/SPECULATION 三分类 + 独立风险判定
-→ 多证据GT(P2-2): 来源加权共识 + 冲突分级 + evidence_consensus_json
-→ 行业KPI权重+阈值(P1-9) → 样本充分度评估(P1-10)
-→ Action Theme聚合 → Content Package(风险分级+状态机)
-→ 报告质量Summary → Go/No-Go → 报告(.md/.docx/.pdf)
-→ 历史重归因(P1-8): original vs corrected 双视图
-→ 人审闭环(P2-4): needs_human_review→claim→review→feedback→GT/template/detector改进
+GT采集(S/A/B/C/D) → GT审核 → 品牌GEO采集 → 模板健康前置门槛 → 模板版本钉定
+→ 5KPI + 5扩展KPI → 4层幻觉分类 → ClaimNature v2
+→ 多证据GT → 行业KPI权重 → 样本充分度
+→ Action Theme → Content Package → 报告质量Summary → Go/No-Go
+→ 三格式报告 → 历史重归因 → 人审闭环
 ```
 
-**Phase A + P0 + P1 + P2 + 前端骨架补全 全部完成。593 tests (0 failures)。**
+**ClaimNature v2**: Accuracy 77.0%, UNKNOWN 20.0%, SPECULATION recall 85.7%, Macro F1 0.696
 
-**本会话修复的关键 bug**:
-- verdict 口径对齐: 9 处旧 `"incorrect"` → `"contradicted"/"unsupported"` (commit fe4e795)
-- Content Package 生成: `_generate_content_packages()` 定义但未调用 → 接入 pipeline (commit 2f61adb)
-- evidence 页: `vm.items` → `vm["items"]` (Jinja2 dict 方法冲突) (commit 531b7f7)
-- Severity 枚举: `"info"` → `"Info"` (与检测器输出对齐)
-- delivery.py: 缺失 `import logging` + `logger` 定义
+## 前端补齐流程
 
-**瑞幸咖啡诊断验证**: 通过完整链路 — GT采集→Promote→采集→幻觉检测→KPI→Content Package→三格式报告
+spec → 桌面审阅 → 补齐清单 → 吸收 → Build → 验证 (可跳过 Plan)。TDD 铁律。
 
-**遗留待办**:
-- 17 处 `datetime.utcnow()` → `datetime.now(timezone.utc)`
-- `HallucinationVerdict` 枚举统一导入 (根本原因 — 枚举定义但从未使用)
-- GT 审核页适配 v2
-- Wenxin API Key 续期
-- ClaimNature 中文识别率优化 (77% UNKNOWN)
-- GT 来源升级 C→S/A/B
+## 设计系统
 
-**下一步**: 用户输入 /compact 后继续修复遗留项。
-
-**P1/P2 推进流程:** spec → 发桌面审阅 → 用户发回补齐清单 → 完全吸收 → Build → 有效性验证
-
-**设计系统:** Data-Dense Dashboard, #1E40AF/#3B82F6/#F59E0B, Fira Code+Fira Sans, Jinja2+HTMX+Tailwind CDN+Chart.js+Heroicons
-
-## 项目文档
-
-- 完整介绍: `reports/GEO_Explorer_项目介绍.md` (PDF 也在同目录)
-- 设计规范: `docs/superpowers/specs/`
-- 实现计划: `docs/superpowers/plans/`
-- 长期记忆: `/home/ffh/.claude/projects/-home-ffh/memory/`（用户输入"GEO"触发加载）
-
-## Retrospectives
-
-每次开发任务前:
-1. 读取 `docs/retrospectives/INDEX.md`
-2. 搜索与当前任务关键词相关的复盘记录
-3. 在实现说明中列出已参考的教训
-4. 若本次踩坑超过 30 分钟，按 TEMPLATE.md 格式新增 retrospective 并更新 INDEX.md
-
-## CodeGraph
-
-此项目已初始化 CodeGraph 索引。使用 `codegraph_*` 工具进行结构性代码探索，优于 grep。
+Data-Dense Dashboard, #1E40AF/#3B82F6/#F59E0B, Fira Code+Fira Sans, Jinja2+HTMX+Tailwind CDN+Chart.js+Heroicons
 
 ## 关键路径
 
-- 项目根目录: `/home/ffh/explore geo/`
-- symlink: `/home/ffh/geo-explorer` → `/home/ffh/explore geo`（避免路径空格）
-- PostgreSQL: Docker 容器 `exploregeo-db-1` (postgres:16-alpine) localhost:5432（geo/geo, geo_explorer）/ `exploregeo-test_db-1` localhost:5433（geo_test/geo_test, geo_explorer_test）。启动: `docker start exploregeo-db-1 exploregeo-test_db-1`
-- Redis: 系统服务 `geo-redis` localhost:6379，启动: `sudo systemctl start geo-redis`
-- Systemd 服务: `geo-redis`, `geo-celery`, `geo-api`（`sudo systemctl {start,stop,restart} geo-*`）
-- 品牌报告输出: `reports/{品牌}_{日期}/`
-- Alembic 多库: `alembic.ini` 指向主库 5432。迁移测试库需 `DATABASE_URL=... alembic upgrade <rev>`。测试库需单独 stamp 跳过已存在的列。Alembic 有双 head (旧 chain 0da168569f6d + 新 chain)，不能 merge，用具体 revision 升级。
-- sudo 密码: 050618
+- 项目: `/home/ffh/explore geo/`, symlink `/home/ffh/geo-explorer`
+- API: http://localhost:8000/login
+- DB: Docker `exploregeo-db-1:5432` / test `exploregeo-test_db-1:5433`
+- Redis: systemd `geo-redis:6379`
+- Systemd: `geo-redis`, `geo-celery`, `geo-api`
+- sudo: 050618
 
-## 环境
+## 历史 Bug 清单 (已全部修复)
 
-- .venv 在项目根目录
-- Node.js 22 通过 nvm（`~/.nvm/versions/node/v22.22.2/bin`），Puppeteer+marked 已安装
-- md2pdf 命令: `md2pdf <input.md> [output.pdf]`
+| Bug | 文件 | 影响 |
+|-----|------|------|
+| `_page_context` current_page 关键字重复 → TypeError 500 | `main.py` | SaaS/Queue/Publishing 全挂 |
+| Jinja2 `vm.xxx` dict 方法冲突 (queue_monitor + publishing) | 2 个模板 | 页面崩溃 |
+| `add_audit_log(None)` → Celery DLQ 崩溃 | `services/audit.py` | 任务失败无法追踪 |
+| `_PreflightResult(status=...)` 参数名不匹配 | `collector/engine.py` | 全部模板误判 invalid |
+| `_build_template_health_report` 不接受 QueryTemplate | `collector/engine.py` | Preflight 误报 |
+| Dashboard `collection-runs` → 应为 `collections` | `dashboard/index.html` | 按钮 404 |
+| `deliver_customer_reports` 不存在 | `main.py` | 报告生成 API 500 |
+| `sum(status=="success")` SQL 表达式错误 | `run_detail.py` | Run 详情页 500 |
+
+## 长期待办
+
+- Wenxin API Key 续期
+- GT 来源升级 C→S/A/B
+- Doubao/Kimi 限流缓解

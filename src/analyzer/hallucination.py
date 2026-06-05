@@ -6,7 +6,7 @@ from src.models.ground_truth import GroundTruthVersion
 from src.models.hallucination import HallucinationResult
 from src.schemas.ground_truth import GT_FIELD_LEVELS
 from src.analyzer.claim_taxonomy import classify_claim_nature
-from src.analyzer.enums import ClaimNature
+from src.analyzer.enums import ClaimNature, HallucinationVerdict
 from src.services.evidence_cross_validator import EvidenceCrossValidator, EvidenceStrengthLevel, ConflictLevel
 
 
@@ -21,8 +21,8 @@ from src.services.evidence_cross_validator import EvidenceCrossValidator, Eviden
 # ambiguous: claim is semantically unclear
 # not_checkable: claim cannot be fact-checked
 
-SERIOUS_CONTROVERSY = {"contradicted", "unsupported"}
-NON_HALLUCINATION = {"not_about_brand", "generic_statement", "template_invalid", "not_checkable"}
+SERIOUS_CONTROVERSY = {HallucinationVerdict.CONTRADICTED, HallucinationVerdict.UNSUPPORTED}
+NON_HALLUCINATION = {HallucinationVerdict.NOT_ABOUT_BRAND, HallucinationVerdict.GENERIC_STATEMENT, HallucinationVerdict.TEMPLATE_INVALID, HallucinationVerdict.NOT_CHECKABLE}
 
 _UNRESOLVED_VAR_RE = re.compile(r"\{[^{}]+\}")
 
@@ -90,6 +90,9 @@ class Claim:
     claim_nature: str = "unknown"            # fact | opinion | speculation | unknown (ClaimNature enum value)
     claim_nature_confidence: float = 0.0     # classifier confidence
     claim_nature_reason: str = ""            # classifier explanation
+    claim_nature_signals: list = field(default_factory=list)       # matched signal words
+    claim_nature_signal_strength: str = ""   # strong | weak | mixed | none
+    claim_nature_needs_hr: bool = False      # classifier-flagged for human review
 
 
 @dataclass
@@ -265,6 +268,9 @@ class HallucinationDetector:
                         claim_nature=nature_result.claim_nature.value,
                         claim_nature_confidence=nature_result.confidence,
                         claim_nature_reason=nature_result.reason,
+                        claim_nature_signals=nature_result.matched_signals,
+                        claim_nature_signal_strength=nature_result.signal_strength,
+                        claim_nature_needs_hr=nature_result.needs_human_review,
                     ))
                     break
 
@@ -286,18 +292,18 @@ class HallucinationDetector:
         # Non-checkable claims
         if not claim.checkable:
             if claim.subject_type == "generic":
-                return {"verdict": "generic_statement", "severity": "Info",
+                return {"verdict": HallucinationVerdict.GENERIC_STATEMENT, "severity": "Info",
                         "error_type": None, "needs_human_review": False,
                         "reason": "Generic statement, not a brand-specific claim",
                         "ai_claim": claim.claim_text, "ground_truth_value": "",
                         "evidence": _evidence("not_checkable:generic")}
             if claim.subject_type == "competitor":
-                return {"verdict": "not_checkable", "severity": "Info",
+                return {"verdict": HallucinationVerdict.NOT_CHECKABLE, "severity": "Info",
                         "error_type": None, "needs_human_review": False,
                         "reason": "Claim about competitor, not target brand",
                         "ai_claim": claim.claim_text, "ground_truth_value": "",
                         "evidence": _evidence("not_checkable:competitor")}
-            return {"verdict": "not_checkable", "severity": "Info",
+            return {"verdict": HallucinationVerdict.NOT_CHECKABLE, "severity": "Info",
                     "error_type": None, "needs_human_review": False,
                     "reason": f"Subject type '{claim.subject_type}' not checkable against brand GT",
                     "ai_claim": claim.claim_text, "ground_truth_value": "",
@@ -309,7 +315,7 @@ class HallucinationDetector:
 
         gt_value = gt_json.get(claim.field)
         if not gt_value:
-            return {"verdict": "gt_insufficient", "severity": "Info",
+            return {"verdict": HallucinationVerdict.GT_INSUFFICIENT, "severity": "Info",
                     "error_type": None, "needs_human_review": False,
                     "reason": f"GT field '{claim.field}' not defined, cannot verify",
                     "ai_claim": claim.claim_text, "ground_truth_value": "",
@@ -322,7 +328,7 @@ class HallucinationDetector:
         gt_lower = gt_str.lower()
         if gt_lower and len(gt_lower) >= 2:
             if gt_lower in claim_lower or claim_lower in gt_lower:
-                return {"verdict": "supported", "severity": field_level,
+                return {"verdict": HallucinationVerdict.SUPPORTED, "severity": field_level,
                         "error_type": None, "needs_human_review": False,
                         "similarity_score": 1.0,
                         "reason": "Exact string match in claim",
@@ -333,7 +339,7 @@ class HallucinationDetector:
         gt_tokens = _tokenize(gt_str)
 
         if not claim_tokens or not gt_tokens:
-            return {"verdict": "ambiguous", "severity": "Info",
+            return {"verdict": HallucinationVerdict.AMBIGUOUS, "severity": "Info",
                     "error_type": None, "needs_human_review": False,
                     "reason": "Insufficient tokens for comparison",
                     "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
@@ -356,7 +362,7 @@ class HallucinationDetector:
                 from difflib import SequenceMatcher
                 char_sim = SequenceMatcher(None, claim_clean, gt_clean).ratio()
                 if char_sim < 0.85:
-                    return {"verdict": "contradicted", "severity": "P0",
+                    return {"verdict": HallucinationVerdict.CONTRADICTED, "severity": "P0",
                             "error_type": "identity_error" if claim.field == "official_name"
                             else "category_error",
                             "needs_human_review": True,
@@ -374,7 +380,7 @@ class HallucinationDetector:
 
         # Supported: strong overlap both ways
         if gt_coverage >= 0.3 and claim_coverage >= 0.2:
-            return {"verdict": "supported", "severity": field_level,
+            return {"verdict": HallucinationVerdict.SUPPORTED, "severity": field_level,
                     "error_type": None, "needs_human_review": False,
                     "similarity_score": round(similarity_score, 3),
                     "reason": f"Token match: claim={claim_coverage:.0%} gt={gt_coverage:.0%}",
@@ -390,7 +396,7 @@ class HallucinationDetector:
         hit_forbidden = [t for t in extra_tokens if t in forbidden]
 
         if hit_forbidden:
-            return {"verdict": "contradicted", "severity": "P0",
+            return {"verdict": HallucinationVerdict.CONTRADICTED, "severity": "P0",
                     "error_type": "overclaim", "needs_human_review": True,
                     "similarity_score": round(similarity_score, 3),
                     "reason": f"Forbidden claim: {hit_forbidden}",
@@ -405,7 +411,7 @@ class HallucinationDetector:
                 "official_name", "category", "positioning")
             severity = "P0" if field_level == "P0" and claim.field in (
                 "official_name", "industry", "category", "core_products") else field_level
-            return {"verdict": "contradicted", "severity": severity,
+            return {"verdict": HallucinationVerdict.CONTRADICTED, "severity": severity,
                     "error_type": error_type, "needs_human_review": needs_review,
                     "similarity_score": round(similarity_score, 3),
                     "reason": f"Tokens not in GT: {sorted(extra_tokens)[:5]}",
@@ -420,7 +426,7 @@ class HallucinationDetector:
 
         # Unsupported / ambiguous
         if overlap:
-            return {"verdict": "unsupported", "severity": field_level,
+            return {"verdict": HallucinationVerdict.UNSUPPORTED, "severity": field_level,
                     "error_type": None, "needs_human_review": False,
                     "similarity_score": round(similarity_score, 3),
                     "reason": "Partial match — GT cannot fully confirm",
@@ -431,7 +437,7 @@ class HallucinationDetector:
                         similarity_score=round(similarity_score, 3),
                         overlap_tokens=sorted(overlap)[:5])}
 
-        return {"verdict": "ambiguous", "severity": "Info",
+        return {"verdict": HallucinationVerdict.AMBIGUOUS, "severity": "Info",
                 "error_type": None, "needs_human_review": False,
                 "reason": "No meaningful overlap with GT",
                 "ai_claim": claim.claim_text, "ground_truth_value": gt_str,
@@ -460,7 +466,7 @@ class HallucinationDetector:
             high_risk_fields = {"official_name", "industry", "category",
                                 "core_products", "core_features"}
             severity = "P1" if claim.field in high_risk_fields else "P2"
-            return {"verdict": "not_checkable", "severity": severity,
+            return {"verdict": HallucinationVerdict.NOT_CHECKABLE, "severity": severity,
                     "error_type": "opinion_absolute_claim",
                     "needs_human_review": True,
                     "reason": f"观点声明包含绝对化表达: {claim.claim_text[:80]}",
@@ -468,7 +474,7 @@ class HallucinationDetector:
                     "evidence": _evidence("opinion:absolute_claim",
                         claim_nature="opinion")}
 
-        return {"verdict": "not_checkable", "severity": "Info",
+        return {"verdict": HallucinationVerdict.NOT_CHECKABLE, "severity": "Info",
                 "error_type": "opinion_claim",
                 "needs_human_review": False,
                 "reason": "观点类声明，不进入事实准确率判定",
@@ -492,11 +498,11 @@ class HallucinationDetector:
         is_high_risk = predicate in HIGH_RISK_PREDICATES
 
         current_severity = verification.get("severity", "P1")
-        current_verdict = verification.get("verdict", "unsupported")
+        current_verdict = verification.get("verdict", HallucinationVerdict.UNSUPPORTED)
 
         if is_high_risk:
             # Financial/regulatory/health speculation: elevate severity
-            if current_verdict in ("contradicted", "unsupported"):
+            if current_verdict in (HallucinationVerdict.CONTRADICTED, HallucinationVerdict.UNSUPPORTED):
                 verification["severity"] = "P0" if current_severity == "P0" else "P1"
                 verification["needs_human_review"] = True
                 verification["error_type"] = f"high_risk_speculation_{predicate}"
@@ -506,10 +512,10 @@ class HallucinationDetector:
                 verification["evidence"] = ev
         else:
             # Low/medium risk speculation: lower severity
-            if current_verdict == "contradicted":
+            if current_verdict == HallucinationVerdict.CONTRADICTED:
                 verification["severity"] = "P2"
                 verification["error_type"] = "low_risk_speculation"
-            elif current_verdict == "unsupported" and current_severity == "P0":
+            elif current_verdict == HallucinationVerdict.UNSUPPORTED and current_severity == "P0":
                 verification["severity"] = "P1"
 
         # Tag verification with claim nature
@@ -533,9 +539,9 @@ class HallucinationDetector:
 
         # Only extract brand claims for brand_centric responses
         if relevance.relevance not in ("brand_centric", "brand_mentioned"):
-            verdict = "not_about_brand" if relevance.relevance != "category_general" else "generic_statement"
+            verdict = HallucinationVerdict.NOT_ABOUT_BRAND if relevance.relevance != "category_general" else HallucinationVerdict.GENERIC_STATEMENT
             if render_status != "ok":
-                verdict = "template_invalid"
+                verdict = HallucinationVerdict.TEMPLATE_INVALID
             return [HallucinationResult(
                 brand_id=query_result.brand_id,
                 query_result_id=query_result.id,
@@ -587,7 +593,7 @@ class HallucinationDetector:
                     pass
             reason = verification.get("reason", "")
             # P1-1: attach GT source evidence for contradicted claims
-            if verification.get("verdict") == "contradicted" and hasattr(gt, "get_best_source_for_field"):
+            if verification.get("verdict") == HallucinationVerdict.CONTRADICTED and hasattr(gt, "get_best_source_for_field"):
                 best_src = gt.get_best_source_for_field(claim.field, min_tier="B")
                 if best_src:
                     reason += f" | GT source: [{best_src.get('tier','?')}] {best_src.get('title','') or best_src.get('url','')}"
@@ -626,6 +632,13 @@ class HallucinationDetector:
                 predicate_type=getattr(claim, "predicate_type", "other"),
                 evidence_consensus_json=evidence_json,
             )
+            # Append claim nature debug info to reason
+            cn_signals = getattr(claim, "claim_nature_signals", None)
+            cn_strength = getattr(claim, "claim_nature_signal_strength", "")
+            if cn_signals:
+                h.reason += f" | cn_signals={cn_signals[:5]}"
+            if cn_strength:
+                h.reason += f" | cn_strength={cn_strength}"
             # P2-2: disputed or critical conflict → not hallucination, evidence risk
             if evidence_json:
                 strength = evidence_json.get("evidence_strength_level", "")
@@ -640,18 +653,24 @@ class HallucinationDetector:
                         h.reason += " | evidence:disputed(GT证据有争议,不计入AI幻觉)"
             # P2-1: auto-mark for human review on low-confidence / UNKNOWN / high-risk speculation
             if not h.needs_human_review:
-                nc = getattr(claim, "claim_nature_confidence", 1.0)
-                cn = getattr(claim, "claim_nature", "unknown")
-                pt = getattr(claim, "predicate_type", "other")
-                if nc < 0.6 and cn != "unknown":
+                # Check if classifier itself flagged this claim for human review
+                c_hr = getattr(claim, "claim_nature_needs_hr", False)
+                if c_hr:
                     h.needs_human_review = True
-                    h.reason += f" | human_review: low_classifier_confidence({nc:.2f})"
-                elif cn == "unknown":
-                    h.needs_human_review = True
-                    h.reason += " | human_review: unknown_claim_nature"
-                elif cn == "speculation" and pt in ("identity", "core_product", "financial_performance"):
-                    h.needs_human_review = True
-                    h.reason += f" | human_review: high_risk_speculation({pt})"
+                    h.reason += " | human_review: classifier_flagged"
+                else:
+                    nc = getattr(claim, "claim_nature_confidence", 1.0)
+                    cn = getattr(claim, "claim_nature", "unknown")
+                    pt = getattr(claim, "predicate_type", "other")
+                    if nc < 0.6 and cn != "unknown":
+                        h.needs_human_review = True
+                        h.reason += f" | human_review: low_classifier_confidence({nc:.2f})"
+                    elif cn == "unknown":
+                        h.needs_human_review = True
+                        h.reason += " | human_review: unknown_claim_nature"
+                    elif cn == "speculation" and pt in ("identity", "core_product", "financial_performance"):
+                        h.needs_human_review = True
+                        h.reason += f" | human_review: high_risk_speculation({pt})"
             results.append(h)
         return results
 
@@ -687,7 +706,7 @@ class HallucinationDetector:
                         if text.startswith("json"):
                             text = text[4:]
                     result = _json.loads(text)
-                    if result.get("verdict") in ("supported", "contradicted", "unsupported"):
+                    if result.get("verdict") in (HallucinationVerdict.SUPPORTED, HallucinationVerdict.CONTRADICTED, HallucinationVerdict.UNSUPPORTED):
                         return {
                             "verdict": result["verdict"],
                             "confidence": float(result.get("confidence", 0.5)),

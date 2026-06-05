@@ -7,14 +7,50 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
-        theme: { extend: { colors: { primary: '#1E40AF', 'primary-light': '#3B82F6', surface: '#F8FAFC', text: '#1E3A8A' } } }
+        theme: { extend: { colors: { primary: '#1E40AF', 'primary-light': '#3B82F6', cta: '#F59E0B', surface: '#F8FAFC', text: '#1E3A8A' } } }
       }
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body class="bg-surface font-sans min-h-screen flex items-center justify-center">
     <div class="bg-white rounded-xl shadow-lg p-8 w-full max-w-sm">
-        <h1 class="font-heading text-xl font-bold text-text text-center mb-6">GEO Explorer</h1>
+        <h1 class="font-heading text-xl font-bold text-text text-center mb-2">GEO Explorer</h1>
+
+        {% if needs_setup %}
+        <!-- ═══ First-time setup ═══ -->
+        <p class="text-sm text-slate-400 text-center mb-6">首次设置</p>
+        <form id="setup-form" class="space-y-4" onsubmit="handleSetup(event)">
+            <p class="text-sm text-slate-500 text-center">首次使用，请创建最高权限账号</p>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">姓名</label>
+                <input type="text" name="name" id="setup-name" required
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light focus:border-transparent">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">邮箱</label>
+                <input type="email" name="email" id="setup-email" required
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light focus:border-transparent">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">组织名称</label>
+                <input type="text" name="org_name" id="setup-org" required
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light focus:border-transparent">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">密码</label>
+                <input type="password" name="password" id="setup-password" required minlength="6"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light focus:border-transparent"
+                       placeholder="至少 6 位">
+            </div>
+            <div id="setup-error-msg" class="text-sm text-red-600 hidden"></div>
+            <button type="submit"
+                    class="w-full py-2.5 bg-cta text-white rounded-lg font-medium hover:opacity-90 transition-colors duration-200 cursor-pointer">
+                创建账号</button>
+        </form>
+
+        {% else %}
+        <!-- ═══ Login ═══ -->
+        <p class="text-sm text-slate-400 text-center mb-6">品牌 AI 可见度监测平台</p>
         <form id="login-form" class="space-y-4" onsubmit="handleLogin(event)">
             <div>
                 <label class="block text-sm font-medium text-slate-700 mb-1">邮箱</label>
@@ -28,38 +64,58 @@
             </div>
             <div id="error-msg" class="text-sm text-red-600 hidden"></div>
             <button type="submit"
-                    class="w-full py-2.5 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-colors duration-200 cursor-pointer">
+                    class="w-full py-2.5 bg-primary text-white rounded-lg font-medium hover:opacity-90 transition-colors duration-200 cursor-pointer">
                 登录</button>
-            <div class="pt-3 border-t border-gray-100 mt-3">
-                <p class="text-xs text-slate-400 mb-2">本地开发 — 一键登录</p>
-                <button type="button" onclick="doLogin('test@geo.com','test123')"
-                        class="w-full py-2 bg-slate-100 text-slate-700 rounded-lg text-sm hover:bg-slate-200 cursor-pointer">
-                    test@geo.com (星巴克)</button>
-                <button type="button" onclick="doLogin('test@test.com','test123')"
-                        class="w-full py-2 bg-slate-100 text-slate-700 rounded-lg text-sm hover:bg-slate-200 cursor-pointer mt-2">
-                    test@test.com (测试品牌)</button>
-            </div>
         </form>
-        <p class="text-xs text-slate-400 text-center mt-4">GEO Explorer — 品牌 AI 可见度监测平台</p>
+        {% endif %}
     </div>
 
     <script>
+    {% if needs_setup %}
+    async function handleSetup(e) {
+        e.preventDefault();
+        var btn = document.querySelector('#setup-form button[type=submit]');
+        var errEl = document.getElementById('setup-error-msg');
+        btn.textContent = '创建中...';
+        btn.disabled = true;
+        errEl.classList.add('hidden');
+        try {
+            var resp = await fetch('/api/auth/setup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: document.getElementById('setup-name').value,
+                    email: document.getElementById('setup-email').value,
+                    org_name: document.getElementById('setup-org').value,
+                    password: document.getElementById('setup-password').value
+                })
+            });
+            if (!resp.ok) { var data = await resp.json(); throw new Error(data.detail || '创建失败'); }
+            var data = await resp.json();
+            localStorage.setItem('geo_token', data.access_token);
+            localStorage.setItem('geo_user', data.user_name);
+            document.cookie = 'geo_token=' + data.access_token + ';path=/;max-age=86400';
+            window.location.href = '/';
+        } catch (err) {
+            errEl.textContent = err.message;
+            errEl.classList.remove('hidden');
+            btn.textContent = '创建账号';
+            btn.disabled = false;
+        }
+    }
+    {% else %}
     async function doLogin(email, password) {
         var btn = document.querySelector('#login-form button[type=submit]');
         var errEl = document.getElementById('error-msg');
         if (btn) { btn.textContent = '登录中...'; btn.disabled = true; }
         errEl.classList.add('hidden');
-
         try {
             var resp = await fetch('/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: email, password: password })
             });
-            if (!resp.ok) {
-                var data = await resp.json();
-                throw new Error(data.detail || '登录失败');
-            }
+            if (!resp.ok) { var data = await resp.json(); throw new Error(data.detail || '登录失败'); }
             var data = await resp.json();
             localStorage.setItem('geo_token', data.access_token);
             localStorage.setItem('geo_user', data.user_name);
@@ -79,6 +135,7 @@
             document.getElementById('password').value
         );
     }
+    {% endif %}
     </script>
 </body>
 </html>

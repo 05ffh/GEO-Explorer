@@ -78,9 +78,16 @@ async def build_reports_vm(brand, user, db) -> dict:
             "artifacts": run_artifacts,
         })
 
+    has_generating = any(
+        r["artifacts"].get(ed, {}).get("status") == "generating"
+        for r in run_list
+        for ed in ["executive", "implementation", "customer"]
+    )
+
     return {
         "brand": {"id": str(brand.id), "name": brand.name},
         "runs": run_list,
+        "has_generating": has_generating,
         "editions": [
             {"key": "executive", "label": "高管摘要", "desc": "CEO/CMO 一页概览"},
             {"key": "implementation", "label": "执行方案", "desc": "内容团队可执行清单"},

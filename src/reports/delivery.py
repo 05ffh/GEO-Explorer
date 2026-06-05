@@ -8,6 +8,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+from src.analyzer.enums import HallucinationVerdict
 
 
 async def deliver_all_reports(
@@ -160,7 +161,7 @@ async def _fetch_analysis_data(brand_id: str, collection_run_id: str, brand_name
     data["hallucinations"] = [dict(r._mapping) for r in hall.fetchall()]
     data["hall_total"] = sum(h["c"] for h in data["hallucinations"])
     data["hall_incorrect"] = sum(h["c"] for h in data["hallucinations"]
-                                  if h["verdict"] in ("contradicted", "unsupported"))
+                                  if h["verdict"] in (HallucinationVerdict.CONTRADICTED, HallucinationVerdict.UNSUPPORTED))
 
     # Action plans
     ap = await db.execute(text("""

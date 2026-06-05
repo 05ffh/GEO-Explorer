@@ -15,6 +15,41 @@ from src.models.ground_truth import GroundTruthVersion
 router = APIRouter(prefix="/api", tags=["ground_truth"])
 
 
+@router.get("/brands/{brand_id}/gt/coverage")
+async def get_gt_coverage(
+    brand_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get GT coverage stats for a brand."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    gt = (await db.execute(
+        select(GroundTruthVersion).where(
+            GroundTruthVersion.brand_id == brand.id,
+            GroundTruthVersion.status == "active",
+        ).order_by(GroundTruthVersion.version.desc())
+    )).scalars().first()
+
+    required = getattr(settings, 'gt_required_fields', [])
+    gt_json = gt.ground_truth_json if gt else {}
+    gt_fields = list(gt_json.keys())
+    covered = [f for f in required if f in gt_fields]
+    missing = [f for f in required if f not in gt_fields]
+    coverage = len(covered) / len(required) if required else 1.0
+
+    return {
+        "brand_id": str(brand.id),
+        "has_active_gt": gt is not None,
+        "gt_version": gt.version if gt else None,
+        "gt_fields": gt_fields,
+        "required_fields": required,
+        "covered_fields": covered,
+        "missing_fields": missing,
+        "coverage": round(coverage, 2),
+        "sufficient": coverage >= 0.5,
+    }
+
+
 class FieldReview(BaseModel):
     field_name: str
     action: Literal["accept", "edit", "delete", "uncertain"]

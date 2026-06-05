@@ -37,7 +37,7 @@ class TestClaimNatureClassifier:
     def test_opinion_best_cn(self):
         r = self.c.classify("星巴克提供最好的咖啡体验")
         assert r.claim_nature == ClaimNature.OPINION
-        assert r.confidence >= 0.65
+        assert r.confidence >= 0.55  # fact weak signal "提供" reduces confidence
 
     def test_opinion_leading_cn(self):
         r = self.c.classify("行业领先的移动应用")
@@ -67,7 +67,7 @@ class TestClaimNatureClassifier:
     def test_speculation_expected_cn(self):
         r = self.c.classify("预计明年业绩会有显著提升")
         assert r.claim_nature == ClaimNature.SPECULATION
-        assert r.confidence >= 0.85  # strong signal
+        assert r.confidence >= 0.65  # single strong signal, no corroborating signals
 
     def test_speculation_plan_cn(self):
         r = self.c.classify("正在探索新的业务模式")

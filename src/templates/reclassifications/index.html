@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
+{% from "partials/components/status_badge.html" import status_badge %}
+{% from "partials/components/loading_skeleton.html" import loading_skeleton %}
+
+{% block title %}{{ vm.brand.name }} — 重归因管理{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <h1 class="font-heading text-2xl font-bold text-text">{{ vm.brand.name }} — 重归因管理</h1>
+            <p class="text-sm text-slate-500 mt-0.5">管理历史诊断数据的检测器重归因批次</p>
+        </div>
+        {% if vm.permissions.can_dry_run %}
+        <button onclick="showNewForm()"
+                class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 cursor-pointer">
+            新建 Dry Run
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- ═══ New Dry-Run Form (hidden by default) ═══ -->
+    <div id="new-form" class="hidden bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+        <h3 class="text-sm font-semibold text-text mb-3">新建历史重归因 (Dry Run)</h3>
+        <p class="text-xs text-slate-500 mb-3">⚠ Dry Run 仅预览变更，不会修改任何历史数据。确认结果后可在详情页正式 Apply。</p>
+        <form onsubmit="submitDryRun(event)" class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">开始日期（可选）</label>
+                    <input type="date" id="from-date" class="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-light">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">结束日期（可选）</label>
+                    <input type="date" id="to-date" class="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-light">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-700 mb-1">原因 <span class="text-red-500">*</span></label>
+                <input type="text" id="reason" required minlength="10" placeholder="例如：ClaimNature v2 上线后重归因历史诊断结果"
+                       class="w-full px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-light">
+            </div>
+            <div class="bg-blue-50 border border-blue-200 rounded p-2 text-xs text-blue-700">
+                检测器版本: p0-7-v1 | GT 策略: latest_active | 模式: Dry Run（不可更改）
+            </div>
+            <div id="form-error" class="text-sm text-red-600 hidden"></div>
+            <div class="flex gap-2">
+                <button type="submit" class="px-4 py-1.5 bg-cta text-white rounded text-sm font-medium hover:opacity-90 cursor-pointer">
+                    开始 Dry Run
+                </button>
+                <button type="button" onclick="hideNewForm()" class="px-4 py-1.5 bg-slate-100 text-slate-700 rounded text-sm hover:bg-slate-200 cursor-pointer">
+                    取消
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ═══ Filters ═══ -->
+    <div class="flex flex-wrap gap-2 mb-4">
+        <a href="?status=" class="px-3 py-1 text-xs rounded-full {% if not vm.filters.status %}bg-primary text-white{% else %}bg-slate-100 text-slate-600{% endif %} cursor-pointer">全部</a>
+        {% for s in vm.filters.statuses %}
+        <a href="?status={{ s }}" class="px-3 py-1 text-xs rounded-full {% if vm.filters.status == s %}bg-primary text-white{% else %}bg-slate-100 text-slate-600{% endif %} cursor-pointer">{{ s }}</a>
+        {% endfor %}
+    </div>
+
+    <!-- ═══ Batch List ═══ -->
+    {% if not vm.batches %}
+    {{ empty_state("暂无重归因记录", "点击「新建 Dry Run」开始第一次历史重归因", none, none) }}
+    {% else %}
+    <div class="space-y-3">
+        {% for b in vm.batches %}
+        <a href="/brands/{{ vm.brand.id }}/reclassifications/{{ b.id }}"
+           class="block bg-white rounded-lg border p-4 hover:shadow-sm transition-shadow cursor-pointer">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-3">
+                    <span class="text-xs text-slate-400 font-mono">{{ b.id[:8] }}</span>
+                    <span class="px-2 py-0.5 text-xs rounded-full font-medium
+                        {% if b.status_color == 'green' %}bg-green-100 text-green-700
+                        {% elif b.status_color == 'red' %}bg-red-100 text-red-700
+                        {% elif b.status_color == 'amber' %}bg-amber-100 text-amber-700
+                        {% elif b.status_color == 'blue' %}bg-blue-100 text-blue-700
+                        {% else %}bg-slate-100 text-slate-600{% endif %}">
+                        {{ b.status_label }}
+                    </span>
+                    <span class="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600">{{ b.mode_label }}</span>
+                </div>
+                <span class="text-xs text-slate-400">{{ b.started_at or b.completed_at or "—" }}</span>
+            </div>
+            <div class="grid grid-cols-4 gap-4 text-sm">
+                <div><span class="text-slate-400">日期范围</span> <span class="text-text">{{ b.from_date or "不限" }} ~ {{ b.to_date or "不限" }}</span></div>
+                <div><span class="text-slate-400">处理进度</span> <span class="text-text">{{ b.runs_processed }}/{{ b.eligible_runs_count }} runs</span></div>
+                <div><span class="text-slate-400">变更数</span> <span class="text-text font-semibold">{{ b.classification_changes_total }}</span></div>
+                <div><span class="text-slate-400">结果</span> <span class="text-text">{{ b.query_results_processed }} QRs</span></div>
+            </div>
+            {% if b.reason %}<p class="text-xs text-slate-500 mt-2 truncate">原因: {{ b.reason }}</p>{% endif %}
+        </a>
+        {% endfor %}
+
+        <!-- Pagination -->
+        {% if vm.pagination.total > vm.pagination.page_size %}
+        <div class="flex justify-center gap-2 mt-4">
+            {% set total_pages = (vm.pagination.total / vm.pagination.page_size)|round(0, 'ceil')|int %}
+            {% for p in range(1, total_pages + 1) %}
+            <a href="?page={{ p }}&status={{ vm.filters.status }}"
+               class="px-3 py-1 text-xs rounded {% if p == vm.pagination.page %}bg-primary text-white{% else %}bg-slate-100 text-slate-600{% endif %} cursor-pointer">{{ p }}</a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showNewForm() { document.getElementById('new-form').classList.remove('hidden'); }
+function hideNewForm() { document.getElementById('new-form').classList.add('hidden'); }
+
+async function submitDryRun(e) {
+    e.preventDefault();
+    var btn = document.querySelector('#new-form button[type=submit]');
+    var errEl = document.getElementById('form-error');
+    var fromDate = document.getElementById('from-date').value;
+    var toDate = document.getElementById('to-date').value;
+    var reason = document.getElementById('reason').value.trim();
+
+    if (reason.length < 10) { errEl.textContent = '原因至少 10 个字符'; errEl.classList.remove('hidden'); return; }
+    if (fromDate && toDate && fromDate > toDate) { errEl.textContent = '开始日期不能晚于结束日期'; errEl.classList.remove('hidden'); return; }
+
+    btn.textContent = '提交中...'; btn.disabled = true; errEl.classList.add('hidden');
+    try {
+        var body = { reason: reason, dry_run: true, mode: 'dry_run', gt_version_strategy: 'latest_active' };
+        if (fromDate) body.from_date = fromDate + 'T00:00:00';
+        if (toDate) body.to_date = toDate + 'T23:59:59';
+
+        var data = await geoFetch('/api/brands/{{ vm.brand.id }}/reclassify', {
+            method: 'POST', body: JSON.stringify(body)
+        });
+        showToast('Dry Run 已创建', 'success');
+        window.location.reload();
+    } catch (err) {
+        errEl.textContent = err.message; errEl.classList.remove('hidden');
+        btn.textContent = '开始 Dry Run'; btn.disabled = false;
+    }
+}
+</script>
+{% endblock %}

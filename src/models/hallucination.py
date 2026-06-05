@@ -4,6 +4,7 @@ from sqlalchemy import String, ForeignKey, Text, DateTime, Boolean
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from src.models.base import Base, TimestampMixin, UUIDMixin
+from src.analyzer.enums import HallucinationVerdict
 
 
 class HallucinationResult(Base, UUIDMixin, TimestampMixin):
@@ -15,7 +16,7 @@ class HallucinationResult(Base, UUIDMixin, TimestampMixin):
     field_name: Mapped[str] = mapped_column(String(100), nullable=False)
     field_level: Mapped[str] = mapped_column(String(10), nullable=False)
     severity: Mapped[str] = mapped_column(String(10), default="P1")
-    verdict: Mapped[str] = mapped_column(String(50), default="ambiguous")
+    verdict: Mapped[str] = mapped_column(String(50), default=HallucinationVerdict.AMBIGUOUS)
     error_type: Mapped[str] = mapped_column(String(50), nullable=False, default="")
     ai_claim: Mapped[str] = mapped_column(Text, default="")
     ground_truth_value: Mapped[str] = mapped_column(Text, default="")

@@ -25,9 +25,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link href="/static/css/app.css" rel="stylesheet">
+    <script src="/static/js/api.js"></script>
 </head>
 <body class="bg-surface text-text font-body flex min-h-screen">
-    {% set nav_items = [
+    {% set brand_nav = [
         {"key": "dashboard", "label": "品牌总览", "icon": "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z", "href": "/brands/" ~ (current_brand_id or "")},
         {"key": "gt-review", "label": "GT 审核", "icon": "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z", "href": "/brands/" ~ (current_brand_id or "") ~ "/gt-review"},
         {"key": "evidence", "label": "AI 证据", "icon": "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z", "href": "/brands/" ~ (current_brand_id or "") ~ "/evidence"},
@@ -36,9 +37,12 @@
         {"key": "content", "label": "Content 管理", "icon": "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10", "href": "/brands/" ~ (current_brand_id or "") ~ "/content"},
         {"key": "trends", "label": "趋势归因", "icon": "M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z", "href": "/brands/" ~ (current_brand_id or "") ~ "/trends"},
         {"key": "reports", "label": "报告下载", "icon": "M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", "href": "/brands/" ~ (current_brand_id or "") ~ "/reports"},
+        {"key": "reclassifications", "label": "重归因管理", "icon": "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15", "href": "/brands/" ~ (current_brand_id or "") ~ "/reclassifications"},
+    ] %}
+    {% set system_nav = [
+        {"key": "templates", "label": "模板管理", "icon": "M4 6h16M4 12h16M4 18h7", "href": "/templates"},
         {"key": "queue-monitor", "label": "队列监控", "icon": "M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15", "href": "/monitor/queue"},
         {"key": "publishing", "label": "发布管理", "icon": "M12 19l9 2-9-18-9 18 9-2zm0 0v-8", "href": "/publishing"},
-        {"key": "templates", "label": "模板管理", "icon": "M4 6h16M4 12h16M4 18h7", "href": "/templates"},
         {"key": "saas", "label": "组织设置", "icon": "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z", "href": "/saas/settings"},
     ] %}
     {% set platform_nav = [
@@ -56,28 +60,49 @@
             <a href="/" class="font-heading text-lg font-bold tracking-tight">GEO Explorer</a>
         </div>
 
-        <!-- Brand Selector -->
-        <div class="px-4 py-3 border-b border-primary-light/20">
-            {% if brands and current_brand_id %}
+        <!-- ═══ 诊断入口 ═══ -->
+        <div class="px-4 py-2 border-b border-primary-light/20">
+            <p class="text-xs text-blue-200 uppercase tracking-wide mb-2">诊断入口</p>
+        </div>
+        <ul class="py-2 space-y-0.5">
+            <li>
+                <a href="/diagnostics/new"
+                   class="flex items-center gap-3 px-5 py-2.5 text-sm text-blue-100 hover:bg-primary-light/20 hover:text-white transition-colors duration-200
+                          {% if current_page == 'diagnostics' %}bg-primary-light/30 text-white{% endif %}">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    开始 GEO 诊断
+                </a>
+            </li>
+        </ul>
+
+        <!-- ═══ 品牌工作台 ═══ -->
+        <div class="px-4 py-2 border-t border-b border-primary-light/20">
+            <p class="text-xs text-blue-200 uppercase tracking-wide mb-2">品牌工作台</p>
+            {% if brands and brands|length > 0 %}
             <select class="w-full bg-primary-light/20 text-white text-sm rounded px-2 py-1.5 border border-primary-light/30
                            focus:outline-none focus:ring-1 focus:ring-cta cursor-pointer"
-                    onchange="window.location.href = '/brands/' + this.value">
+                    onchange="if(this.value) window.location.href = '/brands/' + this.value">
+                <option value="" class="text-gray-900" {% if not current_brand_id %}selected{% endif %}>— 选择品牌 —</option>
                 {% for b in brands %}
                 <option value="{{ b.id }}" class="text-gray-900" {% if b.id|string == current_brand_id %}selected{% endif %}>{{ b.name }}</option>
                 {% endfor %}
             </select>
             {% else %}
-            <p class="text-sm text-blue-200">暂无品牌</p>
+            <p class="text-sm text-blue-200 mt-1">暂无品牌</p>
+            <a href="/diagnostics/new" class="block mt-2 px-3 py-1.5 text-xs bg-cta text-white rounded text-center font-medium hover:opacity-90 transition-opacity cursor-pointer">
+                开始第一次 GEO 诊断
+            </a>
             {% endif %}
         </div>
 
-        <!-- Nav Items -->
-        <ul class="flex-1 py-3 space-y-0.5">
-            {% for item in nav_items %}
+        <ul class="py-2 space-y-0.5">
+            {% for item in brand_nav %}
             <li>
                 <a href="{% if current_brand_id %}{{ item.href }}{% else %}#{% endif %}"
                    class="flex items-center gap-3 px-5 py-2.5 text-sm text-blue-100 hover:bg-primary-light/20 hover:text-white transition-colors duration-200
-                          {% if not current_brand_id %}opacity-50 pointer-events-none{% endif %}
+                          {% if not current_brand_id %}opacity-40 pointer-events-none{% endif %}
                           {% if current_page == item.key %}bg-primary-light/30 text-white{% endif %}"
                    hx-boost="true">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -87,7 +112,33 @@
                 </a>
             </li>
             {% endfor %}
-            <!-- Platform Nav (system_admin+) -->
+        </ul>
+
+        <!-- ═══ 系统管理 ═══ -->
+        <div class="px-4 py-2 border-t border-b border-primary-light/20">
+            <p class="text-xs text-blue-200 uppercase tracking-wide">系统管理</p>
+        </div>
+        <ul class="py-2 space-y-0.5">
+            {% for item in system_nav %}
+            <li>
+                <a href="{{ item.href }}"
+                   class="flex items-center gap-3 px-5 py-2.5 text-sm text-blue-100 hover:bg-primary-light/20 hover:text-white transition-colors duration-200
+                          {% if current_page == item.key %}bg-primary-light/30 text-white{% endif %}">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="{{ item.icon }}"/>
+                    </svg>
+                    {{ item.label }}
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <!-- ═══ 平台管理 (system_admin+) ═══ -->
+        {% if is_platform_admin %}
+        <div class="px-4 py-2 border-t border-primary-light/20">
+            <p class="text-xs text-blue-200 uppercase tracking-wide">平台管理</p>
+        </div>
+        <ul class="py-2 space-y-0.5 flex-1">
             {% for item in platform_nav %}
             <li>
                 <a href="{{ item.href }}"
@@ -101,6 +152,7 @@
             </li>
             {% endfor %}
         </ul>
+        {% endif %}
 
         <div class="px-5 py-3 border-t border-primary-light/20 text-xs text-blue-200">
             <span>{{ current_brand_name or "GEO Explorer" }}</span>

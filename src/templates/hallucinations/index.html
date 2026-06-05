@@ -1,123 +1,304 @@
 {% extends "base.html" %}
 {% from "partials/components/empty_state.html" import empty_state %}
-{% from "partials/components/status_badge.html" import status_badge %}
-{% from "partials/components/risk_badge.html" import risk_badge %}
 {% block title %}{{ vm.brand.name }} — 人审闭环{% endblock %}
+
 {% block content %}
+<div class="max-w-5xl mx-auto">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+        <div>
+            <h1 class="font-heading text-2xl font-bold text-text">{{ vm.brand.name }} — 人审闭环</h1>
+            <p class="text-sm text-slate-500 mt-0.5">审核 needs_human_review 标记的声明</p>
+        </div>
+        <div class="flex gap-2">
+            {% if vm.permissions.can_export %}
+            <button onclick="exportCalibration()" class="px-3 py-1.5 text-xs bg-white border border-gray-200 rounded hover:bg-slate-50 cursor-pointer">导出校准样本</button>
+            {% endif %}
+        </div>
+    </div>
 
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-5 gap-3">
-    <div>
-        <h1 class="font-heading text-2xl font-bold text-text">{{ vm.brand.name }} — 人审闭环</h1>
-        <p class="text-sm text-slate-500 mt-0.5">审核 needs_human_review 标记的声明，反馈改进建议</p>
+    <!-- ═══ Review Stats Panel ═══ -->
+    <div class="grid grid-cols-5 gap-3 mb-4">
+        <a href="?review_status=pending" class="bg-white rounded-lg border p-3 text-center hover:shadow-sm cursor-pointer">
+            <div class="text-xl font-heading font-bold text-amber-600">{{ vm.review_stats.pending }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">待审核</div>
+        </a>
+        <a href="?review_status=claimed" class="bg-white rounded-lg border p-3 text-center hover:shadow-sm cursor-pointer">
+            <div class="text-xl font-heading font-bold text-blue-600">{{ vm.review_stats.claimed }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">已认领</div>
+        </a>
+        <div class="bg-white rounded-lg border p-3 text-center">
+            <div class="text-xl font-heading font-bold text-green-600">{{ vm.review_stats.completed }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">已完成</div>
+        </div>
+        <div class="bg-white rounded-lg border p-3 text-center">
+            <div class="text-xl font-heading font-bold text-slate-600">{{ vm.review_stats.skipped }}</div>
+            <div class="text-xs text-slate-500 mt-0.5">已跳过</div>
+        </div>
+        <div class="bg-white rounded-lg border p-3 text-center">
+            <div class="text-xl font-heading font-bold text-text">{{ (vm.review_stats.completion_rate * 100)|int }}%</div>
+            <div class="text-xs text-slate-500 mt-0.5">完成率</div>
+        </div>
     </div>
-</div>
+    {% if vm.review_stats.feedback_pending > 0 %}
+    <p class="text-xs text-amber-600 mb-3">反馈待处理: {{ vm.review_stats.feedback_pending }} 项（含 GT 候选和反馈建议）</p>
+    {% endif %}
 
-<!-- Stats -->
-<div class="grid grid-cols-3 gap-3 mb-4">
-    <div class="bg-white rounded-lg border p-4 text-center">
-        <div class="text-2xl font-heading font-bold text-amber-600">{{ vm.review_queue.pending }}</div>
-        <div class="text-xs text-gray-500 mt-1">待审核</div>
-    </div>
-    <div class="bg-white rounded-lg border p-4 text-center">
-        <div class="text-2xl font-heading font-bold text-blue-600">{{ vm.review_queue.claimed }}</div>
-        <div class="text-xs text-gray-500 mt-1">已认领</div>
-    </div>
-    <div class="bg-white rounded-lg border p-4 text-center">
-        <div class="text-2xl font-heading font-bold text-green-600">{{ vm.review_queue.completed }}</div>
-        <div class="text-xs text-gray-500 mt-1">已完成</div>
-    </div>
-</div>
-
-<!-- Review items -->
-{% if vm.review_queue.items %}
-<div class="space-y-2">
-    {% for item in vm.review_queue.items %}
-    <div class="bg-white rounded-lg border p-4 hover:shadow-sm transition-shadow"
-         id="review-{{ item.id }}">
-        <div class="flex items-start justify-between gap-3">
-            <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 mb-1">
-                    {% if item.severity == 'P0' %}
-                    <span class="px-1.5 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700">P0</span>
-                    {% elif item.severity == 'P1' %}
-                    <span class="px-1.5 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700">P1</span>
-                    {% else %}
-                    <span class="px-1.5 py-0.5 rounded text-xs bg-gray-100 text-gray-600">{{ item.severity }}</span>
-                    {% endif %}
-                    {% if item.review_priority == 'high' %}
-                    <span class="px-1.5 py-0.5 rounded text-xs bg-red-50 text-red-600">高优先级</span>
-                    {% endif %}
-                    <span class="text-xs text-gray-400">{{ item.claim_type }}</span>
-                    <span class="text-xs text-gray-400">{{ item.verdict }}</span>
-                </div>
-                <p class="text-sm text-gray-800 mb-1"><strong>Claim:</strong> {{ item.ai_claim }}</p>
-                <p class="text-xs text-gray-500 mb-1"><strong>GT:</strong> {{ item.ground_truth_value[:100] }}</p>
-                {% if item.evidence_strength %}
-                <p class="text-xs text-gray-400 mb-1">证据: {{ item.evidence_strength }} | 原因: {{ item.review_reason }}</p>
-                {% endif %}
-                {% if item.reason %}
-                <p class="text-xs text-gray-400 truncate">自动判定: {{ item.reason[:150] }}</p>
-                {% endif %}
+    <!-- ═══ Batch Selection Bar ═══ -->
+    <div id="batch-bar" class="hidden sticky bottom-0 bg-white border-t shadow-lg rounded-t-xl px-4 py-3 mb-4 z-10">
+        <div class="flex items-center justify-between">
+            <div>
+                <span class="text-sm font-medium text-text">已选 <span id="selected-count">0</span> 项</span>
+                <span id="batch-warning" class="hidden ml-2 text-xs text-red-600"></span>
             </div>
-            <div class="flex flex-col gap-1.5 flex-shrink-0">
-                {% if item.review_status == 'pending' and vm.permissions.can_review %}
-                <button onclick="claimAndReview('{{ item.id }}')"
-                        class="px-3 py-1.5 bg-primary text-white rounded text-xs font-medium hover:bg-primary-light">
-                    认领并审核
-                </button>
-                {% elif item.review_status == 'claimed' and item.claimed %}
-                <span class="text-xs text-blue-600">已认领</span>
-                {% endif %}
-                <button onclick="skipItem('{{ item.id }}')"
-                        class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200">
-                    跳过
-                </button>
+            <div class="flex gap-2">
+                <button onclick="batchDryRun()" class="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 cursor-pointer">Dry Run 预览</button>
+                <button id="batch-skip-btn" onclick="batchSkip()" class="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 cursor-pointer" disabled>批量 Skip</button>
+                <button onclick="clearSelection()" class="px-3 py-1.5 text-xs bg-slate-100 text-slate-600 rounded hover:bg-slate-200 cursor-pointer">取消选择</button>
             </div>
         </div>
     </div>
-    {% endfor %}
+
+    <!-- ═══ Review Items ═══ -->
+    {% if vm.review_queue.items %}
+    <div class="space-y-2" id="review-list">
+        {% for item in vm.review_queue.items %}
+        <div class="bg-white rounded-lg border p-4 hover:shadow-sm transition-shadow review-item"
+             id="review-{{ item.id }}" data-id="{{ item.id }}" data-severity="{{ item.severity }}"
+             data-status="{{ item.review_status }}">
+            <div class="flex items-start gap-3">
+                <!-- Checkbox -->
+                <div class="flex-shrink-0 pt-1">
+                    {% if item.can_select %}
+                    <input type="checkbox" class="review-checkbox w-4 h-4 text-primary rounded cursor-pointer"
+                           onchange="onCheckboxChange()" data-id="{{ item.id }}">
+                    {% else %}
+                    <input type="checkbox" disabled class="w-4 h-4 rounded cursor-not-allowed opacity-30"
+                           title="{{ item.select_disabled_reason }}">
+                    {% endif %}
+                </div>
+
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        {% if item.severity == 'P0' %}
+                        <span class="px-1.5 py-0.5 rounded text-xs font-bold bg-red-100 text-red-700">P0</span>
+                        {% elif item.severity == 'P1' %}
+                        <span class="px-1.5 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-700">P1</span>
+                        {% else %}
+                        <span class="px-1.5 py-0.5 rounded text-xs bg-slate-100 text-slate-600">{{ item.severity }}</span>
+                        {% endif %}
+                        <span class="text-xs text-slate-400">{{ item.claim_type }}</span>
+                        <span class="text-xs text-slate-400">{{ item.verdict }}</span>
+                        {% if item.review_priority == 'high' %}
+                        <span class="px-1 py-0.5 rounded text-xs bg-red-50 text-red-600">高优先</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm text-text mb-1"><strong>Claim:</strong> {{ item.ai_claim }}</p>
+                    <p class="text-xs text-slate-500 mb-1"><strong>GT:</strong> {{ item.ground_truth_value[:100] }}</p>
+                    {% if item.reason %}<p class="text-xs text-slate-400 truncate">{{ item.reason[:150] }}</p>{% endif %}
+
+                    <!-- Review History (expandable) -->
+                    <button onclick="toggleHistory('{{ item.id }}')" class="text-xs text-primary-light hover:underline mt-1 cursor-pointer">审核历史 ▾</button>
+                    <div id="history-{{ item.id }}" class="hidden mt-2 bg-slate-50 rounded p-2 text-xs space-y-1"></div>
+                </div>
+
+                <div class="flex flex-col gap-1.5 flex-shrink-0">
+                    {% if item.review_status == 'pending' and vm.permissions.can_review %}
+                    <button onclick="claimAndReview('{{ item.id }}')"
+                            class="px-3 py-1.5 bg-primary text-white rounded text-xs font-medium hover:bg-primary-light cursor-pointer">认领并审核</button>
+                    {% elif item.review_status == 'claimed' and item.claimed %}
+                    <span class="text-xs text-blue-600">已认领</span>
+                    {% endif %}
+                    <button onclick="skipItem('{{ item.id }}')"
+                            class="px-3 py-1.5 bg-slate-100 text-slate-600 rounded text-xs hover:bg-slate-200 cursor-pointer">跳过</button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    {{ empty_state("暂无待审核项", "当前品牌没有 needs_human_review 标记的待审核声明", none, none) }}
+    {% endif %}
 </div>
-{% else %}
-{{ empty_state("暂无待审核项", "当前品牌没有 needs_human_review 标记的待审核声明", none, none) }}
-{% endif %}
+
+<!-- Dry Run Modal -->
+<div id="dry-run-modal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+    <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg mx-4">
+        <h2 class="font-heading text-lg font-bold text-text mb-3">Dry Run 预览</h2>
+        <div id="dry-run-content" class="text-sm space-y-2 mb-4"></div>
+        <div class="flex gap-2">
+            <button id="dry-run-confirm" onclick="confirmBatchSkip()"
+                    class="px-4 py-2 bg-cta text-white rounded text-sm font-medium hover:opacity-90 cursor-pointer" disabled>
+                确认 Skip
+            </button>
+            <button onclick="closeDryRun()"
+                    class="px-4 py-2 bg-slate-100 text-slate-700 rounded text-sm hover:bg-slate-200 cursor-pointer">取消</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-async function claimAndReview(id) {
-    const token = localStorage.getItem('geo_token');
-    // Claim
-    let resp = await fetch('/api/hallucinations/' + id + '/claim', {
-        method: 'POST', headers: {'Authorization': 'Bearer ' + token}});
-    if (!resp.ok) { alert('认领失败: ' + (await resp.json()).detail); return; }
+var selectedIds = new Set();
+var dryRunToken = '';
+var dryRunData = null;
 
-    const decision = prompt('审核决定:\n- confirm_auto_correct\n- mark_false_positive\n- mark_false_negative\n- gt_needs_update\n- inconclusive\n- skip');
-    if (!decision) return;
-
-    const notes = prompt('审核备注 (可选):') || '';
-    const corrected = (decision === 'gt_needs_update') ? (prompt('修正值:') || '') : '';
-
-    resp = await fetch('/api/hallucinations/' + id + '/review', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
-        body: JSON.stringify({decision, notes, corrected_value: corrected}),
+// ═══ Selection ═══
+function onCheckboxChange() {
+    selectedIds.clear();
+    document.querySelectorAll('.review-checkbox:checked').forEach(function(cb) {
+        selectedIds.add(cb.dataset.id);
     });
-    if (resp.ok) {
-        document.getElementById('review-' + id).classList.add('opacity-50');
-        location.reload();
+    updateBatchBar();
+}
+
+function clearSelection() {
+    document.querySelectorAll('.review-checkbox:checked').forEach(function(cb) { cb.checked = false; });
+    selectedIds.clear();
+    updateBatchBar();
+}
+
+function updateBatchBar() {
+    var bar = document.getElementById('batch-bar');
+    var countEl = document.getElementById('selected-count');
+    var warnEl = document.getElementById('batch-warning');
+    var skipBtn = document.getElementById('batch-skip-btn');
+
+    if (selectedIds.size === 0) {
+        bar.classList.add('hidden');
     } else {
-        alert('审核失败: ' + (await resp.json()).detail);
+        bar.classList.remove('hidden');
+        countEl.textContent = selectedIds.size;
+        warnEl.classList.add('hidden');
+        skipBtn.disabled = true;  // Must dry-run first
     }
 }
 
+// ═══ Batch Dry Run ═══
+async function batchDryRun() {
+    if (selectedIds.size === 0) return;
+    var ids = Array.from(selectedIds);
+    try {
+        var data = await geoFetch('/api/hallucinations/batch-review/dry-run', {
+            method: 'POST', body: JSON.stringify({ result_ids: ids, decision: 'skip', reason: 'batch dry run' })
+        });
+        dryRunToken = data.dry_run_token;
+        dryRunData = data;
+
+        var html = '<p>将影响 <strong>' + data.affected_count + '</strong> 条记录</p>';
+        if (data.blocked_items && data.blocked_items.length > 0) {
+            html += '<div class="bg-red-50 border border-red-200 rounded p-2"><p class="font-medium text-red-700">被阻止: ' + data.blocked_items.length + ' 项</p>';
+            data.blocked_items.slice(0, 5).forEach(function(b) {
+                html += '<p class="text-xs text-red-600">' + escapeHtml(b.id.slice(0,8)) + ': ' + escapeHtml(b.reason) + '</p>';
+            });
+            html += '</div>';
+        }
+        if (data.severity_breakdown) {
+            html += '<p class="text-xs text-slate-500">严重度分布: ' + JSON.stringify(data.severity_breakdown) + '</p>';
+        }
+
+        document.getElementById('dry-run-content').innerHTML = html;
+        document.getElementById('dry-run-confirm').disabled = (data.affected_count === 0);
+        document.getElementById('dry-run-modal').classList.remove('hidden');
+    } catch (err) {}
+}
+
+function closeDryRun() {
+    document.getElementById('dry-run-modal').classList.add('hidden');
+}
+
+// ═══ Batch Skip ═══
+async function confirmBatchSkip() {
+    if (!dryRunToken) return;
+    var reason = prompt('批量 Skip 原因 (必填，最少 5 字):');
+    if (!reason || reason.length < 5) return;
+    var ids = Array.from(selectedIds);
+    try {
+        var data = await geoFetch('/api/hallucinations/batch-review', {
+            method: 'POST',
+            body: JSON.stringify({
+                result_ids: ids, decision: 'skip', reason: reason,
+                dry_run_token: dryRunToken,
+                idempotency_key: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString()
+            })
+        });
+        showToast('已 Skip ' + data.skipped + ' 项', 'success');
+        closeDryRun();
+        clearSelection();
+        window.location.reload();
+    } catch (err) {}
+}
+
+// ═══ Calibration Export ═══
+async function exportCalibration() {
+    try {
+        var data = await geoFetch('/api/hallucinations/calibration-export?limit=200');
+        var blob = new Blob([data.map(function(d) { return JSON.stringify(d); }).join('\n')], { type: 'application/x-jsonlines' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = 'calibration_samples.jsonl';
+        a.click(); URL.revokeObjectURL(url);
+        showToast('校准样本已导出', 'success');
+    } catch (err) {}
+}
+
+// ═══ Review History ═══
+async function toggleHistory(id) {
+    var el = document.getElementById('history-' + id);
+    if (!el.classList.contains('hidden')) { el.classList.add('hidden'); return; }
+
+    try {
+        var data = await geoFetch('/api/hallucinations/' + id + '/review-history');
+        if (!data || data.length === 0) {
+            el.innerHTML = '<p class="text-slate-400">暂无审核历史</p>';
+        } else {
+            el.innerHTML = data.map(function(l) {
+                var action = l.action || '?';
+                var time = (l.created_at || '').slice(0, 19);
+                var change = '';
+                if (l.old_verdict && l.new_verdict && l.old_verdict !== l.new_verdict) {
+                    change = ' ' + escapeHtml(l.old_verdict) + ' → ' + escapeHtml(l.new_verdict);
+                }
+                var notes = l.notes ? ' <span class="text-slate-400">' + escapeHtml(l.notes.slice(0, 80)) + '</span>' : '';
+                return '<div class="flex items-center gap-2"><span class="font-medium">' + escapeHtml(action) + '</span><span class="text-slate-400">' + time + '</span>' + change + notes + '</div>';
+            }).join('');
+        }
+        el.classList.remove('hidden');
+    } catch (err) {
+        el.innerHTML = '<p class="text-red-500">加载失败</p>';
+        el.classList.remove('hidden');
+    }
+}
+
+// ═══ Single item actions (using geoFetch) ═══
+async function claimAndReview(id) {
+    try {
+        await geoFetch('/api/hallucinations/' + id + '/claim', { method: 'POST' });
+    } catch (err) { return; }
+
+    var decision = prompt('审核决定:\n- confirm_auto_correct\n- mark_false_positive\n- mark_false_negative\n- gt_needs_update\n- inconclusive\n- skip');
+    if (!decision) return;
+    var notes = prompt('审核备注 (可选):') || '';
+    var corrected = (decision === 'gt_needs_update') ? (prompt('修正值:') || '') : '';
+
+    try {
+        await geoFetch('/api/hallucinations/' + id + '/review', {
+            method: 'POST',
+            body: JSON.stringify({ decision: decision, notes: notes, corrected_value: corrected })
+        });
+        showToast('审核完成', 'success');
+        window.location.reload();
+    } catch (err) {}
+}
+
 async function skipItem(id) {
-    const reason = prompt('跳过原因 (必填):');
+    var reason = prompt('跳过原因 (必填):');
     if (!reason) return;
-    const token = localStorage.getItem('geo_token');
-    const resp = await fetch('/api/hallucinations/' + id + '/skip?reason=' + encodeURIComponent(reason), {
-        method: 'POST', headers: {'Authorization': 'Bearer ' + token}});
-    if (resp.ok) location.reload();
-    else alert('失败: ' + (await resp.json()).detail);
+    try {
+        await geoFetch('/api/hallucinations/' + id + '/skip?reason=' + encodeURIComponent(reason), { method: 'POST' });
+        showToast('已跳过', 'success');
+        window.location.reload();
+    } catch (err) {}
 }
 </script>
 {% endblock %}

@@ -59,18 +59,62 @@ async def build_hallucination_vm(brand, filters, user, db) -> dict:
             "claimed": r.claimed_by is not None,
         })
 
+    # Skipped count
+    skipped_q = select(func.count(HallucinationResult.id)).where(
+        HallucinationResult.brand_id == brand.id,
+        HallucinationResult.needs_human_review == True,
+        HallucinationResult.review_status == "skipped",
+    )
+    skipped = (await db.execute(skipped_q)).scalar() or 0
+
+    # Feedback pending count
+    from src.models.review_feedback import ReviewFeedbackItem, GTUpdateCandidate
+    fb_q = select(func.count(ReviewFeedbackItem.id)).where(
+        ReviewFeedbackItem.brand_id == brand.id,
+        ReviewFeedbackItem.status == "pending",
+    )
+    fb_pending = (await db.execute(fb_q)).scalar() or 0
+    gt_q = select(func.count(GTUpdateCandidate.id)).where(
+        GTUpdateCandidate.brand_id == brand.id,
+        GTUpdateCandidate.status == "pending",
+    )
+    gt_pending = (await db.execute(gt_q)).scalar() or 0
+
     # Permissions
     can_review = user.role in ("admin", "analyst", "gt_reviewer", "hallucination_reviewer",
                                "senior_reviewer") \
                  or user.platform_role in ("system_owner", "system_admin")
+    can_batch = user.role in ("admin", "senior_reviewer") \
+                or user.platform_role in ("system_owner", "system_admin")
+    is_senior = user.role == "senior_reviewer" or user.platform_role in ("system_owner", "system_admin")
+
+    # Enrich review items with batch selection metadata
+    for item in review_items:
+        sev = item["severity"]
+        item["can_select"] = sev not in ("P0",) and can_batch
+        if sev == "P1" and not is_senior:
+            item["can_select"] = False
+        item["select_disabled_reason"] = ""
+        if sev == "P0":
+            item["select_disabled_reason"] = "P0 高风险样本必须逐条审核"
+        elif sev == "P1" and not is_senior:
+            item["select_disabled_reason"] = "P1 需要高级审核员权限才能批量"
+
+    total = pending + claimed + completed + skipped
+    completion_rate = round((completed + skipped) / total, 2) if total > 0 else 0
 
     return {
         "brand": {"id": str(brand.id), "name": brand.name},
         "review_queue": {
-            "pending": pending,
-            "claimed": claimed,
-            "completed": completed,
+            "pending": pending, "claimed": claimed,
+            "completed": completed, "skipped": skipped,
             "items": review_items,
+        },
+        "review_stats": {
+            "pending": pending, "claimed": claimed,
+            "completed": completed, "skipped": skipped,
+            "total": total, "completion_rate": completion_rate,
+            "feedback_pending": fb_pending + gt_pending,
         },
         "filters": {
             "severities": ["P0", "P1", "P2", "Info"],
@@ -79,7 +123,9 @@ async def build_hallucination_vm(brand, filters, user, db) -> dict:
         },
         "permissions": {
             "can_review": can_review,
+            "can_batch": can_batch,
+            "can_export": can_batch,
         },
         "clusters": [],
-        "total": pending + claimed,
+        "total": total,
     }

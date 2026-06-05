@@ -6,7 +6,7 @@
     <div class="flex items-center justify-between">
         <h1 class="text-2xl font-heading font-bold text-gray-900">队列监控</h1>
         <span class="text-sm text-gray-500">
-            {% if vm.is_platform %}全平台视图{% else %}本组织视图{% endif %}
+            {% if vm["is_platform"] %}全平台视图{% else %}本组织视图{% endif %}
         </span>
     </div>
 
@@ -15,7 +15,7 @@
         {% for key, label in [("queued","排队中"), ("running","运行中"), ("retrying","重试中"), ("completed","已完成"), ("failed","失败"), ("dead_lettered","DLQ")] %}
         <div class="bg-white rounded-lg border border-gray-200 p-4">
             <div class="text-sm text-gray-500">{{ label }}</div>
-            <div class="text-2xl font-bold text-gray-900">{{ vm.counts[key] }}</div>
+            <div class="text-2xl font-bold text-gray-900">{{ vm["counts"][key] }}</div>
         </div>
         {% endfor %}
     </div>
@@ -35,7 +35,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for t in vm.recent_tasks %}
+                    {% for t in vm["recent_tasks"] %}
                     <tr class="border-t border-gray-100">
                         <td class="px-4 py-2 font-mono text-xs">{{ t.task_name }}</td>
                         <td class="px-4 py-2">
@@ -70,7 +70,7 @@
     <!-- DLQ Panel -->
     <div class="bg-white rounded-lg border border-gray-200">
         <div class="px-5 py-3 border-b border-gray-200 font-medium flex items-center justify-between">
-            <span>死信队列 (DLQ) — {{ vm.counts.dead_lettered }} 条</span>
+            <span>死信队列 (DLQ) — {{ vm["counts"].dead_lettered }} 条</span>
         </div>
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
@@ -84,7 +84,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for t in vm.dlq_tasks %}
+                    {% for t in vm["dlq_tasks"] %}
                     <tr class="border-t border-gray-100">
                         <td class="px-4 py-2 font-mono text-xs">{{ t.task_name }}</td>
                         <td class="px-4 py-2">
@@ -111,7 +111,7 @@
     <div class="bg-white rounded-lg border border-gray-200">
         <div class="px-5 py-3 border-b border-gray-200 font-medium">平台健康</div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 p-5">
-            {% for platform, health in vm.platform_health.items() %}
+            {% for platform, health in vm["platform_health"].items() %}
             <div class="text-center p-3 rounded-lg border
                 {% if health.circuit_state == 'closed' %}border-green-200 bg-green-50
                 {% elif health.circuit_state == 'open' %}border-red-200 bg-red-50
@@ -129,11 +129,11 @@
     </div>
 
     <!-- Alerts -->
-    {% if vm.alerts %}
+    {% if vm["alerts"] %}
     <div class="bg-white rounded-lg border border-gray-200">
-        <div class="px-5 py-3 border-b border-gray-200 font-medium">告警 ({{ vm.alerts|length }})</div>
+        <div class="px-5 py-3 border-b border-gray-200 font-medium">告警 ({{ vm["alerts"]|length }})</div>
         <div class="divide-y divide-gray-100">
-            {% for a in vm.alerts %}
+            {% for a in vm["alerts"] %}
             <div class="px-5 py-3 flex items-center gap-3">
                 <span class="inline-block w-2 h-2 rounded-full
                     {% if a.severity == 'critical' %}bg-red-500{% else %}bg-amber-500{% endif %}"></span>

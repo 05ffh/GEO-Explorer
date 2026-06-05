@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from collections import Counter, defaultdict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
@@ -78,7 +78,7 @@ async def generate_insights(
         key_findings_json=findings,
         data_reliability_json=reliability,
         confidence_level=confidence,
-        generated_at=datetime.utcnow(),
+        generated_at=datetime.now(timezone.utc),
     )
     db.add(summary)
     await db.commit()

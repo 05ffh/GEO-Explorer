@@ -42,11 +42,9 @@ async def _get_org_brands(user: User, db: AsyncSession):
 
 def _page_context(request: Request, current_page: str, brands: list,
                   current_brand_id: str = "", current_brand_name: str = "",
-                  collection_time: str = "", **extra) -> dict:
-    """Build template context with all required sidebar/nav variables.
-
-    Note: does NOT include 'request' — Starlette 1.1+ adds it via TemplateResponse.
-    """
+                  collection_time: str = "", user: User | None = None, **extra) -> dict:
+    """Build template context with all required sidebar/nav variables."""
+    is_admin = user is not None and user.platform_role in ("system_owner", "system_admin")
     return {
         "current_page": current_page,
         "brands": brands,
@@ -54,14 +52,17 @@ def _page_context(request: Request, current_page: str, brands: list,
         "current_brand_name": current_brand_name,
         "collection_time": collection_time,
         "KPI_DISPLAY_NAMES": KPI_DISPLAY_NAMES,
+        "is_platform_admin": is_admin,
         **extra,
     }
 
 
 def _render(request: Request, name: str, context: dict | None = None,
             status_code: int = 200) -> HTMLResponse:
-    """Render a Jinja2 template. Starlette 1.1+ signature: (request, name, context)."""
-    return tpl.TemplateResponse(request, name, context or {}, status_code=status_code)
+    """Render a Jinja2 template. Sets is_platform_admin=False if not present."""
+    ctx = context or {}
+    ctx.setdefault("is_platform_admin", False)
+    return tpl.TemplateResponse(request, name, ctx, status_code=status_code)
 
 
 @app.get("/login", response_class=HTMLResponse)
@@ -156,7 +157,92 @@ async def brand_dashboard(request: Request, brand_id: str,
         request, "dashboard", org_brands,
         current_brand_id=str(brand.id), current_brand_name=brand.name,
         collection_time=vm["data_reliability"]["latest_snapshot_at"] or "",
-        vm=vm,
+        vm=vm, user=user,
+    ))
+
+
+# ── Module 1: Brand list + inline edit ───────────────────────────────────────
+
+@app.get("/brands", response_class=HTMLResponse)
+async def brand_list_page(request: Request, user: User = Depends(get_current_user),
+                           db: AsyncSession = Depends(get_db),
+                           q: str = Query(default=""),
+                           industry: str = Query(default=""),
+                           page: int = Query(default=1, ge=1),
+                           page_size: int = Query(default=20, ge=1, le=100)):
+    from src.view_models.brands import build_brand_list_vm
+    vm = await build_brand_list_vm(user, db, search_query=q, industry_filter=industry,
+                                   page=page, page_size=page_size)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "brands/list.html", _page_context(
+        request, "brand-list", org_brands, vm=vm, user=user,
+    ))
+
+
+@app.get("/brands/{brand_id}/edit", response_class=HTMLResponse)
+async def brand_edit_fragment(request: Request, brand_id: str,
+                                user: User = Depends(get_current_user),
+                                db: AsyncSession = Depends(get_db)):
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    industries = (await db.execute(
+        select(Brand.industry).where(
+            Brand.organization_id == user.organization_id, Brand.industry != "",
+        ).distinct()
+    )).scalars().all()
+    defaults = ["餐饮连锁","银行","保险","金融科技","医疗健康","教育培训","汽车","零售","SaaS","科技","文旅"]
+    opts = sorted(set(list(industries) + defaults))
+    return _render(request, "partials/brand_header_edit.html", {
+        "request": request,
+        "vm": {"brand": {"id": str(brand.id), "name": brand.name, "industry": brand.industry or "",
+                         "aliases": brand.aliases or []},
+               "industry_options": [i for i in opts if i]},
+    })
+
+
+@app.get("/brands/{brand_id}/view", response_class=HTMLResponse)
+async def brand_view_fragment(request: Request, brand_id: str,
+                                user: User = Depends(get_current_user),
+                                db: AsyncSession = Depends(get_db)):
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    return _render(request, "partials/brand_header_view.html", {
+        "request": request,
+        "vm": {"brand": {"id": str(brand.id), "name": brand.name, "industry": brand.industry or "",
+                         "aliases": brand.aliases or []}},
+    })
+
+
+# ── Module 2: Run list  ─────────────────────────────────────────────────────
+
+@app.get("/brands/{brand_id}/runs", response_class=HTMLResponse)
+async def run_list_page(request: Request, brand_id: str,
+                         user: User = Depends(get_current_user),
+                         db: AsyncSession = Depends(get_db),
+                         page: int = Query(default=1, ge=1),
+                         page_size: int = Query(default=20, ge=1, le=100)):
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.runs import build_run_list_vm
+    vm = await build_run_list_vm(brand, user, db, page=page, page_size=page_size)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "runs/list.html", _page_context(
+        request, "dashboard", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name,
+        vm=vm, vm_brand_id=str(brand.id), vm_brand_name=brand.name, user=user,
+    ))
+
+
+# ── Module 3: GT Compare ────────────────────────────────────────────────────
+
+@app.get("/brands/{brand_id}/gt-compare", response_class=HTMLResponse)
+async def gt_compare_page(request: Request, brand_id: str,
+                           user: User = Depends(get_current_user),
+                           db: AsyncSession = Depends(get_db)):
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.gt_compare import build_gt_compare_vm
+    vm = await build_gt_compare_vm(brand, user, db)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "gt_review/compare.html", _page_context(
+        request, "gt-review", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name, vm=vm, user=user,
     ))
 
 
@@ -450,16 +536,14 @@ async def generate_reports_api(brand_id: str,
                                 db: AsyncSession = Depends(get_db)):
     """Trigger report generation via async Celery task."""
     brand = await get_org_brand_or_404(brand_id, user, db)
-    from src.reports.delivery import deliver_customer_reports
-    result = await deliver_customer_reports(
+    from src.reports.delivery import deliver_all_reports
+    result = await deliver_all_reports(
         brand_name=brand.name,
         brand_id=str(brand.id),
         collection_run_id=body.get("collection_run_id", ""),
         db=db,
-        editions=body.get("editions"),
-        generated_by=str(user.id),
     )
-    return result
+    return {"status": "queued", "dir": result.get("dir"), **result}
 
 
 @app.get("/api/brands/{brand_id}/reports/download")

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from src.models.hallucination import HallucinationResult
+from src.analyzer.enums import HallucinationVerdict
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,7 @@ async def build_report_quality_summary(
     total_claim_count = 0
     claim_type_breakdown = {"fact": {}, "opinion": {}, "speculation": {}, "unknown": {}}
 
+    rows = None
     try:
         rows = (await db.execute(
             select(
@@ -83,16 +85,16 @@ async def build_report_quality_summary(
         )).fetchall()
 
         for verdict, severity, subject_type, cnt in rows:
-            if verdict == "contradicted" and subject_type == "target_brand":
+            if verdict == HallucinationVerdict.CONTRADICTED and subject_type == "target_brand":
                 confirmed += cnt
                 if severity == "P0": p0_count += cnt
                 elif severity == "P1": p1_count += cnt
                 elif severity == "P2": p2_count += cnt
-            if verdict == "generic_statement": generic_count += cnt
-            if verdict == "not_about_brand": irrelevant_count += cnt
-            if verdict == "unsupported": unsupported_count += cnt
-            if verdict == "gt_insufficient": gt_insufficient_count += cnt
-            if verdict == "template_invalid": template_invalid_count += cnt
+            if verdict == HallucinationVerdict.GENERIC_STATEMENT: generic_count += cnt
+            if verdict == HallucinationVerdict.NOT_ABOUT_BRAND: irrelevant_count += cnt
+            if verdict == HallucinationVerdict.UNSUPPORTED: unsupported_count += cnt
+            if verdict == HallucinationVerdict.GT_INSUFFICIENT: gt_insufficient_count += cnt
+            if verdict == HallucinationVerdict.TEMPLATE_INVALID: template_invalid_count += cnt
     except Exception:
         logger.warning("Failed to aggregate hallucination results for %s", collection_run_id, exc_info=True)
 
@@ -161,6 +163,13 @@ async def build_report_quality_summary(
             "unknown_count": unknown_count,
             "total_classified": total_claim_count,
             "breakdown": claim_type_breakdown,
+            "claim_nature_quality": {
+                "unknown_ratio": unknown_count / total_claim_count if total_claim_count else 0,
+                "high_risk_speculation_count": speculation_count,
+                "low_confidence_count": sum(
+                    1 for r in (rows or [])
+                    if r[0] in ("unknown", "speculation")),
+            },
         },
         # P2-2: evidence strength
         "evidence_strength": {

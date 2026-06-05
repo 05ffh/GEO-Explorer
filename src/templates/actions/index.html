@@ -8,8 +8,14 @@
         <h1 class="font-heading text-2xl font-bold text-text">{{ vm.brand.name }} — Action 工作台</h1>
         <p class="text-sm text-slate-500 mt-0.5">{{ vm.total_themes }} 主题 · {{ vm.total_plans }} 计划</p>
     </div>
-    {% if vm.permissions.can_manage %}
-    <button onclick="generateActions()" class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-light">
+    {% if vm.permissions.can_generate_actions %}
+    <button onclick="generateActions()" class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-light cursor-pointer"
+            {% if vm.generation.latest_run_id %}title="基于 Run {{ vm.generation.latest_run_id[:8] }}"{% endif %}>
+        生成 Action
+    </button>
+    {% elif vm.permissions.can_manage %}
+    <button disabled class="px-4 py-2 bg-slate-200 text-slate-400 rounded-lg text-sm font-medium cursor-not-allowed"
+            title="{{ vm.generation.disabled_reason }}">
         生成 Action
     </button>
     {% endif %}
@@ -134,16 +140,32 @@ async function transitionPlan(id, status) {
 }
 
 async function generateActions() {
-    const resp = await fetch(`/api/brands/${BID}/actions/generate`, {
-        method: 'POST',
-        headers: {'Authorization':'Bearer '+TOKEN},
-    });
-    if (resp.ok) { alert('生成成功'); location.reload(); }
-    else alert('生成失败: ' + (await resp.json()).detail);
+    var reason = prompt('生成原因 (必填):', '基于最新 GEO 诊断生成优化行动');
+    if (!reason || reason.length < 3) return;
+    var confirmed = confirm('将基于最新诊断结果生成 Action Plans。已有 {{ vm.generation.existing_actions }} 个 Action。确认生成？');
+    if (!confirmed) return;
+    try {
+        var data = await geoFetch('/api/brands/{{ vm.brand.id }}/actions/generate', {
+            method: 'POST',
+            body: JSON.stringify({ reason: reason, idempotency_key: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString() })
+        });
+        showToast('已生成 ' + data.generated + ' 个 Action', 'success');
+        location.reload();
+    } catch (err) {}
 }
 
 async function generateContent(planId) {
-    const resp = await fetch(`/api/actions/${planId}/content-package`, {
+    var reason = prompt('生成原因 (必填):', '为该 Action 生成内容包');
+    if (!reason || reason.length < 3) return;
+    try {
+        var data = await geoFetch('/api/actions/' + planId + '/content-package', {
+            method: 'POST',
+            body: JSON.stringify({ reason: reason, idempotency_key: crypto.randomUUID ? crypto.randomUUID() : Date.now().toString() })
+        });
+        showToast('内容已生成', 'success');
+        location.reload();
+    } catch (err) {}
+}
         method: 'POST',
         headers: {'Authorization':'Bearer '+TOKEN},
     });

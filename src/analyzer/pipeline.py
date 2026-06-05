@@ -75,7 +75,8 @@ async def compute_and_save_metrics(
     try:
         from src.analyzer.quality import build_report_quality_summary, compute_report_publishable
         from src.models.collection_run import CollectionRun as CR
-        from src.models.hallucination import HallucinationResult as HR
+        from src.models.hallucination import HallucinationResult
+        from src.analyzer.enums import HallucinationVerdict
 
         run_row = await db.get(CR, collection_run_id)
         if run_row:
@@ -91,7 +92,7 @@ async def compute_and_save_metrics(
             p0_rows = (await db.execute(
                 select(HR).where(_and(
                     HR.collection_run_id == collection_run_id,
-                    HR.verdict == "contradicted",
+                    HR.verdict == HallucinationVerdict.CONTRADICTED,
                     HR.severity == "P0",
                     HR.subject_type == "target_brand",
                 ))
@@ -237,6 +238,7 @@ async def _run_hallucination_detection(
         )
 
     detector = HallucinationDetector()
+    from src.analyzer.enums import HallucinationVerdict
     all_hallucinations = []
 
     for qr in query_results:
@@ -252,7 +254,7 @@ async def _run_hallucination_detection(
     await db.flush()
 
     # Generate action plans from hallucinations
-    incorrect_hallucinations = [h for h in all_hallucinations if h.verdict == "contradicted"]
+    incorrect_hallucinations = [h for h in all_hallucinations if h.verdict == HallucinationVerdict.CONTRADICTED]
     if incorrect_hallucinations:
         TRIGGER_MAP = {
             "P0": {"action_type": "definition_correction", "content_type": "FAQ"},

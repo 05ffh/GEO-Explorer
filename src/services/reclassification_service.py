@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models.query_result import QueryResult
 from src.models.collection_run import CollectionRun
 from src.models.hallucination import HallucinationResult
+from src.analyzer.enums import HallucinationVerdict
 from src.models.reclassification_run import (
     ReclassificationRun,
     STATUS_QUEUED, STATUS_RUNNING, STATUS_COMPLETED, STATUS_PARTIAL_FAILED,
@@ -108,7 +109,7 @@ class ReclassificationService:
                 r.verdict for r in old_results
                 if r.query_result_id == qr.id
             ]
-            old_error = any(v in ("incorrect", "contradicted", "unsupported") for v in old_verdicts) if old_verdicts else False
+            old_error = any(v in ("incorrect", HallucinationVerdict.CONTRADICTED, HallucinationVerdict.UNSUPPORTED) for v in old_verdicts) if old_verdicts else False
 
             if old_error and new_layer != "ai_hallucination":
                 changes[new_layer] = changes.get(new_layer, 0) + 1
@@ -158,7 +159,7 @@ class ReclassificationService:
                 result_origin=RESULT_RECLASSIFIED,
                 reclassification_run_id=batch.id,
                 is_current_reclassification=True,
-                verdict="contradicted" if new_layer == "ai_hallucination" else new_layer,
+                verdict=HallucinationVerdict.CONTRADICTED if new_layer == "ai_hallucination" else new_layer,
                 field_name="reclassification",
                 field_level="P1",
                 reason=f"P1-8 reclassification: {new_layer}",
@@ -173,7 +174,7 @@ class ReclassificationService:
                     HallucinationResult.result_origin == "original",
                 )
             )).scalars().all()
-            old_error = any(r.verdict in ("incorrect", "contradicted", "unsupported") for r in old_results)
+            old_error = any(r.verdict in ("incorrect", HallucinationVerdict.CONTRADICTED, HallucinationVerdict.UNSUPPORTED) for r in old_results)
             if old_error and new_layer != "ai_hallucination":
                 changes[new_layer] = changes.get(new_layer, 0) + 1
 

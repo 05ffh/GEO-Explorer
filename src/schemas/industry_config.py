@@ -72,6 +72,8 @@ class ClaimNatureThresholdsConfig(BaseModel):
     block_speculation_for_predicates: list[str] = Field(default_factory=list)
     warning_speculation_for_predicates: list[str] = Field(default_factory=list)
     regulated_industry_mode: bool = False
+    industry_high_risk_terms: list[str] = Field(default_factory=list)
+    high_risk_industries: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_thresholds(self) -> "ClaimNatureThresholdsConfig":

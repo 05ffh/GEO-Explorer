@@ -36,6 +36,8 @@ class BatchReviewRequest(BaseModel):
     result_ids: list[str]
     decision: str = "skip"
     reason: str = Field(min_length=1)
+    dry_run_token: str = ""
+    idempotency_key: str = ""
 
 
 class ClaimRequest(BaseModel):
@@ -169,7 +171,10 @@ async def batch_review(
         raise HTTPException(403, "无权批量审核")
     try:
         if body.decision == "skip":
-            result = await review_service.batch_skip(db, body.result_ids, user, body.reason)
+            result = await review_service.batch_skip(
+                db, body.result_ids, user, body.reason,
+                dry_run_token=body.dry_run_token,
+                idempotency_key=body.idempotency_key)
         else:
             raise HTTPException(400, "批量操作仅支持 skip")
         await db.commit()

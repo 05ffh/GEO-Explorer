@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from src.models.hallucination import HallucinationResult
 from src.models.action_plan import ActionPlan, VALID_TRANSITIONS
+from src.analyzer.enums import HallucinationVerdict
 
 TRIGGER_MAP = {
     "P0": {"action_type": "definition_correction", "content_type": "FAQ"},
@@ -22,7 +23,7 @@ async def generate_action_plans(
         select(HallucinationResult).where(
             HallucinationResult.brand_id == brand_id,
             HallucinationResult.human_reviewed == True,  # noqa: E712
-            HallucinationResult.verdict == "contradicted",
+            HallucinationResult.verdict == HallucinationVerdict.CONTRADICTED,
         )
     )).scalars().all()
 

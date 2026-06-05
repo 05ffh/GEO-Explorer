@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
+{% from "partials/components/error_state.html" import error_state %}
+{% from "partials/components/loading_skeleton.html" import loading_skeleton %}
+{% from "partials/components/status_badge.html" import status_badge %}
+
+{% block title %}品牌管理{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h1 class="font-heading text-2xl font-bold text-text">品牌管理</h1>
+        <p class="text-sm text-slate-500 mt-1">管理组织下的所有品牌，查看 GT 覆盖和采集状态</p>
+    </div>
+    <a href="/diagnostics/new"
+       class="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        创建品牌
+    </a>
+</div>
+
+<!-- Search & Filter Bar -->
+<div class="flex flex-wrap gap-3 mb-6" id="brand-filter-bar">
+    <div class="flex-1 min-w-[200px]">
+        <input type="text" name="q" id="brand-search"
+               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light focus:border-transparent"
+               placeholder="搜索品牌名称..."
+               value="{{ vm.search_query }}"
+               hx-get="/brands"
+               hx-trigger="keyup changed delay:300ms"
+               hx-target="#brand-list-area"
+               hx-include="#brand-industry-filter"
+               hx-indicator="#brand-list-spinner">
+    </div>
+    <div>
+        <select name="industry" id="brand-industry-filter"
+                class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light focus:border-transparent cursor-pointer bg-white"
+                hx-get="/brands"
+                hx-trigger="change"
+                hx-target="#brand-list-area"
+                hx-include="#brand-search"
+                hx-indicator="#brand-list-spinner">
+            <option value="">全部行业</option>
+            {% for ind in vm.industry_options %}
+            <option value="{{ ind }}" {% if vm.industry_filter == ind %}selected{% endif %}>{{ ind }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div id="brand-list-spinner" class="htmx-indicator flex items-center">
+        <svg class="animate-spin w-5 h-5 text-primary-light" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        </svg>
+    </div>
+</div>
+
+<!-- Brand List -->
+<div id="brand-list-area">
+{% if not vm.has_brands %}
+    {% if vm.has_search %}
+        {{ empty_state("没有找到匹配的品牌", "试试其他关键词或清除筛选条件") }}
+    {% else %}
+        {{ empty_state("还没有品牌", "创建第一个品牌，开始 GEO 诊断", "/diagnostics/new", "创建品牌") }}
+    {% endif %}
+{% else %}
+    <div class="space-y-3">
+        {% for b in vm.brands %}
+        <div class="bg-white border border-gray-200 rounded-lg p-4 hover:border-primary-light/30 transition-colors duration-200">
+            <div class="flex items-start justify-between gap-4">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-3 mb-1.5">
+                        <a href="/brands/{{ b.id }}"
+                           class="font-heading font-semibold text-text hover:text-primary-light transition-colors text-base">
+                            {{ b.name }}
+                        </a>
+                        {% if b.industry and b.industry != "未设置" %}
+                        <span class="px-2 py-0.5 bg-blue-50 text-primary-light text-xs rounded-full font-medium">
+                            {{ b.industry }}
+                        </span>
+                        {% else %}
+                        <span class="px-2 py-0.5 bg-slate-100 text-slate-500 text-xs rounded-full">
+                            未设置行业
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    {% if b.aliases_display %}
+                    <p class="text-sm text-slate-500 mb-2">别名: {{ b.aliases_display }}</p>
+                    {% endif %}
+
+                    <div class="flex items-center gap-4 text-xs text-slate-400">
+                        <span class="flex items-center gap-1">
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                            GT: {{ b.gt_field_count }}/{{ b.gt_total }} 字段
+                        </span>
+                        {% if b.latest_collection_at %}
+                        <span>最近采集: {{ b.latest_collection_at[:10] }}</span>
+                        {% endif %}
+                        {% if b.latest_diagnostic_at %}
+                        <span>最近诊断: {{ b.latest_diagnostic_at[:10] }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <a href="/brands/{{ b.id }}"
+                       class="px-3 py-1.5 text-xs font-medium text-primary border border-primary/20 rounded-md hover:bg-primary/5 transition-colors cursor-pointer">
+                        Dashboard
+                    </a>
+                    <button onclick="triggerGTCollect('{{ b.id }}', this)"
+                       class="gt-collect-btn px-3 py-1.5 text-xs font-medium text-white bg-cta rounded-md hover:opacity-90 transition-all cursor-pointer">
+                        采集 GT
+                    </button>
+                    <a href="/diagnostics/new"
+                       class="px-3 py-1.5 text-xs font-medium text-slate-600 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors cursor-pointer">
+                        诊断
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if vm.total_pages > 1 %}
+    <div class="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
+        <p class="text-sm text-slate-500">共 {{ vm.total }} 个品牌</p>
+        <div class="flex items-center gap-1">
+            {% if vm.page > 1 %}
+            <button class="px-3 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors cursor-pointer"
+                    hx-get="/brands?page={{ vm.page - 1 }}&q={{ vm.search_query }}&industry={{ vm.industry_filter }}"
+                    hx-target="#brand-list-area"
+                    hx-indicator="#brand-list-spinner">
+                上一页
+            </button>
+            {% endif %}
+
+            {% for p in range(1, vm.total_pages + 1) %}
+                {% if p >= vm.page - 2 and p <= vm.page + 2 %}
+                <button class="w-8 h-8 text-sm rounded-md transition-colors cursor-pointer
+                              {% if p == vm.page %}bg-primary text-white{% else %}text-slate-600 hover:bg-slate-100{% endif %}"
+                        hx-get="/brands?page={{ p }}&q={{ vm.search_query }}&industry={{ vm.industry_filter }}"
+                        hx-target="#brand-list-area"
+                        hx-indicator="#brand-list-spinner">
+                    {{ p }}
+                </button>
+                {% endif %}
+            {% endfor %}
+
+            {% if vm.page < vm.total_pages %}
+            <button class="px-3 py-1.5 text-sm text-slate-600 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors cursor-pointer"
+                    hx-get="/brands?page={{ vm.page + 1 }}&q={{ vm.search_query }}&industry={{ vm.industry_filter }}"
+                    hx-target="#brand-list-area"
+                    hx-indicator="#brand-list-spinner">
+                下一页
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function triggerGTCollect(brandId, btn) {
+    var origHTML = btn.innerHTML;
+    btn.innerHTML = '<svg class="animate-spin inline w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> 采集中...';
+    btn.disabled = true;
+    btn.classList.add('opacity-60', 'cursor-not-allowed');
+
+    geoFetch('/api/brands/' + brandId + '/gt-collect', { method: 'POST' })
+        .then(function(data) {
+            if (data.status === 'queued') {
+                showToast('GT采集已启动', 'success');
+                btn.innerHTML = '查看任务';
+                btn.classList.remove('opacity-60', 'cursor-not-allowed');
+                btn.disabled = false;
+            } else if (data.status === 'duplicate') {
+                showToast('已有采集任务在执行中', 'info');
+                btn.innerHTML = origHTML;
+                btn.classList.remove('opacity-60', 'cursor-not-allowed');
+                btn.disabled = false;
+            }
+        })
+        .catch(function(err) {
+            showToast('采集启动失败', 'error');
+            btn.innerHTML = origHTML;
+            btn.classList.remove('opacity-60', 'cursor-not-allowed');
+            btn.disabled = false;
+        });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,85 @@
+{# brand_header_edit.html — inline edit form, loaded via HTMX #}
+<div id="brand-header" class="bg-white border border-gray-200 rounded-lg p-4 mb-6">
+    <form id="brand-edit-form"
+          hx-put="/api/brands/{{ vm.brand.id }}"
+          hx-target="#brand-header"
+          hx-swap="outerHTML"
+          hx-headers='{"Content-Type": "application/json"}'
+          onsubmit="submitBrandEdit(event, '{{ vm.brand.id }}')">
+        <div id="brand-edit-error" class="text-sm text-red-600 mb-3 hidden"></div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">
+                    品牌名称 <span class="text-red-500">*</span>
+                </label>
+                <input type="text" name="name" id="edit-brand-name" required
+                       value="{{ vm.brand.name }}"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light focus:border-transparent">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">行业</label>
+                <select name="industry" id="edit-brand-industry"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light focus:border-transparent cursor-pointer bg-white">
+                    <option value="">— 选择行业 —</option>
+                    {% for ind in vm.industry_options %}
+                    <option value="{{ ind }}" {% if vm.brand.industry == ind %}selected{% endif %}>{{ ind }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-slate-700 mb-1">别名 (逗号分隔)</label>
+            <input type="text" name="aliases" id="edit-brand-aliases"
+                   value="{{ vm.brand.aliases|join(', ') }}"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-light focus:border-transparent"
+                   placeholder="例如: luckin, 瑞幸">
+        </div>
+        <div class="flex gap-3">
+            <button type="submit" id="edit-save-btn"
+                    class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors cursor-pointer">
+                保存
+            </button>
+            <button type="button"
+                    hx-get="/brands/{{ vm.brand.id }}/view"
+                    hx-target="#brand-header"
+                    hx-swap="outerHTML"
+                    class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200 transition-colors cursor-pointer">
+                取消
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+function submitBrandEdit(e, brandId) {
+    e.preventDefault();
+    var btn = document.getElementById('edit-save-btn');
+    var errEl = document.getElementById('brand-edit-error');
+    btn.textContent = '保存中...';
+    btn.disabled = true;
+    errEl.classList.add('hidden');
+
+    var aliases = document.getElementById('edit-brand-aliases').value
+        .split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+
+    var body = JSON.stringify({
+        name: document.getElementById('edit-brand-name').value.trim(),
+        aliases: aliases,
+        industry: document.getElementById('edit-brand-industry').value
+    });
+
+    geoFetch('/api/brands/' + brandId, {
+        method: 'PUT',
+        body: body
+    }).then(function() {
+        showToast('品牌信息已更新', 'success');
+        // Reload view mode
+        htmx.ajax('GET', '/brands/' + brandId + '/view', '#brand-header');
+    }).catch(function(err) {
+        btn.textContent = '保存';
+        btn.disabled = false;
+        errEl.textContent = '保存失败: ' + (err.message || '未知错误');
+        errEl.classList.remove('hidden');
+    });
+}
+</script>

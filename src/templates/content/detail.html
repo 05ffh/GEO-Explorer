@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
+{% block title %}{{ vm.brand.name }} — Content 详情{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <h1 class="font-heading text-xl font-bold text-text">Content Package 详情</h1>
+            <p class="text-sm text-slate-500">{{ vm.brand.name }} · {{ vm.package.id[:8] }}</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="/brands/{{ vm.brand.id }}/content" class="px-3 py-1.5 text-xs bg-slate-100 rounded hover:bg-slate-200 cursor-pointer">返回列表</a>
+            {% for to in vm.transitions %}
+            <button onclick="transitionCP('{{ vm.package.id }}','{{ to }}')"
+                    class="px-3 py-1.5 text-xs bg-primary text-white rounded hover:bg-primary-light cursor-pointer">{{ to }}</button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Status + Risk -->
+    <div class="flex items-center gap-3 mb-4">
+        <span class="px-2 py-1 text-xs rounded font-medium bg-slate-100 text-slate-700">{{ vm.package.status }}</span>
+        <span class="px-2 py-1 text-xs rounded font-medium
+            {% if vm.package.risk_level == 'high' %}bg-red-100 text-red-700
+            {% elif vm.package.risk_level == 'medium' %}bg-amber-100 text-amber-700
+            {% else %}bg-green-100 text-green-700{% endif %}">
+            风险: {{ vm.package.risk_level }}
+        </span>
+    </div>
+
+    <!-- Fact Check Summary -->
+    {% if vm.fact_check.has_report %}
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+        <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">Fact Check</h3>
+        <div class="grid grid-cols-4 gap-3 text-center">
+            <div class="p-2 rounded bg-green-50"><p class="text-lg font-bold text-green-700">{{ vm.fact_check.supported }}</p><p class="text-xs text-green-600">supported</p></div>
+            <div class="p-2 rounded bg-red-50"><p class="text-lg font-bold text-red-700">{{ vm.fact_check.contradicted }}</p><p class="text-xs text-red-600">contradicted</p></div>
+            <div class="p-2 rounded bg-amber-50"><p class="text-lg font-bold text-amber-700">{{ vm.fact_check.unsupported }}</p><p class="text-xs text-amber-600">unsupported</p></div>
+            <div class="p-2 rounded bg-slate-50"><p class="text-lg font-bold text-slate-700">{{ vm.fact_check.not_checkable }}</p><p class="text-xs text-slate-500">not checkable</p></div>
+        </div>
+        {% if vm.fact_check.high_risk %}
+        <div class="mt-2 p-2 bg-red-50 rounded text-xs text-red-700">
+            ⚠ 高风险声明: {{ vm.fact_check.high_risk|length }} 条
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Content Sections -->
+    {% if vm.content_items %}
+    <div class="space-y-3 mb-4">
+        {% for item in vm.content_items %}
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">{{ item.get('type', 'section') }}</h3>
+            <div class="prose prose-sm max-w-none text-text">{{ item.get('body', item.get('content', '')) }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Schema.org JSON-LD -->
+    {% if vm.schema_items %}
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Schema.org JSON-LD</h3>
+            <button onclick="copyJSON()" class="px-2 py-1 text-xs bg-slate-100 rounded hover:bg-slate-200 cursor-pointer">复制</button>
+        </div>
+        <pre id="schema-json" class="text-xs text-slate-600 bg-slate-50 rounded p-3 overflow-x-auto"><code>{{ vm.schema_items | tojson(indent=2) }}</code></pre>
+    </div>
+    {% endif %}
+
+    <!-- Publish Checklist -->
+    {% if vm.checklist %}
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+        <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">发布检查清单</h3>
+        <div class="space-y-1">
+            {% for item in vm.checklist %}
+            <div class="flex items-center gap-2 text-sm">
+                {% if item.status == 'passed' %}
+                <span class="text-green-600">✓</span>
+                {% elif item.status == 'blocked' %}
+                <span class="text-red-600">✗</span>
+                {% else %}
+                <span class="text-amber-500">○</span>
+                {% endif %}
+                <span class="text-text">{{ item.label }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Actions -->
+    {% if vm.permissions.can_publish and vm.package.status in ('approved','fact_checked','ready') %}
+    <button onclick="publishCP('{{ vm.package.id }}')"
+            class="px-4 py-2 bg-cta text-white rounded-lg text-sm font-medium hover:opacity-90 cursor-pointer">
+        发布
+    </button>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function transitionCP(id, to) {
+    try {
+        await geoFetch('/api/content-packages/' + id + '/transition', {
+            method: 'POST', body: JSON.stringify({ status: to })
+        });
+        showToast('状态已更新: ' + to, 'success');
+        location.reload();
+    } catch (err) {}
+}
+
+async function publishCP(id) {
+    var confirmed = await confirmAction('确认发布此内容包？', '发布备注');
+    if (!confirmed.confirmed) return;
+    try {
+        await geoFetch('/api/content-packages/' + id + '/transition', {
+            method: 'POST', body: JSON.stringify({ status: 'published' })
+        });
+        showToast('已发布', 'success');
+        location.reload();
+    } catch (err) {}
+}
+
+function copyJSON() {
+    var el = document.getElementById('schema-json');
+    if (el) {
+        navigator.clipboard.writeText(el.textContent).then(function() {
+            showToast('已复制', 'success');
+        });
+    }
+}
+</script>
+{% endblock %}

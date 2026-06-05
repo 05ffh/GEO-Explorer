@@ -127,7 +127,7 @@ async def test_extended_kpis_flow(db_session):
     from src.models.collection_run import CollectionRun
     from src.models.query_template import QueryTemplate
     from src.models.query_result import QueryResult
-    from datetime import datetime
+    from datetime import datetime, timezone
 
     org = Organization(name="KPIOrg")
     db_session.add(org)
@@ -151,7 +151,7 @@ async def test_extended_kpis_flow(db_session):
             question=f"Query {i} about KPIBrand",
             answer_text=f"KPIBrand is an innovative tech platform with unique capabilities. Answer {i}.",
             status="success",
-            collected_at=datetime.utcnow(),
+            collected_at=datetime.now(timezone.utc),
         )
         db_session.add(qr)
     await db_session.commit()

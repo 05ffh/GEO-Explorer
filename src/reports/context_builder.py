@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
+from src.analyzer.enums import HallucinationVerdict
 from src.reports.customer_language import (
     KPI_CUSTOMER_LANGUAGE, get_kpi_verdict, get_industry_language,
 )
@@ -134,7 +135,7 @@ async def _fetch_data(brand: dict, collection_run_id: str, db: AsyncSession) -> 
     data["hallucinations"] = [dict(r._mapping) for r in hall.fetchall()]
     data["hall_total"] = sum(h["c"] for h in data["hallucinations"])
     data["hall_incorrect"] = sum(h["c"] for h in data["hallucinations"]
-                                  if h["verdict"] in ("contradicted", "unsupported"))
+                                  if h["verdict"] in (HallucinationVerdict.CONTRADICTED, HallucinationVerdict.UNSUPPORTED))
     data["p0_hall_count"] = sum(h["c"] for h in data["hallucinations"] if h["severity"] == "P0")
 
     # Hallucination examples for report

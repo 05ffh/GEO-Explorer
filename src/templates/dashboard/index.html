@@ -5,10 +5,22 @@
 {% from "partials/components/partial_data_banner.html" import partial_data_banner %}
 {% from "partials/components/priority_badge.html" import priority_badge %}
 
-{% block title %}{{ vm.brand.name }} — 品牌总览{% endblock %}
+{% block title %}GEO Explorer — 品牌总览{% endblock %}
 
 {% block content %}
-{% if not vm.has_data %}
+
+{% if not vm.has_brands %}
+<!-- ═══ Empty State: no brands ═══ -->
+<div class="text-center py-16">
+    <h1 class="font-heading text-2xl font-bold text-text mb-3">还没有品牌</h1>
+    <p class="text-slate-500 mb-6">开始你的第一次 GEO 诊断，监测 AI 如何描述你的品牌</p>
+    <a href="/diagnostics/new"
+       class="inline-block px-6 py-3 bg-cta text-white rounded-lg font-medium text-sm hover:opacity-90 transition-opacity cursor-pointer">
+        开始第一次 GEO 诊断
+    </a>
+</div>
+
+{% elif not vm.has_data %}
 
 {{ empty_state("暂无采集数据", "请先触发采集以获取品牌 AI 可见度数据", none, none) }}
 {% if vm.permissions.can_trigger_collection %}
@@ -21,24 +33,26 @@
 
 {% else %}
 
-<!-- Page Header -->
+<!-- Brand Header: inline edit + GT collect -->
+{% include "partials/brand_header_view.html" %}
+
+<!-- Page Header (metrics area) -->
 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-5 gap-3">
     <div>
-        <h1 class="font-heading text-2xl font-bold text-text">{{ vm.brand.name }}</h1>
         <p class="text-sm text-slate-500 mt-0.5">
-            行业: {{ vm.brand.industry }}
             {% if vm.data_reliability.latest_snapshot_at %}
-            <span class="ml-3">数据时间: {{ vm.data_reliability.latest_snapshot_at[:10] }}</span>
+            <span>数据时间: {{ vm.data_reliability.latest_snapshot_at[:10] }}</span>
             {% endif %}
         </p>
     </div>
     <div class="flex gap-2 flex-shrink-0">
         {% if vm.permissions.can_trigger_collection %}
-        <button class="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200 cursor-pointer"
-                hx-post="/api/dashboard/brands/{{ vm.brand.id }}/reports/generate" hx-swap="none">
+        <button id="generate-report-btn"
+                class="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors duration-200 cursor-pointer"
+                onclick="generateDashboardReport('{{ vm.brand.id }}')">
             生成报告</button>
         <button class="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer"
-                hx-post="/api/brands/{{ vm.brand.id }}/collection-runs" hx-swap="none">
+                hx-post="/api/brands/{{ vm.brand.id }}/collections" hx-swap="none">
             触发采集</button>
         {% endif %}
     </div>
@@ -163,6 +177,65 @@
 
 {% block scripts %}
 <script>
+function triggerGTCollect(brandId, btn) {
+    var origHTML = btn.innerHTML;
+    btn.innerHTML = '<svg class=\"animate-spin inline w-3.5 h-3.5\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\"><circle class=\"opacity-25\" cx=\"12\" cy=\"12\" r=\"10\" stroke=\"currentColor\" stroke-width=\"4\"></circle><path class=\"opacity-75\" fill=\"currentColor\" d=\"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z\"></path></svg> 采集中...';
+    btn.disabled = true;
+    btn.classList.add('opacity-60', 'cursor-not-allowed');
+
+    geoFetch('/api/brands/' + brandId + '/gt-collect', { method: 'POST' })
+        .then(function(data) {
+            if (data.status === 'queued') {
+                showToast('GT采集已启动', 'success');
+                btn.innerHTML = '查看任务';
+                btn.classList.remove('opacity-60', 'cursor-not-allowed');
+                btn.disabled = false;
+            } else if (data.status === 'duplicate') {
+                showToast('已有采集任务在执行中', 'info');
+                btn.innerHTML = origHTML;
+                btn.classList.remove('opacity-60', 'cursor-not-allowed');
+                btn.disabled = false;
+            }
+        })
+        .catch(function(err) {
+            showToast('采集启动失败', 'error');
+            btn.innerHTML = origHTML;
+            btn.classList.remove('opacity-60', 'cursor-not-allowed');
+            btn.disabled = false;
+        });
+}
+
+function generateDashboardReport(brandId) {
+    var btn = document.getElementById('generate-report-btn');
+    var origHTML = btn.innerHTML;
+    btn.innerHTML = '<svg class="animate-spin inline w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> 生成中...';
+    btn.disabled = true;
+    btn.classList.add('opacity-60', 'cursor-not-allowed');
+
+    geoFetch('/api/brands/' + brandId + '/reports/generate', {
+        method: 'POST',
+        body: JSON.stringify({ editions: null })
+    }).then(function(data) {
+        if (data.status === 'queued' || data.dir) {
+            showToast('报告生成已启动', 'success');
+            btn.innerHTML = '查看报告';
+            btn.classList.remove('opacity-60', 'cursor-not-allowed');
+            btn.disabled = false;
+            btn.onclick = function() { window.location.href = '/brands/' + brandId + '/reports'; };
+        } else {
+            showToast('报告生成失败', 'error');
+            btn.innerHTML = origHTML;
+            btn.classList.remove('opacity-60', 'cursor-not-allowed');
+            btn.disabled = false;
+        }
+    }).catch(function() {
+        showToast('报告生成失败', 'error');
+        btn.innerHTML = origHTML;
+        btn.classList.remove('opacity-60', 'cursor-not-allowed');
+        btn.disabled = false;
+    });
+}
+
 (function() {
     var canvas = document.getElementById('health-ring');
     if (!canvas) return;

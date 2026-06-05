@@ -1,6 +1,6 @@
 """P2-4: Append-only audit log for hallucination human review actions."""
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import String, ForeignKey, Text, DateTime
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -38,4 +38,4 @@ class HallucinationReviewLog(Base, UUIDMixin):
     snapshot_after_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     feedback_generated_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.utcnow())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

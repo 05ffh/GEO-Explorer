@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from src.analyzer.insights import generate_insights
 from src.models.organization import Organization
 from src.models.brand import Brand
@@ -35,7 +35,7 @@ async def _seed_insight_data(db_session, platforms, field_name="industry", sever
 
     snap = MetricsSnapshot(
         brand_id=brand.id, organization_id=org.id,
-        collection_run_id=run.id, week_start=datetime.utcnow().date(),
+        collection_run_id=run.id, week_start=datetime.now(timezone.utc).date(),
         sov=0.78, first_rec_rate=0.65, accuracy_rate=0.82,
         completeness_rate=0.71, citation_rate=0.43, sample_size=n,
         details={"citation": {"by_platform": {
@@ -53,7 +53,7 @@ async def _seed_insight_data(db_session, platforms, field_name="industry", sever
             collection_run_id=run.id, platform=p,
             template_id=tmpl.id, question="TestBrand 是什么？",
             answer_text="TestBrand 是一家金融公司", status="success",
-            collected_at=datetime.utcnow(),
+            collected_at=datetime.now(timezone.utc),
         )
         db_session.add(qr)
         await db_session.flush()

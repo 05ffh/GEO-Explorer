@@ -14,6 +14,19 @@
         <h1 class="font-heading text-2xl font-bold text-text">{{ vm.brand.name }} — GT 审核</h1>
         <p class="text-sm text-slate-500 mt-0.5">审核 AI 采集的 Ground Truth 候选字段，确认后 Promote 为正式 GT</p>
     </div>
+    <div class="flex gap-2">
+        <a href="/brands/{{ vm.brand.id }}/gt-compare"
+           class="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors cursor-pointer">
+            版本对比
+        </a>
+        {% if vm.permissions.can_promote and vm.can_promote %}
+        <button class="px-5 py-2 bg-primary text-white rounded-lg font-medium text-sm hover:bg-primary/90 cursor-pointer"
+                hx-post="/api/gt-candidates/{{ vm.candidate_id }}/promote"
+                hx-confirm="确认 Promote 为正式 GT？">
+            Promote 为正式 GT
+        </button>
+    {% endif %}
+</div>
 </div>
 
 {% if not vm.has_candidate %}
@@ -48,15 +61,20 @@
 <div class="space-y-2" id="gt-field-list">
     {% for field in vm.fields %}
     <div class="bg-white rounded-lg border border-gray-200 {% if field.risk_level == 'high' %}risk-high{% elif field.risk_level == 'medium' %}risk-medium{% else %}risk-low{% endif %}"
-         data-risk="{{ field.risk_level }}" data-status="{{ field.status }}" data-conflict="{{ '1' if field.has_conflict else '0' }}">
+         data-risk="{{ field.risk_level }}" data-status="{{ field.status }}" data-conflict="{{ '1' if field.has_conflict else '0' }}"
+         id="field-{{ loop.index }}">
 
         <!-- Field Row (always visible) -->
         <div class="flex items-center justify-between px-4 py-3 cursor-pointer" onclick="toggleFieldDetail(this)">
             <div class="flex items-center gap-3 min-w-0 flex-1">
                 <span class="font-heading text-sm font-semibold text-text whitespace-nowrap">{{ field.name }}</span>
                 {{ risk_badge(field.risk_level) }}
+                <!-- Field type badge (v2 schema) -->
+                {% if field.field_type %}
+                <span class="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">{{ field.field_type }}</span>
+                {% endif %}
                 {% if field.has_conflict %}
-                <span class="badge badge-p0">冲突</span>
+                <span class="badge badge-p0 text-xs">冲突</span>
                 {% endif %}
                 {% if field.best_tier %}
                 {{ source_tier_badge(field.best_tier) }}
@@ -75,7 +93,17 @@
             <!-- Candidate value -->
             <div class="mb-3">
                 <span class="text-xs text-slate-500 font-medium">候选值</span>
-                <p class="text-sm text-text mt-1">{{ field.value }}</p>
+                <p class="text-sm text-text mt-1 field-value-display">{{ field.value }}</p>
+                <!-- Inline edit form (hidden by default) -->
+                <div class="field-edit-form hidden mt-2">
+                    <input type="text" class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm field-edit-input" value="{{ field.value }}">
+                    <div class="flex gap-2 mt-2">
+                        <button class="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 cursor-pointer"
+                                onclick="saveFieldEdit(this, '{{ field.name }}', '{{ vm.candidate_id }}')">保存</button>
+                        <button class="px-3 py-1 text-xs bg-slate-100 text-slate-600 rounded hover:bg-slate-200 cursor-pointer"
+                                onclick="cancelFieldEdit(this)">取消</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Active GT comparison -->
@@ -94,6 +122,7 @@
                     <div class="bg-white rounded p-2 text-sm border border-gray-100 {% if ev.human_confirmed %}bg-green-50{% endif %}">
                         <div class="flex items-center gap-2 mb-1">
                             {{ source_tier_badge(ev.source_tier) }}
+                            <span class="text-xs px-1.5 py-0.5 rounded bg-slate-50 text-slate-500 font-medium">{{ ev.source_tier }}</span>
                             <span class="font-medium text-text">{{ ev.source_name }}</span>
                             {% if ev.human_confirmed %}<span class="badge badge-success text-xs">已确认</span>{% endif %}
                             {% if ev.review_status == 'flagged' %}<span class="badge badge-p0 text-xs">已标记</span>{% endif %}
@@ -109,13 +138,19 @@
             {% if vm.permissions.can_review %}
             <div class="flex gap-2">
                 <button class="px-3 py-1.5 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 cursor-pointer"
-                        hx-post="/api/gt-candidates/{{ vm.candidate_id }}/review" hx-swap="none">接受</button>
+                        hx-post="/api/gt-candidates/{{ vm.candidate_id }}/review"
+                        hx-vals='{"field_reviews": [{"field_name": "{{ field.name }}", "action": "accept"}]}'
+                        hx-swap="none">接受</button>
                 <button class="px-3 py-1.5 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 cursor-pointer"
-                        onclick="alert('编辑功能开发中')">编辑</button>
+                        onclick="showFieldEdit(this)">编辑</button>
                 <button class="px-3 py-1.5 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 cursor-pointer"
-                        hx-post="/api/gt-candidates/{{ vm.candidate_id }}/review" hx-swap="none">删除</button>
+                        hx-post="/api/gt-candidates/{{ vm.candidate_id }}/review"
+                        hx-vals='{"field_reviews": [{"field_name": "{{ field.name }}", "action": "delete"}]}'
+                        hx-swap="none">删除</button>
                 <button class="px-3 py-1.5 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 cursor-pointer"
-                        hx-post="/api/gt-candidates/{{ vm.candidate_id }}/review" hx-swap="none">标记不确定</button>
+                        hx-post="/api/gt-candidates/{{ vm.candidate_id }}/review"
+                        hx-vals='{"field_reviews": [{"field_name": "{{ field.name }}", "action": "uncertain"}]}'
+                        hx-swap="none">标记不确定</button>
             </div>
             {% endif %}
         </div>
@@ -171,6 +206,60 @@ function filterFields(type) {
         b.className = types[i] === type
             ? 'px-3 py-1.5 text-xs rounded-full bg-primary text-white cursor-pointer'
             : 'px-3 py-1.5 text-xs rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 cursor-pointer';
+    });
+}
+
+// Inline field editing
+function showFieldEdit(btn) {
+    var panel = btn.closest('.field-detail');
+    var display = panel.querySelector('.field-value-display');
+    var form = panel.querySelector('.field-edit-form');
+    display.classList.add('hidden');
+    form.classList.remove('hidden');
+    form.querySelector('.field-edit-input').focus();
+}
+
+function cancelFieldEdit(btn) {
+    var panel = btn.closest('.field-detail');
+    var display = panel.querySelector('.field-value-display');
+    var form = panel.querySelector('.field-edit-form');
+    form.classList.add('hidden');
+    display.classList.remove('hidden');
+}
+
+function saveFieldEdit(btn, fieldName, candidateId) {
+    var panel = btn.closest('.field-detail');
+    var input = panel.querySelector('.field-edit-input');
+    var newValue = input.value.trim();
+    if (!newValue) return;
+
+    // Disable button during save
+    btn.disabled = true;
+    btn.textContent = '保存中...';
+
+    fetch('/api/gt-candidates/' + candidateId + '/review', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            field_reviews: [{field_name: fieldName, action: 'edit', new_value: newValue}],
+            notes: ''
+        })
+    }).then(function(r) {
+        if (r.ok) {
+            var display = panel.querySelector('.field-value-display');
+            display.textContent = newValue;
+            cancelFieldEdit(btn);
+            btn.disabled = false;
+            btn.textContent = '保存';
+        } else {
+            alert('保存失败，请重试');
+            btn.disabled = false;
+            btn.textContent = '保存';
+        }
+    }).catch(function() {
+        alert('网络错误');
+        btn.disabled = false;
+        btn.textContent = '保存';
     });
 }
 </script>

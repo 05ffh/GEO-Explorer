@@ -75,6 +75,15 @@ async def build_gt_review_vm(brand, user, db) -> dict:
     # Build field list with evidence
     fields = []
     if candidate:
+        # Detect v2 field types from active GT for display
+        field_types = {}
+        if active_gt and isinstance(active_gt.ground_truth_json, dict):
+            v2_fields = active_gt.ground_truth_json.get("fields", {})
+            if isinstance(v2_fields, dict):
+                for fn, fmeta in v2_fields.items():
+                    if isinstance(fmeta, dict) and "field_type" in fmeta:
+                        field_types[fn] = fmeta["field_type"]
+
         for fname, fval in (candidate.candidate_json or {}).items():
             risk = FIELD_TO_RISK_LEVEL.get(fname, "low")
             field_ev = evidences_by_field.get(fname, [])
@@ -94,9 +103,21 @@ async def build_gt_review_vm(brand, user, db) -> dict:
             # Best tier
             best_tier = max((ev.source_tier for ev in field_ev), default="C")
 
+            # Infer field type from value if not in v2 schema
+            ft = field_types.get(fname)
+            if not ft:
+                fv = str(fval)
+                if fv.startswith("[") or "、" in fv:
+                    ft = "list"
+                elif fv.isdigit() or fv.replace(".", "").replace("%", "").isdigit():
+                    ft = "number"
+                else:
+                    ft = "string"
+
             fields.append({
                 "name": fname,
                 "value": str(fval)[:200],
+                "field_type": ft,
                 "risk_level": risk,
                 "status": status,
                 "has_conflict": has_conflict,

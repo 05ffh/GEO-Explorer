@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
+
+{% block title %}{{ vm.brand.name }} — Diff 对比{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <h1 class="font-heading text-2xl font-bold text-text">变更对比</h1>
+            <p class="text-sm text-slate-500 mt-0.5">{{ vm.brand.name }} · Batch {{ vm.batch_id[:8] }}</p>
+        </div>
+        <a href="/brands/{{ vm.brand.id }}/reclassifications/{{ vm.batch_id }}"
+           class="px-3 py-1.5 text-xs bg-slate-100 text-slate-700 rounded hover:bg-slate-200 cursor-pointer">返回详情</a>
+    </div>
+
+    <!-- ═══ Summary ═══ -->
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+        <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">变更摘要</h3>
+        <div class="grid grid-cols-4 gap-3 text-center">
+            <div><p class="text-2xl font-bold text-text">{{ vm.summary.total_changes }}</p><p class="text-xs text-slate-500">总变更</p></div>
+            <div><p class="text-2xl font-bold text-amber-700">{{ vm.summary.old_incorrect_count }}</p><p class="text-xs text-slate-500">旧 incorrect →</p></div>
+            <div><p class="text-2xl font-bold text-red-700">{{ vm.summary.to_contradicted_count }}</p><p class="text-xs text-slate-500">→ AI 幻觉</p></div>
+            <div>
+                <p class="text-2xl font-bold text-text">{{ vm.pagination.total }}</p>
+                <p class="text-xs text-slate-500">样本 Diffs</p>
+            </div>
+        </div>
+        {% if vm.summary.classification_changes %}
+        <div class="mt-3 flex gap-4 text-xs text-slate-500">
+            {% for k, v in vm.summary.classification_changes.items() %}
+            <span>{{ k }}: <strong>{{ v }}</strong></span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ═══ Diff Filters ═══ -->
+    <div class="flex flex-wrap gap-2 mb-4">
+        <a href="?" class="px-3 py-1 text-xs rounded-full {% if not vm.filters.old_verdict and not vm.filters.category %}bg-primary text-white{% else %}bg-slate-100 text-slate-600{% endif %} cursor-pointer">全部</a>
+        <span class="text-xs text-slate-400 self-center">|</span>
+        {% for v in ["incorrect", "contradicted", "unsupported", "supported"] %}
+        <a href="?old_verdict={{ v }}" class="px-3 py-1 text-xs rounded-full {% if vm.filters.old_verdict == v %}bg-primary text-white{% else %}bg-slate-100 text-slate-600{% endif %} cursor-pointer">old:{{ v }}</a>
+        {% endfor %}
+        <span class="text-xs text-slate-400 self-center">|</span>
+        {% for c in ["ai_hallucination", "template_issue", "gt_insufficient", "not_about_brand"] %}
+        <a href="?category={{ c }}" class="px-3 py-1 text-xs rounded-full {% if vm.filters.category == c %}bg-primary text-white{% else %}bg-slate-100 text-slate-600{% endif %} cursor-pointer">new:{{ c }}</a>
+        {% endfor %}
+    </div>
+
+    <!-- ═══ Diff List ═══ -->
+    {% if not vm.diffs %}
+    {{ empty_state("本次无判定变化", "所有查询结果的分类与原始判定一致", none, none) }}
+    {% else %}
+    <div class="space-y-1">
+        {% for d in vm.diffs %}
+        <div class="bg-white rounded-lg border border-gray-100 p-3 text-sm hover:shadow-sm transition-shadow">
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-slate-400 font-mono w-8">#{{ loop.index + (vm.pagination.page - 1) * vm.pagination.page_size }}</span>
+                <span class="px-1.5 py-0.5 text-xs rounded bg-red-50 text-red-700 font-medium">{{ d.get("old_verdict", "?") }}</span>
+                <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                <span class="px-1.5 py-0.5 text-xs rounded bg-green-50 text-green-700 font-medium">{{ d.get("new_layer", "?") }}</span>
+                <span class="text-xs text-slate-500 truncate flex-1">Run: {{ d.get("collection_run_id", "")[:8] }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if vm.pagination.total > vm.pagination.page_size %}
+    <div class="flex justify-center gap-2 mt-4">
+        {% set total_pages = (vm.pagination.total / vm.pagination.page_size)|round(0, 'ceil')|int %}
+        {% for p in range(1, min(total_pages, 10) + 1) %}
+        <a href="?page={{ p }}&old_verdict={{ vm.filters.old_verdict }}&category={{ vm.filters.category }}"
+           class="px-3 py-1 text-xs rounded {% if p == vm.pagination.page %}bg-primary text-white{% else %}bg-slate-100 text-slate-600{% endif %} cursor-pointer">{{ p }}</a>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

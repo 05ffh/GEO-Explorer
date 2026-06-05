@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
+
+{% block title %}{{ vm.brand.name }} — GT 版本对比{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+    <div class="flex items-center justify-between mb-5">
+        <div>
+            <h1 class="font-heading text-2xl font-bold text-text">GT 版本对比</h1>
+            <p class="text-sm text-slate-500 mt-0.5">{{ vm.brand.name }} — Candidate v.s. Active GT v{{ vm.active_gt_version }}</p>
+        </div>
+        <a href="/brands/{{ vm.brand.id }}/gt-review" class="text-sm text-primary-light hover:underline">返回 GT 审核</a>
+    </div>
+
+    {% if not vm.has_candidate %}
+        {{ empty_state("暂无 GT Candidate", "当前品牌没有待审核的 GT Candidate", none, none) }}
+    {% elif not vm.has_active_gt %}
+        {{ empty_state("暂无 Active GT", "当前品牌尚未设置 Active GT，这是首次建立", none, none) }}
+    {% else %}
+
+    <!-- Stats -->
+    <div class="grid grid-cols-4 gap-3 mb-5">
+        <div class="bg-green-50 rounded-lg p-3 text-center">
+            <p class="text-2xl font-bold text-green-700">{{ vm.stats.added }}</p>
+            <p class="text-xs text-green-600">新增字段</p>
+        </div>
+        <div class="bg-amber-50 rounded-lg p-3 text-center">
+            <p class="text-2xl font-bold text-amber-700">{{ vm.stats.changed }}</p>
+            <p class="text-xs text-amber-600">变更字段</p>
+        </div>
+        <div class="bg-slate-50 rounded-lg p-3 text-center">
+            <p class="text-2xl font-bold text-slate-600">{{ vm.stats.unchanged }}</p>
+            <p class="text-xs text-slate-500">未变更</p>
+        </div>
+        <div class="bg-red-50 rounded-lg p-3 text-center">
+            <p class="text-2xl font-bold text-red-700">{{ vm.stats.removed }}</p>
+            <p class="text-xs text-red-600">移除字段</p>
+        </div>
+    </div>
+
+    <!-- Diff Table -->
+    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="bg-slate-50 border-b border-gray-200">
+                <tr>
+                    <th class="text-left px-4 py-3 font-semibold text-slate-600 w-1/4">字段</th>
+                    <th class="text-left px-4 py-3 font-semibold text-slate-600">Active GT (当前)</th>
+                    <th class="text-left px-4 py-3 font-semibold text-slate-600">Candidate (新)</th>
+                    <th class="text-center px-4 py-3 font-semibold text-slate-600 w-20">状态</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in vm.fields %}
+                <tr class="border-b border-gray-100 hover:bg-slate-50/50 transition-colors
+                           {% if f.status == 'added' %}bg-green-50/30{% elif f.status == 'removed' %}bg-red-50/30{% elif f.status == 'changed' %}bg-amber-50/20{% endif %}">
+                    <td class="px-4 py-3">
+                        <span class="font-medium text-text">{{ f.field_name }}</span>
+                        {% if f.risk_level == 'high' %}
+                        <span class="ml-1.5 px-1.5 py-0.5 text-xs rounded bg-red-100 text-red-700">高风险</span>
+                        {% elif f.risk_level == 'medium' %}
+                        <span class="ml-1.5 px-1.5 py-0.5 text-xs rounded bg-amber-100 text-amber-700">中风险</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="text-slate-500 {% if f.status == 'changed' %}line-through{% endif %}">
+                            {{ f.old_value or "—" }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="text-text font-medium {% if f.status in ('added', 'changed') %}text-primary{% endif %}">
+                            {{ f.new_value or "—" }}
+                        </span>
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                        {% if f.status == 'added' %}
+                        <span class="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-700 font-medium">新增</span>
+                        {% elif f.status == 'changed' %}
+                        <span class="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 font-medium">变更</span>
+                        {% elif f.status == 'removed' %}
+                        <span class="px-2 py-0.5 text-xs rounded-full bg-red-100 text-red-700 font-medium">移除</span>
+                        {% else %}
+                        <span class="px-2 py-0.5 text-xs rounded-full bg-slate-100 text-slate-500">未变</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

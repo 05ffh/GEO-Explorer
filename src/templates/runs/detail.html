@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% from "partials/components/empty_state.html" import empty_state %}
+{% from "partials/components/status_badge.html" import status_badge %}
+
+{% block title %}诊断详情 — {{ vm.brand.name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto"
+     {% if vm.run.status in ("running", "pending", "queued") %}
+     hx-get="/brands/{{ vm.brand.id }}/runs/{{ vm.run.id }}"
+     hx-trigger="every 5s"
+     hx-swap="outerHTML"
+     hx-indicator="#poll-spinner"
+     {% endif %}>
+    <div class="flex items-center justify-between mb-4">
+        <div>
+            <h1 class="font-heading text-2xl font-bold text-text">诊断详情</h1>
+            <p class="text-sm text-slate-500 mt-0.5">{{ vm.brand.name }} · Run {{ vm.run.id[:8] }}
+            {% if vm.run.status in ("running", "pending", "queued") %}
+            <span id="poll-spinner" class="htmx-indicator ml-2 inline-block">
+                <svg class="animate-spin w-3.5 h-3.5 text-primary-light inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                自动刷新中
+            </span>
+            {% endif %}
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="/brands/{{ vm.brand.id }}/runs" class="text-sm text-slate-500 hover:underline">← 返回列表</a>
+            <a href="/brands/{{ vm.brand.id }}/reports" class="text-sm text-primary-light hover:underline">查看报告 →</a>
+        </div>
+    </div>
+
+    <!-- ═══ Run Status ═══ -->
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            <div>
+                <p class="text-xs text-slate-400 uppercase">状态</p>
+                <p class="text-sm font-semibold text-text mt-1">{{ status_badge(vm.run.status) }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-slate-400 uppercase">查询进度</p>
+                <p class="text-sm font-semibold text-text mt-1">{{ vm.run.success_count }}/{{ vm.run.total_queries }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-slate-400 uppercase">开始时间</p>
+                <p class="text-sm text-text mt-1">{{ vm.run.started_at }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-slate-400 uppercase">完成时间</p>
+                <p class="text-sm text-text mt-1">{{ vm.run.completed_at or "—" }}</p>
+            </div>
+        </div>
+        <!-- Progress bar -->
+        <div class="bg-slate-200 rounded-full h-2">
+            {% set pct = (vm.run.success_count / vm.run.total_queries * 100)|int if vm.run.total_queries else 0 %}
+            <div class="bg-primary-light h-2 rounded-full transition-all" style="width: {{ pct }}%"></div>
+        </div>
+    </div>
+
+    <!-- ═══ Platform Breakdown ═══ -->
+    {% if vm.platforms %}
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+        <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">平台采集进度</h3>
+        <div class="space-y-2">
+            {% for p in vm.platforms %}
+            <div class="flex items-center gap-3">
+                <span class="text-sm font-medium text-text w-20">{{ p.platform }}</span>
+                <div class="flex-1 bg-slate-100 rounded-full h-1.5">
+                    {% set ppct = (p.success / p.total * 100)|int if p.total else 0 %}
+                    <div class="h-1.5 rounded-full {% if ppct == 100 %}bg-green-500{% elif ppct > 0 %}bg-amber-500{% else %}bg-red-400{% endif %}" style="width: {{ ppct }}%"></div>
+                </div>
+                <span class="text-xs text-slate-500 w-16 text-right">{{ p.success }}/{{ p.total }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══ Hallucinations ═══ -->
+    {% if vm.hallucination.total > 0 %}
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+        <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">AI 幻觉检测</h3>
+        <div class="grid grid-cols-4 gap-3">
+            <div class="text-center p-3 bg-red-50 rounded-lg">
+                <p class="text-2xl font-bold text-red-700">{{ vm.hallucination.P0 }}</p>
+                <p class="text-xs text-red-600">P0 严重</p>
+            </div>
+            <div class="text-center p-3 bg-amber-50 rounded-lg">
+                <p class="text-2xl font-bold text-amber-700">{{ vm.hallucination.P1 }}</p>
+                <p class="text-xs text-amber-600">P1 重要</p>
+            </div>
+            <div class="text-center p-3 bg-blue-50 rounded-lg">
+                <p class="text-2xl font-bold text-blue-700">{{ vm.hallucination.P2 }}</p>
+                <p class="text-xs text-blue-600">P2 改善</p>
+            </div>
+            <div class="text-center p-3 bg-slate-50 rounded-lg">
+                <p class="text-2xl font-bold text-slate-700">{{ vm.hallucination.total }}</p>
+                <p class="text-xs text-slate-500">总计</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══ KPI Summary ═══ -->
+    {% if vm.has_metrics %}
+    <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+        <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">KPI 概览</h3>
+        <div class="grid grid-cols-5 gap-3">
+            {% for key, label in [("sov","SOV"), ("accuracy","准确率"), ("completeness","完备性"), ("citation","引用率"), ("first_rec","首推率")] %}
+            <div class="text-center">
+                <p class="text-xl font-bold text-text">{{ vm.kpi[key] if vm.kpi[key] is not none else "—" }}</p>
+                <p class="text-xs text-slate-500">{{ label }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══ Actions ═══ -->
+    <div class="flex gap-3">
+        <a href="/brands/{{ vm.brand.id }}/hallucinations"
+           class="px-4 py-2.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 cursor-pointer">
+            进入人审
+        </a>
+        <a href="/brands/{{ vm.brand.id }}/actions"
+           class="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-slate-50 cursor-pointer">
+            Action 工作台
+        </a>
+        <a href="/brands/{{ vm.brand.id }}/evidence"
+           class="px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium hover:bg-slate-50 cursor-pointer">
+            查看证据链
+        </a>
+    </div>
+</div>
+{% endblock %}

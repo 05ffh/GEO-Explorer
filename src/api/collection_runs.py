@@ -119,6 +119,89 @@ async def list_collections(
     return {"items": results, "page": page, "page_size": page_size}
 
 
+@router.post("/api/collections/preflight")
+async def collection_preflight(
+    brand_id: str = Query(...),
+    user: User = Depends(get_user_or_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Preflight check before starting a GEO diagnostic collection."""
+    from src.models.brand import Brand
+    from src.models.query_template import QueryTemplate
+    from src.models.ground_truth import GroundTruthVersion
+    from src.adapters import get_adapter
+    from src.config import settings
+    from src.collector.engine import _build_template_health_report
+
+    brand = await get_org_brand_or_404(brand_id, user, db)
+
+    has_industry = bool(brand.industry)
+    brand_ok = bool(brand.name)
+
+    gt = (await db.execute(
+        select(GroundTruthVersion).where(
+            GroundTruthVersion.brand_id == brand.id,
+            GroundTruthVersion.status == "active",
+        ).order_by(GroundTruthVersion.version.desc())
+    )).scalars().first()
+    gt_fields = list(gt.ground_truth_json.keys()) if gt and gt.ground_truth_json else []
+    required_fields = getattr(settings, 'gt_required_fields', [])
+    gt_coverage = len(set(required_fields) & set(gt_fields)) / len(required_fields) if required_fields else 1.0
+    gt_missing = [f for f in required_fields if f not in gt_fields]
+
+    templates = (await db.execute(
+        select(QueryTemplate).where(QueryTemplate.is_active == True)
+    )).scalars().all()
+    health = _build_template_health_report(templates) if templates else {"can_collect": True, "invalid_templates": 0}
+
+    platforms = {}
+    for p in getattr(settings, 'ai_platforms', ['deepseek', 'kimi', 'doubao', 'wenxin']):
+        try:
+            adapter = get_adapter(p)
+            platforms[p] = {"available": adapter is not None}
+        except Exception:
+            platforms[p] = {"available": False}
+
+    available_platforms = [p for p, s in platforms.items() if s["available"]]
+    platform_count = len(available_platforms)
+    template_count = len(templates)
+    estimated_queries = template_count * platform_count if template_count > 0 and platform_count > 0 else 0
+
+    blocking = []
+    warnings = []
+    if not brand_ok:
+        blocking.append({"code": "BRAND_NAME_MISSING", "message": "品牌名称缺失"})
+    if not has_industry:
+        blocking.append({"code": "INDUSTRY_UNSET", "message": "行业未设置，请先确认行业"})
+    if gt_coverage < 0.3:
+        blocking.append({"code": "GT_COVERAGE_LOW", "message": f"GT 覆盖率仅 {gt_coverage:.0%}，建议先补充 GT"})
+    if template_count == 0:
+        blocking.append({"code": "NO_TEMPLATES", "message": "没有启用的查询模板"})
+    if platform_count == 0:
+        blocking.append({"code": "NO_PLATFORMS", "message": "没有可用的 AI 平台"})
+    if not health.get("can_collect", True):
+        blocking.append({"code": "TEMPLATE_UNHEALTHY"})
+    if gt_coverage < 0.6:
+        warnings.append({"code": "GT_COVERAGE_LOW_WARN"})
+    if platform_count < 2:
+        warnings.append({"code": "SINGLE_PLATFORM"})
+
+    return {
+        "brand_id": str(brand.id), "brand_name": brand.name,
+        "can_start": len(blocking) == 0,
+        "blocking_reasons": blocking, "warnings": warnings,
+        "checks": {
+            "brand_ok": brand_ok, "has_industry": has_industry,
+            "industry": brand.industry or "",
+            "gt_coverage": round(gt_coverage, 2), "gt_fields": len(gt_fields),
+            "gt_required_fields": required_fields, "gt_missing": gt_missing,
+            "template_health": health, "template_count": template_count,
+            "platforms": platforms, "available_platforms": available_platforms,
+            "platform_count": platform_count, "estimated_queries": estimated_queries,
+        },
+    }
+
+
 @router.get("/api/collections/{collection_id}")
 async def get_collection(
     collection_id: str,
@@ -134,3 +217,47 @@ async def get_collection(
     if not run:
         return {"detail": "Not found"}, 404
     return {"collection": run}
+
+
+@router.post("/api/collections/{collection_id}/cancel")
+async def cancel_collection(
+    collection_id: str,
+    user: User = Depends(get_user_or_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cancel a running/queued collection run."""
+    run = (await db.execute(
+        select(CollectionRun).where(
+            CollectionRun.id == collection_id,
+            CollectionRun.organization_id == user.organization_id,
+        )
+    )).scalar_one_or_none()
+    if not run:
+        return {"detail": "Not found"}, 404
+
+    if run.collection_status not in ("running", "pending", "queued"):
+        return {"accepted": False, "message": f"任务状态为 {run.collection_status}，无法取消"}
+
+    from src.queue.control import cancel_task
+    from src.models.task_state import TaskState
+
+    # Find the Celery task
+    ts = (await db.execute(
+        select(TaskState).where(
+            TaskState.brand_id == run.brand_id,
+            TaskState.operation_type.in_(["full_collect", "gt_collection"]),
+            TaskState.status.in_(["queued", "running", "retrying"]),
+        ).order_by(TaskState.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+
+    if ts:
+        result = await cancel_task(ts.celery_task_id, ts.status)
+        ts.status = "cancelled"
+    else:
+        result = {"accepted": True, "mechanism": "direct", "message": "未找到 Celery 任务，直接更新状态"}
+
+    run.collection_status = "cancelled"
+    run.collection_completed_at = datetime.now(timezone.utc)
+    await db.commit()
+
+    return {"accepted": True, "status": run.collection_status, **result}

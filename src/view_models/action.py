@@ -82,6 +82,34 @@ async def build_action_vm(brand, filters, user, db) -> dict:
             "publish_summary": cp.publish_status_summary or "",
         })
 
+    # Generation preconditions
+    from src.models.collection_run import CollectionRun
+    latest_run = (await db.execute(
+        select(CollectionRun).where(
+            CollectionRun.brand_id == brand.id,
+            CollectionRun.collection_status.in_(["completed", "partial"]),
+        ).order_by(CollectionRun.collection_completed_at.desc()).limit(1)
+    )).scalar_one_or_none()
+
+    can_generate = user.role in ("admin", "analyst", "owner") \
+                   or user.platform_role in ("system_owner", "system_admin")
+    gen_disabled_reason = ""
+    if not can_generate:
+        gen_disabled_reason = "需要管理员权限"
+    elif not latest_run:
+        gen_disabled_reason = "没有已完成的诊断 Run，请先启动诊断"
+
+    # Per-action content generation flags
+    for plan in p_rows:
+        plan["can_generate_content"] = plan.get("status") not in ("closed", "archived", "rejected") \
+                                       and user.role in ("admin", "content_editor") \
+                                       or user.platform_role in ("system_owner", "system_admin")
+        plan["generate_content_disabled_reason"] = ""
+        if plan.get("status") in ("closed", "archived", "rejected"):
+            plan["generate_content_disabled_reason"] = "该 Action 已关闭/归档"
+        elif not plan["can_generate_content"]:
+            plan["generate_content_disabled_reason"] = "需要 Content Editor 权限"
+
     return {
         "brand": {"id": str(brand.id), "name": brand.name},
         "themes": t_rows,
@@ -91,6 +119,15 @@ async def build_action_vm(brand, filters, user, db) -> dict:
         "permissions": {
             "can_manage": user.role in ("admin","analyst","gt_reviewer","content_editor","legal_reviewer"),
             "role": user.role,
+            "can_generate_actions": can_generate and latest_run is not None,
+            "generate_disabled_reason": gen_disabled_reason,
+        },
+        "generation": {
+            "can_generate": can_generate and latest_run is not None,
+            "disabled_reason": gen_disabled_reason,
+            "latest_run_id": str(latest_run.id) if latest_run else None,
+            "latest_run_status": latest_run.collection_status if latest_run else None,
+            "existing_actions": len(p_rows),
         },
         "total_themes": len(t_rows),
         "total_plans": len(p_rows),

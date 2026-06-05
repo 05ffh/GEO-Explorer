@@ -40,6 +40,8 @@ async def add_audit_log(db, user, action: str, target_type: str, target_id: str,
     IMPORTANT: Does NOT call db.commit() — the caller must commit.
     This keeps audit and business changes in the same transaction (P0-2).
     """
+    if db is None:
+        return
     from src.models.audit_log import AuditLog
 
     req_id = ""

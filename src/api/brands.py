@@ -65,6 +65,23 @@ async def create_brand(
     return {"id": str(brand.id), "name": brand.name}
 
 
+@router.get("/search")
+async def search_brands(
+    q: str = Query("", min_length=1),
+    user: User = Depends(get_user_or_api_key),
+    db: AsyncSession = Depends(get_db),
+):
+    """Search brands by name or alias within user's organization."""
+    q = q.strip()
+    brands = (await db.execute(
+        select(Brand).where(
+            Brand.organization_id == user.organization_id,
+            Brand.name.ilike(f"%{q}%"),
+        ).limit(10)
+    )).scalars().all()
+    return {"items": brands, "query": q}
+
+
 @router.get("/{brand_id}")
 async def get_brand(
     brand_id: str,

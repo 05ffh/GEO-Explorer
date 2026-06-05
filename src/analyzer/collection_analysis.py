@@ -1,6 +1,6 @@
 import logging
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -65,7 +65,7 @@ async def run_analysis_for_collection(
         return
 
     run_obj.analysis_status = "running"
-    run_obj.analysis_started_at = datetime.utcnow()
+    run_obj.analysis_started_at = datetime.now(timezone.utc)
     await db.commit()
 
     try:
@@ -86,5 +86,5 @@ async def run_analysis_for_collection(
             },
         )
     finally:
-        run_obj.analysis_completed_at = datetime.utcnow()
+        run_obj.analysis_completed_at = datetime.now(timezone.utc)
         await db.commit()

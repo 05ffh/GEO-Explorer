@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from src.adapters import get_adapter
@@ -28,7 +28,7 @@ TEMPLATE_LEVEL_MAP = {
 
 
 def _build_template_health_report(preflight_results: list) -> dict:
-    """Build TemplateHealthReport from preflight results with corrected counting."""
+    """Build TemplateHealthReport from preflight results or QueryTemplate objects."""
     from datetime import datetime, timezone
 
     def _level(r):
@@ -39,8 +39,13 @@ def _build_template_health_report(preflight_results: list) -> dict:
         return TEMPLATE_LEVEL_MAP.get(qt, "important")
 
     total = len(preflight_results) if preflight_results else 0
-    invalid = [r for r in (preflight_results or []) if getattr(r, 'render_status', None) != "ok"]
-    skipped = [r for r in (preflight_results or []) if getattr(r, 'render_status', None) == "skipped_missing_variable"]
+    # Accept both _PreflightResult objects and plain QueryTemplate objects
+    if preflight_results and hasattr(preflight_results[0], 'render_status'):
+        invalid = [r for r in preflight_results if r.render_status != "ok"]
+        skipped = [r for r in preflight_results if r.render_status == "skipped_missing_variable"]
+    else:
+        invalid = []
+        skipped = []
 
     critical_invalid = [r for r in invalid if _level(r) == "critical"]
     important_invalid = [r for r in invalid if _level(r) == "important"]
@@ -143,7 +148,7 @@ async def run_collection(
         ground_truth_version_id=active_gt.id if active_gt else None,
         trigger_type=trigger_type,
         collection_status="running",
-        started_at=datetime.utcnow(),
+        started_at=datetime.now(timezone.utc),
         total_queries=0,  # computed after preflight
     )
     db.add(run)
@@ -228,7 +233,7 @@ async def run_collection(
     # --- P0-8: Template health blocking gate ---
     if not health_report.get("can_collect", True):
         run.collection_status = "failed"
-        run.collection_completed_at = datetime.utcnow()
+        run.collection_completed_at = datetime.now(timezone.utc)
         run.collection_error_summary = {
             "reason": "template_health_threshold",
             "invalid_ratio": health_report["invalid_ratio"],
@@ -351,7 +356,7 @@ async def run_collection(
             retry_count=retry_info["retry_count"],
             rate_limited=retry_info["rate_limited"],
             final_error_code=retry_info["final_error_code"],
-            collected_at=datetime.utcnow(),
+            collected_at=datetime.now(timezone.utc),
         )
         db.add(qr)
         await db.flush()
@@ -381,10 +386,10 @@ async def run_collection(
         else "failed" if failure_count == run.total_queries
         else "partial"
     )
-    run.collection_completed_at = datetime.utcnow()
+    run.collection_completed_at = datetime.now(timezone.utc)
     run.template_version_ids = {
         "schema_version": "template_versions_snapshot_v1",
-        "pinned_at": datetime.utcnow().isoformat(),
+        "pinned_at": datetime.now(timezone.utc).isoformat(),
         "templates": _pinned_snapshot,
     }
     await db.commit()
