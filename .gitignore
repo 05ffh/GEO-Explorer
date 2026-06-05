@@ -107,3 +107,4 @@ docker-compose.override.yml
 #   Dockerfile
 # ============================================================
 .claude/
+.superpowers/
