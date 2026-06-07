@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}{{ vm.brand.name }} — GT 搜索{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 py-6">
+
+  <!-- Header -->
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">GT 搜索 — {{ vm.brand.name }}</h1>
+    <p class="text-sm text-gray-500 mt-1">搜索外部证据，生成 Ground Truth 候选</p>
+  </div>
+
+  <!-- Provider Status Bar -->
+  <div class="mb-8" id="provider-status">
+    <h2 class="text-sm font-semibold text-gray-600 mb-3">可用搜索源</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      {% for p in vm.providers %}
+      <div class="border rounded-lg p-3 bg-white">
+        <div class="flex items-center justify-between">
+          <span class="text-sm font-medium text-gray-800">{{ p.label }}</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+            {% if p.status == 'enabled' %}bg-green-100 text-green-700
+            {% elif p.status == 'disabled' %}bg-gray-100 text-gray-500
+            {% elif p.status == 'pending_config' %}bg-yellow-100 text-yellow-700
+            {% else %}bg-red-100 text-red-700{% endif %}">
+            {{ p.status_text }}
+          </span>
+        </div>
+        {% if p.is_fallback %}
+        <p class="text-xs text-amber-600 mt-1">低质量 fallback，非 GT 强证据主源</p>
+        {% endif %}
+        {% if p.status == 'pending_config' %}
+        <p class="text-xs text-gray-400 mt-1">等待 API Key 或 API 启用</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Search Form -->
+  <div class="border rounded-lg p-5 bg-white mb-6" id="search-form">
+    <h2 class="text-sm font-semibold text-gray-600 mb-4">搜索证据</h2>
+
+    <div class="mb-4">
+      <label class="block text-xs font-medium text-gray-500 mb-1">选择 GT 字段</label>
+      <select id="field-select" name="field_name"
+              class="w-full sm:w-64 border border-gray-300 rounded-md px-3 py-2 text-sm"
+              onchange="onFieldChange()">
+        <option value="">-- 选择字段 --</option>
+        {% for cat, fields in vm.field_groups.items() %}
+        <optgroup label="{{ cat }}">
+          {% for f in fields %}
+          <option value="{{ f.key }}">{{ f.label }}{% if f.required %} *{% endif %}</option>
+          {% endfor %}
+        </optgroup>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div id="query-list" class="mb-4 hidden">
+      <label class="block text-xs font-medium text-gray-500 mb-1">搜索查询 (可编辑)</label>
+      <div id="query-inputs"></div>
+    </div>
+
+    <button id="search-btn" type="button"
+            class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50"
+            onclick="doSearch()">
+      搜索证据
+    </button>
+    <span id="search-loading" class="hidden text-sm text-gray-400 ml-3">搜索中...</span>
+  </div>
+
+  <!-- Results (HTMX target) -->
+  <div id="results-area">
+    {% include "gt_search/_empty.html" %}
+  </div>
+
+  <!-- Candidate Section (HTMX target) -->
+  <div id="candidate-area" class="hidden"></div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const FIELD_QUERIES = {
+  official_name: ["{brand} 公司全称", "{brand} 官方网站", "{brand} official name"],
+  official_domains: ["{brand} 官网", "{brand} 官方网站地址"],
+  official_website: ["{brand} 官网", "{brand} 官方网站"],
+  industry: ["{brand} 是什么行业", "{brand} 行业分类"],
+  category: ["{brand} 产品类别", "{brand} 分类"],
+  positioning: ["{brand} 品牌定位", "{brand} 市场定位"],
+  core_products: ["{brand} 核心产品", "{brand} 主要产品", "{brand} products"],
+  target_users: ["{brand} 目标用户", "{brand} 用户群体"],
+  key_differentiators: ["{brand} 核心竞争力", "{brand} 差异化优势"],
+  core_scenarios: ["{brand} 使用场景", "{brand} 应用场景"],
+  target_competitors: ["{brand} 竞争对手", "{brand} 竞品分析"],
+  founded_year: ["{brand} 成立时间", "{brand} 公司历史", "{brand} founded"],
+  headquarters: ["{brand} 总部", "{brand} 总部地址"],
+  store_count: ["{brand} 门店数量", "{brand} 店铺数量"],
+  pricing: ["{brand} 价格", "{brand} 定价"],
+  aliases: ["{brand} 别名", "{brand} 别称"]
+};
+
+function onFieldChange() {
+  const field = document.getElementById('field-select').value;
+  const ql = document.getElementById('query-list');
+  const qi = document.getElementById('query-inputs');
+  if (!field) { ql.classList.add('hidden'); return; }
+
+  const brandName = "{{ vm.brand.name }}";
+  const aliases = {{ vm.brand.aliases | tojson }};
+  const names = [brandName].concat(aliases || []).slice(0, 3);
+  const templates = FIELD_QUERIES[field] || ["{brand} " + field];
+  let html = '';
+  templates.slice(0, 3).forEach((tmpl, i) => {
+    const q = tmpl.replace('{brand}', brandName);
+    html += `<input type="text" value="${q}" class="w-full border border-gray-200 rounded px-3 py-1.5 text-sm mb-1.5" data-query-index="${i}">`;
+  });
+  qi.innerHTML = html;
+  ql.classList.remove('hidden');
+}
+
+async function doSearch() {
+  const field = document.getElementById('field-select').value;
+  if (!field) return alert('请选择 GT 字段');
+
+  const btn = document.getElementById('search-btn');
+  const loading = document.getElementById('search-loading');
+  const resultsArea = document.getElementById('results-area');
+  btn.disabled = true; loading.classList.remove('hidden');
+  resultsArea.innerHTML = '<div class="text-center py-8 text-gray-400">搜索中...</div>';
+
+  try {
+    const resp = await geoFetch(`/api/brands/{{ vm.brand.id }}/gt-search/search`, {
+      method: 'POST', body: JSON.stringify({field_name: field, limit: 10}),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { resultsArea.innerHTML = `<div class="text-center py-8 text-red-500">搜索失败: ${data.detail || '未知错误'}</div>`; return; }
+    renderResults(data);
+  } catch (e) {
+    resultsArea.innerHTML = `<div class="text-center py-8 text-red-500">搜索失败: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false; loading.classList.add('hidden');
+  }
+}
+
+function renderResults(data) {
+  if (!data.results || data.results.length === 0) {
+    document.getElementById('results-area').innerHTML = '<div class="text-center py-8 text-gray-400">无搜索结果</div>';
+    return;
+  }
+  let html = `<h3 class="text-sm font-semibold text-gray-600 mb-3">搜索结果 (${data.result_count} 条，使用 ${data.queries_used.length} 个查询)</h3>`;
+  html += '<div class="overflow-x-auto"><table class="w-full text-sm border"><thead><tr class="bg-gray-50">';
+  html += '<th class="p-2 text-left w-8"><input type="checkbox" id="select-all" onclick="toggleAll()"></th>';
+  html += '<th class="p-2 text-left">标题</th><th class="p-2 text-left">URL</th>';
+  html += '<th class="p-2 text-left">来源</th><th class="p-2 text-left">可信度</th></tr></thead><tbody>';
+  data.results.forEach((r, i) => {
+    const tierColors = {S:'text-green-700 bg-green-50', A:'text-blue-700 bg-blue-50', B:'text-yellow-700 bg-yellow-50', C:'text-orange-700 bg-orange-50', D:'text-red-700 bg-red-50'};
+    html += `<tr class="border-t">
+      <td class="p-2"><input type="checkbox" class="result-check" data-index="${i}"></td>
+      <td class="p-2"><a href="${r.url}" class="text-blue-600 hover:underline" target="_blank">${r.title}</a></td>
+      <td class="p-2 text-xs text-gray-400 truncate max-w-xs">${r.url}</td>
+      <td class="p-2"><span class="text-xs px-1.5 py-0.5 rounded bg-gray-100">${r.provider}</span></td>
+      <td class="p-2"><span class="text-xs px-1.5 py-0.5 rounded ${tierColors[r.source_tier] || ''}">${r.source_tier}</span></td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  html += `<div class="mt-4" id="candidate-form">
+    <label class="block text-xs font-medium text-gray-500 mb-1">候选值 (proposed_value)</label>
+    <input type="text" id="proposed-value" class="w-full sm:w-96 border border-gray-300 rounded-md px-3 py-2 text-sm mb-2" placeholder="输入或从结果中提取的候选值">
+    <button onclick="generateCandidate()" class="px-4 py-2 bg-amber-500 text-white text-sm font-medium rounded-md hover:bg-amber-600">生成 GT Candidate</button>
+    <span id="gen-loading" class="hidden text-sm text-gray-400 ml-3">生成中...</span>
+  </div>`;
+  document.getElementById('results-area').innerHTML = html;
+  document.getElementById('candidate-area').classList.add('hidden');
+}
+
+function toggleAll() {
+  const checked = document.getElementById('select-all').checked;
+  document.querySelectorAll('.result-check').forEach(cb => cb.checked = checked);
+}
+
+async function generateCandidate() {
+  const field = document.getElementById('field-select').value;
+  const pv = document.getElementById('proposed-value').value.trim();
+  if (!pv) return alert('请填写候选值 (proposed_value)');
+
+  const selected = [];
+  document.querySelectorAll('.result-check:checked').forEach(cb => selected.push(parseInt(cb.dataset.index)));
+  if (selected.length === 0) return alert('请勾选至少一个搜索结果作为证据');
+
+  const loading = document.getElementById('gen-loading');
+  loading.classList.remove('hidden');
+
+  try {
+    const resp = await geoFetch(`/api/brands/{{ vm.brand.id }}/gt-search/generate-candidate`, {
+      method: 'POST',
+      body: JSON.stringify({field_name: field, proposed_value: pv, extraction_method: 'manual', selected_result_indexes: selected}),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { alert('生成失败: ' + (data.detail || '未知错误')); return; }
+    renderCandidate(data);
+  } catch (e) {
+    alert('生成失败: ' + e.message);
+  } finally {
+    loading.classList.add('hidden');
+  }
+}
+
+function renderCandidate(data) {
+  const area = document.getElementById('candidate-area');
+  area.classList.remove('hidden');
+  area.innerHTML = `
+    <div class="border rounded-lg p-5 bg-white mt-4">
+      <h3 class="text-sm font-semibold text-gray-600 mb-3">GT Candidate</h3>
+      <div class="text-sm space-y-2">
+        <p><span class="text-gray-500">ID:</span> ${data.candidate_id}</p>
+        <p><span class="text-gray-500">状态:</span> <span class="px-2 py-0.5 rounded text-xs bg-yellow-100 text-yellow-700">${data.status}</span></p>
+        <p><span class="text-gray-500">证据数:</span> ${data.evidence_count}</p>
+      </div>
+      <div class="mt-4 flex gap-3">
+        <button onclick="approveCandidate('${data.candidate_id}')" class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700">Approve</button>
+        <button onclick="showReject('${data.candidate_id}')" class="px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-md hover:bg-red-600">Reject</button>
+      </div>
+      <div id="reject-form-${data.candidate_id}" class="hidden mt-3">
+        <input type="text" id="reject-reason-${data.candidate_id}" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm mb-2" placeholder="拒绝原因 (必填)">
+        <button onclick="rejectCandidate('${data.candidate_id}')" class="px-3 py-1.5 bg-red-600 text-white text-xs font-medium rounded-md">确认拒绝</button>
+      </div>
+    </div>`;
+}
+
+function showReject(cid) {
+  document.getElementById('reject-form-' + cid).classList.toggle('hidden');
+}
+
+async function approveCandidate(cid) {
+  const notes = prompt('审批备注 (可选):') || '';
+  try {
+    const resp = await geoFetch(`/api/gt-candidates/${cid}/approve`, {
+      method: 'POST', body: JSON.stringify({notes}),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { alert('审批失败: ' + (data.detail || '未知错误')); return; }
+    if (data.action === 'conflict') {
+      alert(`冲突: 字段 ${data.conflicting_field} 当前值为 "${data.existing_value}"，需要人工确认。`);
+    } else {
+      alert('审批成功: ' + data.action);
+      document.getElementById('candidate-area').innerHTML = '<div class="text-green-600 text-sm py-3">已审批 — GT 已更新</div>';
+    }
+  } catch (e) {
+    alert('审批失败: ' + e.message);
+  }
+}
+
+async function rejectCandidate(cid) {
+  const reason = document.getElementById('reject-reason-' + cid).value.trim();
+  if (!reason) return alert('请输入拒绝原因');
+  try {
+    const resp = await geoFetch(`/api/gt-candidates/${cid}/reject`, {
+      method: 'POST', body: JSON.stringify({reason}),
+    });
+    if (!resp.ok) { const data = await resp.json(); alert('拒绝失败: ' + (data.detail || '')); return; }
+    alert('已拒绝');
+    document.getElementById('candidate-area').innerHTML = '<div class="text-red-500 text-sm py-3">已拒绝: ' + reason + '</div>';
+  } catch (e) {
+    alert('拒绝失败: ' + e.message);
+  }
+}
+</script>
+{% endblock %}

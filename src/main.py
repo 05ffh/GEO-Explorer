@@ -11,7 +11,7 @@ from src.config import settings
 from src.api.deps import get_current_user, get_org_brand_or_404
 from src.models.user import User
 from src.models.brand import Brand
-from src.api import auth, brands, metrics, collection_runs, hallucinations, actions, dashboard, ground_truth, tasks, publishing, saas, platform, template_versions, reclassifications, templates
+from src.api import auth, brands, metrics, collection_runs, hallucinations, actions, dashboard, ground_truth, tasks, publishing, saas, platform, template_versions, reclassifications, templates, gt_search
 from src.schemas.ground_truth import KPI_DISPLAY_NAMES
 
 app = FastAPI(title="GEO Explorer", version="0.1.0")
@@ -28,6 +28,7 @@ for router in [
     actions.router, dashboard.router, ground_truth.router,
     tasks.router, publishing.router, saas.router, platform.router,
     template_versions.router, reclassifications.router, templates.router,
+    gt_search.router,
 ]:
     app.include_router(router)
 
@@ -233,6 +234,22 @@ async def run_list_page(request: Request, brand_id: str,
 
 
 # ── Module 3: GT Compare ────────────────────────────────────────────────────
+
+@app.get("/brands/{brand_id}/gt-search", response_class=HTMLResponse)
+async def gt_search_page(request: Request, brand_id: str,
+                          user: User = Depends(get_current_user),
+                          db: AsyncSession = Depends(get_db)):
+    """GT Search page — Tavily-first evidence search."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.gt_search import build_gt_search_vm
+    vm = await build_gt_search_vm(brand, user, db)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "gt_search/index.html", _page_context(
+        request, "gt-search", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name,
+        vm=vm, user=user,
+    ))
+
 
 @app.get("/brands/{brand_id}/gt-compare", response_class=HTMLResponse)
 async def gt_compare_page(request: Request, brand_id: str,

@@ -104,6 +104,13 @@ class Settings(BaseSettings):
     google_search_api_key: str = ""
     google_search_cx: str = ""
     brave_search_api_key: str = ""
+
+    # --- GT Search Pipeline ---
+    gt_search_tavily_enabled: bool = True
+    gt_search_google_cse_enabled: bool = False
+    gt_search_brave_enabled: bool = False
+    gt_search_duckduckgo_enabled: bool = True
+    gt_search_cache_ttl_seconds: int = 86400  # 24h
     tavily_api_key: str = ""
 
     # --- Action 触发阈值 ---
