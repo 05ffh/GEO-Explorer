@@ -128,7 +128,8 @@ class TestGoogleBackend:
 
 class TestGoogleIntegration:
 
-    def test_get_available_backends_includes_google_when_keys_present(self):
+    def test_get_available_backends_omits_google(self):
+        """Google CSE removed from get_available_backends() until GCP API enabled."""
         config = MagicMock()
         config.tavily_api_key = ""
         config.google_search_api_key = "key-123"
@@ -137,7 +138,7 @@ class TestGoogleIntegration:
         backends = get_available_backends(config)
 
         names = [b.name for b in backends]
-        assert "google" in names
+        assert "google" not in names
 
     def test_get_available_backends_omits_google_when_no_key(self):
         config = MagicMock()
