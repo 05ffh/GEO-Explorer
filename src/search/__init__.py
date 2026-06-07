@@ -30,5 +30,8 @@ def get_available_backends(config) -> list[SearchBackend]:
     if config.tavily_api_key:
         backends.append(TavilyBackend(api_key=config.tavily_api_key))
     if config.google_search_api_key and config.google_search_cx:
-        pass  # Google backend registration point
+        from src.search.google_backend import GoogleBackend
+        backends.append(GoogleBackend(
+            api_key=config.google_search_api_key, cx=config.google_search_cx,
+        ))
     return backends
