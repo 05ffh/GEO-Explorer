@@ -52,7 +52,11 @@
                 onclick="generateDashboardReport('{{ vm.brand.id }}')">
             生成报告</button>
         <button class="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200 cursor-pointer"
-                hx-post="/api/brands/{{ vm.brand.id }}/collections" hx-swap="none">
+                {% if collection_test_mode == "real" %}
+                onclick="confirmRealCollection('{{ vm.brand.id }}')"
+                {% else %}
+                hx-post="/api/brands/{{ vm.brand.id }}/collections" hx-swap="none"
+                {% endif %}>
             触发采集</button>
         {% endif %}
     </div>
@@ -203,6 +207,25 @@ function triggerGTCollect(brandId, btn) {
             btn.classList.remove('opacity-60', 'cursor-not-allowed');
             btn.disabled = false;
         });
+}
+
+function confirmRealCollection(brandId) {
+    var platforms = 4;
+    var templates = 23;
+    var total = platforms * templates;
+    var msg = '你正在执行全平台真实采集。\n\n'
+        + '预计发起 ' + total + ' 个 HTTPS 请求\n'
+        + '（' + platforms + ' 个平台 × ' + templates + ' 个模板）\n\n'
+        + '可能触发 Kimi / Doubao / DeepSeek / Wenxin 限流。\n'
+        + '将消耗 API 额度。\n\n'
+        + '是否确认继续？';
+    if (confirm(msg)) {
+        var btn = event.target;
+        btn.disabled = true;
+        btn.textContent = '采集中...';
+        htmx.ajax('POST', '/api/brands/' + brandId + '/collections', {target: 'body', swap: 'none'});
+        setTimeout(function() { btn.disabled = false; btn.textContent = '触发采集'; }, 3000);
+    }
 }
 
 function generateDashboardReport(brandId) {

@@ -53,6 +53,8 @@ def _page_context(request: Request, current_page: str, brands: list,
         "collection_time": collection_time,
         "KPI_DISPLAY_NAMES": KPI_DISPLAY_NAMES,
         "is_platform_admin": is_admin,
+        "collection_test_mode": settings.collection_test_mode,
+        "enable_real_platform_tests": settings.enable_real_platform_tests,
         **extra,
     }
 
@@ -512,6 +514,17 @@ async def platform_deletion_page(request: Request, user: User = Depends(get_curr
     org_brands = await _get_org_brands(user, db)
     return _render(request, "platform/data_deletion.html", _page_context(
         request, "platform-deletion", org_brands, vm=vm))
+
+
+@app.get("/platform/health", response_class=HTMLResponse)
+async def platform_health_page(request: Request, user: User = Depends(get_current_user),
+                                db: AsyncSession = Depends(get_db)):
+    """Platform health dashboard — AI collector status for all platforms."""
+    from src.view_models.platform_health import build_platform_health_vm
+    vm = await build_platform_health_vm(db)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "platform/health.html", _page_context(
+        request, "platform-health", org_brands, vm=vm, user=user))
 
 
 @app.get("/brands/{brand_id}/reports", response_class=HTMLResponse)

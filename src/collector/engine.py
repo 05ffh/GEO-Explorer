@@ -1,8 +1,12 @@
 import asyncio
+import logging
+import random
 import uuid
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+
+logger = logging.getLogger(__name__)
 from src.adapters import get_adapter
 from src.config import settings
 from src.models.brand import Brand
@@ -88,6 +92,7 @@ async def run_collection(
     db: AsyncSession,
     trigger_type: str = "manual",
     auto_analyze: bool = True,
+    adapter_registry: dict | None = None,
 ) -> CollectionRun:
     brand = (await db.execute(
         select(Brand).where(Brand.id == brand_id, Brand.organization_id == org_id)
@@ -274,8 +279,9 @@ async def run_collection(
     await db.flush()
     # --- End preflight ---
 
+    # ── Concurrency control: per-platform semaphores only (no global to avoid deadlock) ──
     _platform_semaphores = {
-        p: asyncio.Semaphore(settings.platform_concurrency_limits.get(p, 4))
+        p: asyncio.Semaphore(settings.platform_concurrency_limits.get(p, 2))
         for p in PLATFORMS
     }
 
@@ -285,15 +291,22 @@ async def run_collection(
 
     system = active_prompt.system_prompt if active_prompt else "你是一个诚实的AI助手。"
 
-    async def query_one(platform_name, tmpl, question):
-        sem = _platform_semaphores[platform_name]
-        retry_cfg = settings.platform_retry_config.get(
-            platform_name, {"max_retries": 2, "backoff_seconds": [1, 2]}
-        )
-        max_retries = retry_cfg["max_retries"]
-        backoffs = retry_cfg["backoff_seconds"]
+    # ── Per-platform stats (logged at end of run) ──────────────────────────
+    _platform_stats_accum: dict[str, dict] = {
+        p: {"request_count": 0, "success_count": 0, "timeout_count": 0,
+            "rate_limited_count": 0, "latencies": [], "last_error": None}
+        for p in PLATFORMS
+    }
 
-        adapter = get_adapter(platform_name)
+    async def query_one(platform_name, tmpl, question):
+        stats = _platform_stats_accum[platform_name]
+        sem = _platform_semaphores[platform_name]
+        retry_cfg = settings.platform_rate_limits.get(platform_name, {})
+        max_retries = retry_cfg.get("max_retries", 2)
+        backoff_base = retry_cfg.get("backoff_base_seconds", 15)
+        backoff_max = retry_cfg.get("backoff_max_seconds", 300)
+
+        adapter = get_adapter(platform_name, registry=adapter_registry)
         retry_count = 0
         rate_limited = False
         final_error_code = ""
@@ -301,26 +314,40 @@ async def run_collection(
 
         for attempt in range(max_retries + 1):
             async with sem:
+                stats["request_count"] += 1
                 response = await adapter.query(question, system_prompt=system)
+                stats["latencies"].append(response.latency_ms)
 
             if not response.error:
+                stats["success_count"] += 1
                 break
-            if "Error code: 429" in (response.error or "") and attempt < max_retries:
+
+            code = response.error_code or ""
+            stats["last_error"] = f"{code}: {str(response.error)[:100]}"
+            final_error_code = response.error_message or response.error or ""
+
+            if code in ("platform_rate_limited",) and attempt < max_retries:
                 retry_count += 1
                 rate_limited = True
-                final_error_code = response.error[:50]
-                wait = backoffs[min(attempt, len(backoffs) - 1)]
-                await asyncio.sleep(wait)
+                stats["rate_limited_count"] += 1
+                delay = min(backoff_base * (2 ** attempt), backoff_max)
+                jitter = random.uniform(0, delay * 0.3)
+                await asyncio.sleep(delay + jitter)
+            elif code in ("platform_timeout", "platform_network_error") and attempt < max_retries:
+                retry_count += 1
+                stats["timeout_count"] += 1
+                delay = min(backoff_base * (2 ** attempt), backoff_max)
+                await asyncio.sleep(delay)
             else:
+                if code == "platform_timeout":
+                    stats["timeout_count"] += 1
                 retry_count = attempt
-                if response.error:
-                    final_error_code = response.error[:50]
                 break
 
         return response, platform_name, tmpl, {
             "retry_count": retry_count,
             "rate_limited": rate_limited,
-            "final_error_code": final_error_code,
+            "final_error_code": final_error_code[:50],
         }
 
     jobs = [
@@ -374,19 +401,82 @@ async def run_collection(
         )
         db.add(usage)
 
+    # ── Per-platform status + partial success ─────────────────────────────
+    platform_stats: dict[str, dict] = {}
+    for p in PLATFORMS:
+        platform_stats[p] = {"success": 0, "failed": 0, "rate_limited": 0,
+                             "timeout_count": 0, "error_codes": []}
+
+    for result in responses:
+        if isinstance(result, Exception):
+            for p in PLATFORMS:
+                platform_stats[p]["failed"] += 1
+            continue
+        response, platform_name, tmpl, retry_info = result
+        if response.error:
+            code = response.error_code or "unknown"
+            platform_stats[platform_name]["failed"] += 1
+            platform_stats[platform_name]["error_codes"].append(code)
+            if code == "platform_rate_limited":
+                platform_stats[platform_name]["rate_limited"] += 1
+        else:
+            platform_stats[platform_name]["success"] += 1
+
     success_count = sum(
         1 for r in responses
         if not isinstance(r, Exception) and not r[0].error
     )
     failure_count = run.total_queries - success_count
+
+    # Determine overall status with platform awareness
+    rate_limited_platforms = [p for p, s in platform_stats.items()
+                              if s["rate_limited"] > 0]
+    deferred_retry_platforms = [p for p, s in platform_stats.items()
+                                if s["rate_limited"] > 0 or
+                                (s["failed"] > 0 and s["success"] == 0 and
+                                 any(e in ("platform_rate_limited", "platform_timeout",
+                                           "platform_network_error")
+                                     for e in s.get("error_codes", [])))]
+    timeout_platforms = [p for p, s in platform_stats.items()
+                         if s["timeout_count"] > 0 and s["success"] == 0]
+    all_failed_platforms = [p for p, s in platform_stats.items() if s["success"] == 0]
+    has_partial_data = any(s["success"] > 0 for s in platform_stats.values())
+
+    if failure_count == 0:
+        run.collection_status = "completed"
+    elif not has_partial_data:
+        run.collection_status = "failed"
+    else:
+        run.collection_status = "partial"
+
     run.success_count = success_count
     run.failure_count = failure_count
-    run.collection_status = (
-        "completed" if failure_count == 0
-        else "failed" if failure_count == run.total_queries
-        else "partial"
-    )
     run.collection_completed_at = datetime.now(timezone.utc)
+    # ── Platform stats logging ────────────────────────────────────────────
+    for p in PLATFORMS:
+        s = _platform_stats_accum[p]
+        latencies = s["latencies"]
+        avg_lat = round(sum(latencies) / len(latencies)) if latencies else 0
+        sorted_lat = sorted(latencies)
+        p95_lat = sorted_lat[int(len(sorted_lat) * 0.95)] if len(sorted_lat) >= 20 else (sorted_lat[-1] if sorted_lat else 0)
+        logger.info(
+            f"[{p}] requests={s['request_count']} success={s['success_count']} "
+            f"timeout={s['timeout_count']} rate_limited={s['rate_limited_count']} "
+            f"avg_lat={avg_lat}ms p95_lat={p95_lat}ms "
+            f"last_error={s['last_error'] or 'none'}"
+        )
+
+    run.platform_status_json = {
+        "schema_version": "platform_status_v2",
+        "platforms": platform_stats,
+        "rate_limited_platforms": rate_limited_platforms,
+        "timeout_platforms": timeout_platforms,
+        "deferred_retry_platforms": deferred_retry_platforms,
+        "all_failed_platforms": all_failed_platforms,
+        "partial_success": run.collection_status == "partial",
+        "has_partial_data": has_partial_data,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
     run.template_version_ids = {
         "schema_version": "template_versions_snapshot_v1",
         "pinned_at": datetime.now(timezone.utc).isoformat(),

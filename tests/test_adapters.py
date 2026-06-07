@@ -38,8 +38,8 @@ async def test_mock_adapter_query():
     result = await adapter.query("什么是TestBrand？")
     assert result.platform == "deepseek"
     assert "TestBrand" in result.answer_text
-    assert result.model_name == "mock-deepseek-v1"
-    assert result.latency_ms == 50
+    assert "mock" in result.model_name
+    assert result.latency_ms >= 0  # randomized mock latency
     assert result.error is None
 
 

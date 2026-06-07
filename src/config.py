@@ -23,15 +23,27 @@ class Settings(BaseSettings):
     wenxin_api_key: str = ""
     wenxin_secret_key: str = ""
     wenxin_base_url: str = "https://aip.baidubce.com"
+    wenxin_base_url_v2: str = "https://qianfan.baidubce.com/v2"
     wenxin_model: str = "ernie-4.0-turbo-128k"
 
+    # ── Test gates ───────────────────────────────────────────────────────
+    collection_test_mode: str = "mock"     # "mock" | "real" — default mock for dev/CI
+    enable_real_platform_tests: bool = False  # Default OFF — gate real API tests
+    real_platform_test_mode: str = "single_platform_single_template"  # default minimal
+    mock_platform_scenario: str = "all_success"  # default mock scenario
+
     # ── Collector v2 ──────────────────────────────────────────────────────────
-    collector_platforms: list[str] = ["deepseek", "kimi", "doubao"]  # wenxin key expired
+    collector_platforms: list[str] = ["deepseek", "kimi", "doubao", "wenxin"]
     collector_platform_order: list[str] = ["deepseek", "kimi", "doubao", "wenxin"]
-    collector_platform_concurrency: int = 3      # Per-platform concurrent queries
-    collector_platform_cooldown_seconds: int = 5 # Inter-platform cooling
-    collector_query_timeout_seconds: int = 30    # Single query timeout (asyncio.wait_for)
+
+    # ── Global concurrency (WSL2-safe defaults) ──────────────────────────────
+    global_max_concurrency: int = 6              # Global semaphore: max total concurrent HTTP requests
+
+    # Per-platform concurrency (WSL2 dev: reduce to 2 each)
+    collector_platform_concurrency: int = 2      # Dev default — production override to platform_rate_limits values
+
     collector_max_retries: int = 1               # Engine-level retries (SDK retries=0)
+    collector_query_timeout_seconds: int = 60    # Single query timeout (asyncio.wait_for)
     collector_sdk_max_retries: int = 0           # SDK built-in retries disabled
     collector_max_requests_per_run: int = 200    # Hard budget: total HTTP calls
     collector_max_duration_seconds: int = 1200   # Raised for slow platforms (Kimi/Doubao)
@@ -44,11 +56,40 @@ class Settings(BaseSettings):
     min_success_queries_for_analysis: int = 10
 
     # --- 平台级限流 (v2 RateLimiter) ---
+    # Conservative initial settings per 2026-06-07 human review.
+    # Kimi:   RPM 200 actual → start at 60.   TPM 2M → start at 800K.
+    # Doubao: RPM 30K actual → start at 300.  TPM 5M → start at 1.5M.
+    # Ramp up every 24h based on actual 429 rate.
+    # WSL2 dev defaults (production: use higher values in .env or deploy config)
     platform_rate_limits: dict = {
-        "deepseek": {"max_concurrent": 3, "min_interval_seconds": 0.1, "max_requests_per_minute": None, "cooldown_on_429_seconds": 30, "consecutive_429_threshold": 5},
-        "kimi":     {"max_concurrent": 3, "min_interval_seconds": 0.1, "max_requests_per_minute": 100, "cooldown_on_429_seconds": 30, "consecutive_429_threshold": 5},
-        "doubao":   {"max_concurrent": 1, "min_interval_seconds": 1.0, "max_requests_per_minute": 30, "cooldown_on_429_seconds": 60, "consecutive_429_threshold": 2},
-        "wenxin":   {"max_concurrent": 1, "min_interval_seconds": 3.0, "max_requests_per_minute": None, "cooldown_on_429_seconds": 30, "consecutive_429_threshold": 2},
+        "deepseek": {
+            "max_concurrent": 2, "min_interval_seconds": 0.1,
+            "max_requests_per_minute": None, "max_tokens_per_minute": None,
+            "cooldown_on_429_seconds": 300, "consecutive_429_threshold": 3,
+            "max_retries": 2, "retry_after_respected": True,
+            "backoff_base_seconds": 15, "backoff_max_seconds": 300,
+        },
+        "kimi": {
+            "max_concurrent": 2, "min_interval_seconds": 0.3,
+            "max_requests_per_minute": 60, "max_tokens_per_minute": 800000,
+            "cooldown_on_429_seconds": 300, "consecutive_429_threshold": 3,
+            "max_retries": 3, "retry_after_respected": True,
+            "backoff_base_seconds": 30, "backoff_max_seconds": 900,
+        },
+        "doubao": {
+            "max_concurrent": 2, "min_interval_seconds": 0.2,
+            "max_requests_per_minute": 300, "max_tokens_per_minute": 1500000,
+            "cooldown_on_429_seconds": 300, "consecutive_429_threshold": 3,
+            "max_retries": 3, "retry_after_respected": True,
+            "backoff_base_seconds": 30, "backoff_max_seconds": 900,
+        },
+        "wenxin": {
+            "max_concurrent": 2, "min_interval_seconds": 0.5,
+            "max_requests_per_minute": 30, "max_tokens_per_minute": 500000,
+            "cooldown_on_429_seconds": 300, "consecutive_429_threshold": 3,
+            "max_retries": 2, "retry_after_respected": True,
+            "backoff_base_seconds": 15, "backoff_max_seconds": 300,
+        },
     }
     # Backward compat for v1 engine
     @property

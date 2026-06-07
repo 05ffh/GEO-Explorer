@@ -526,3 +526,16 @@ def _plan_response(p: PlanDefinition) -> dict:
         "features": p.features_json,
         "monthly_price_cny": float(p.monthly_price_cny) if p.monthly_price_cny else None,
     }
+
+
+# ── Platform Health ────────────────────────────────────────────────────────
+
+@router.get("/health")
+async def platform_health(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Platform health status — AI collector health for all platforms."""
+    _check_system_admin(user)
+    from src.view_models.platform_health import build_platform_health_vm
+    return await build_platform_health_vm(db)

@@ -169,6 +169,21 @@
     </button>
 
     <main id="main-content" class="flex-1 overflow-auto">
+        <!-- Test Mode Banner -->
+        {% if collection_test_mode == "mock" %}
+        <div class="bg-indigo-50 border-b border-indigo-200 px-4 py-1.5 flex items-center justify-center gap-2 text-xs">
+            <svg class="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+            <span class="text-indigo-700 font-medium">Mock 测试模式</span>
+            <span class="text-indigo-500">| 不会消耗真实 API 额度 | 用于验证采集引擎逻辑</span>
+        </div>
+        {% elif collection_test_mode == "real" %}
+        <div class="bg-amber-50 border-b border-amber-200 px-4 py-1.5 flex items-center justify-center gap-2 text-xs">
+            <svg class="w-4 h-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            <span class="text-amber-700 font-medium">真实平台测试模式</span>
+            <span class="text-amber-600">| 将消耗 API 额度 | 可能触发平台限流</span>
+        </div>
+        {% endif %}
+
         <div class="px-4 sm:px-6 lg:px-8 py-6 max-w-[1600px] mx-auto">
             {% block content %}{% endblock %}
         </div>

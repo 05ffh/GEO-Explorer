@@ -1,8 +1,12 @@
 import re
 import time
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from openai import AsyncOpenAI
+import httpx
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -22,12 +26,12 @@ class AIResponse:
     model_version: str = ""
     raw_response: dict | None = None
     latency_ms: int = 0
-    error: str | None = None           # Deprecated — use error_code + error_message
-    error_code: str | None = None      # CollectorErrorCode value
+    error: str | None = None
+    error_code: str | None = None
     error_message: str | None = None
     retryable: bool = False
-    answer_source: str = "content"     # "content" | "reasoning_content" | "empty"
-    reasoning_fallback: bool = False   # True when answer came from reasoning_content
+    answer_source: str = "content"
+    reasoning_fallback: bool = False
 
 
 class PlatformAdapter(ABC):
@@ -40,6 +44,46 @@ class PlatformAdapter(ABC):
         ...
 
 
+# ── Shared httpx client pool for OpenAI-compatible adapters ─────────────────
+
+_SHARED_HTTPX_CLIENT: httpx.AsyncClient | None = None
+_SHARED_OPENAI_CLIENTS: dict[str, AsyncOpenAI] = {}
+
+
+def _get_shared_httpx_client() -> httpx.AsyncClient:
+    """Build or return a shared httpx.AsyncClient with proper timeouts for WSL2."""
+    global _SHARED_HTTPX_CLIENT
+    if _SHARED_HTTPX_CLIENT is None:
+        from src.config import settings
+        _SHARED_HTTPX_CLIENT = httpx.AsyncClient(
+            timeout=httpx.Timeout(
+                connect=20.0,    # connect timeout
+                read=90.0,       # read timeout
+                write=20.0,
+                pool=20.0,       # pool timeout
+            ),
+            limits=httpx.Limits(
+                max_connections=20,
+                max_keepalive_connections=10,
+            ),
+        )
+    return _SHARED_HTTPX_CLIENT
+
+
+def _get_openai_client(api_key: str, base_url: str) -> AsyncOpenAI:
+    """Build or return a shared AsyncOpenAI client per (key, url) pair."""
+    cache_key = f"{api_key[:20]}@{base_url}"
+    if cache_key not in _SHARED_OPENAI_CLIENTS:
+        from src.config import settings
+        _SHARED_OPENAI_CLIENTS[cache_key] = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            max_retries=0,  # SDK retries disabled — we handle retries
+            http_client=_get_shared_httpx_client(),
+        )
+    return _SHARED_OPENAI_CLIENTS[cache_key]
+
+
 class OpenAICompatibleAdapter(PlatformAdapter):
     platform_name: str = ""
     base_url: str = ""
@@ -47,20 +91,9 @@ class OpenAICompatibleAdapter(PlatformAdapter):
     api_key: str = ""
     default_temperature: float = 0.3
 
-    def __init__(self):
-        self._client = None
-
     @property
     def client(self) -> AsyncOpenAI:
-        if self._client is None:
-            import httpx
-            from src.config import settings
-            self._client = AsyncOpenAI(
-                api_key=self.api_key, base_url=self.base_url,
-                max_retries=settings.collector_sdk_max_retries,
-                timeout=httpx.Timeout(settings.collector_query_timeout_seconds, connect=10.0),
-            )
-        return self._client
+        return _get_openai_client(self.api_key, self.base_url)
 
     async def query(self, prompt: str, system_prompt: str = "", **kwargs) -> AIResponse:
         start = time.time()
@@ -74,57 +107,58 @@ class OpenAICompatibleAdapter(PlatformAdapter):
                 ],
                 temperature=kwargs.get("temperature", self.default_temperature),
                 max_tokens=kwargs.get("max_tokens", 2048),
+                extra_headers=kwargs.get("extra_headers"),
             )
             latency = int((time.time() - start) * 1000)
             msg = response.choices[0].message
             content = (msg.content or "").strip()
             reasoning = (msg.reasoning_content or "").strip()
             if content:
-                answer = content
-                source = "content"
-                fallback = False
+                answer, source, fallback = content, "content", False
             elif reasoning:
-                answer = reasoning
-                source = "reasoning_content"
-                fallback = True
+                answer, source, fallback = reasoning, "reasoning_content", True
             else:
-                answer = ""
-                source = "empty"
-                fallback = False
+                answer, source, fallback = "", "empty", False
             return AIResponse(
-                platform=self.platform_name,
-                question=prompt,
-                answer_text=answer,
-                answer_source=source,
-                reasoning_fallback=fallback,
-                error_code=None if answer else "empty_response",
+                platform=self.platform_name, question=prompt, answer_text=answer,
+                answer_source=source, reasoning_fallback=fallback,
+                error_code=None if answer else "platform_empty_response",
                 citations=await self.extract_citations(answer),
-                model_name=model,
-                model_version=response.model or "",
-                raw_response=response.model_dump(),
-                latency_ms=latency,
+                model_name=model, model_version=response.model or "",
+                raw_response=response.model_dump(), latency_ms=latency,
             )
         except Exception as e:
-            from src.collector.error_codes import CollectorErrorCode
             error_str = str(e)
-            # Map to standard error codes
-            if "429" in error_str or "rate_limit" in error_str.lower() or "RateLimitError" in type(e).__name__:
-                code = CollectorErrorCode.RATE_LIMIT.value; retry = True
-            elif "timeout" in error_str.lower() or "Timeout" in type(e).__name__:
-                code = CollectorErrorCode.TIMEOUT.value; retry = True
-            elif "401" in error_str or "403" in error_str or "auth" in error_str.lower() or "AuthenticationError" in type(e).__name__:
-                code = CollectorErrorCode.AUTH_ERROR.value; retry = False
-            elif "5" in error_str[:3] if len(error_str) > 3 else False:
-                code = CollectorErrorCode.SERVER_ERROR.value; retry = True
-            elif "connection" in error_str.lower() or "network" in error_str.lower():
-                code = CollectorErrorCode.NETWORK_ERROR.value; retry = True
-            else:
-                code = CollectorErrorCode.UNKNOWN_ERROR.value; retry = False
+            error_type = type(e).__name__
+            code, retry = self._classify_error(error_str, error_type, e)
             return AIResponse(
                 platform=self.platform_name, question=prompt, answer_text="",
                 model_name=model, latency_ms=int((time.time() - start) * 1000),
-                error=error_str, error_code=code, error_message=error_str[:500], retryable=retry,
+                error=error_str, error_code=code, error_message=error_str[:500],
+                retryable=retry,
             )
+
+    def _classify_error(self, error_str: str, error_type: str, exc: Exception) -> tuple[str, bool]:
+        """Classify platform errors. Returns (error_code, retryable)."""
+        error_lower = error_str.lower()
+
+        if "429" in error_str or "rate_limit" in error_lower or "RateLimitError" in error_type:
+            return "platform_rate_limited", True
+        if "timeout" in error_lower or "Timeout" in error_type or "timed out" in error_lower:
+            return "platform_timeout", True
+        if "401" in error_str or "403" in error_str or "auth" in error_lower or "AuthenticationError" in error_type:
+            return "platform_auth_failed", False
+        if "quota" in error_lower or "exhausted" in error_lower:
+            return "platform_quota_exhausted", False
+        if "empty" in error_lower or "content_filter" in error_lower:
+            return "platform_empty_response", False
+        if "connection" in error_lower or "network" in error_lower or "ConnectError" in error_type:
+            return "platform_network_error", True
+        if "5" in error_str[:3] if len(error_str) > 3 else False:
+            return "server_error", True
+        if "parse" in error_lower or "json" in error_lower:
+            return "platform_parse_failed", False
+        return "platform_unknown_error", False
 
     async def extract_citations(self, response: str) -> list[Citation]:
         citations = []

@@ -1,30 +1,53 @@
 """Standard error codes for collector engine — no string matching in dispatch logic."""
+
 from enum import Enum
 
 
 class CollectorErrorCode(str, Enum):
-    RATE_LIMIT = "rate_limit"
-    TIMEOUT = "timeout"
+    # Platform errors
+    PLATFORM_RATE_LIMITED = "platform_rate_limited"   # 429
+    PLATFORM_TIMEOUT = "platform_timeout"
+    PLATFORM_AUTH_FAILED = "platform_auth_failed"
+    PLATFORM_QUOTA_EXHAUSTED = "platform_quota_exhausted"
+    PLATFORM_EMPTY_RESPONSE = "platform_empty_response"
+    PLATFORM_PARSE_FAILED = "platform_parse_failed"
+    PLATFORM_UNKNOWN_ERROR = "platform_unknown_error"
+
+    # Legacy aliases (keep backward compat)
+    RATE_LIMIT = "platform_rate_limited"
+    TIMEOUT = "platform_timeout"
+    AUTH_ERROR = "platform_auth_failed"
+    QUOTA_EXCEEDED = "platform_quota_exhausted"
+    EMPTY_RESPONSE = "platform_empty_response"
+    PARSE_ERROR = "platform_parse_failed"
+    UNKNOWN_ERROR = "platform_unknown_error"
+
+    # Infrastructure errors
     SERVER_ERROR = "server_error"
-    AUTH_ERROR = "auth_error"
     INVALID_CONFIG = "invalid_config"
-    EMPTY_RESPONSE = "empty_response"
     CONTENT_FILTERED = "content_filtered"
-    QUOTA_EXCEEDED = "quota_exceeded"
     NETWORK_ERROR = "network_error"
-    PARSE_ERROR = "parse_error"
     CIRCUIT_OPEN = "circuit_open"
     BUDGET_EXCEEDED = "budget_exceeded"
     CANCELLED = "cancelled"
-    UNKNOWN_ERROR = "unknown_error"
 
 
 RETRYABLE_ERRORS = {
-    CollectorErrorCode.RATE_LIMIT,
-    CollectorErrorCode.TIMEOUT,
+    CollectorErrorCode.PLATFORM_RATE_LIMITED,
+    CollectorErrorCode.PLATFORM_TIMEOUT,
     CollectorErrorCode.SERVER_ERROR,
     CollectorErrorCode.NETWORK_ERROR,
     CollectorErrorCode.CIRCUIT_OPEN,
+}
+
+
+NON_RETRYABLE_ERRORS = {
+    CollectorErrorCode.PLATFORM_AUTH_FAILED,
+    CollectorErrorCode.PLATFORM_QUOTA_EXHAUSTED,
+    CollectorErrorCode.INVALID_CONFIG,
+    CollectorErrorCode.CONTENT_FILTERED,
+    CollectorErrorCode.BUDGET_EXCEEDED,
+    CollectorErrorCode.CANCELLED,
 }
 
 
@@ -42,7 +65,7 @@ def normalize_error_code(code) -> CollectorErrorCode | None:
         try:
             return CollectorErrorCode(code)
         except ValueError:
-            return CollectorErrorCode.UNKNOWN_ERROR
+            return CollectorErrorCode.PLATFORM_UNKNOWN_ERROR
     return None
 
 

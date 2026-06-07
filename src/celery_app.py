@@ -10,18 +10,28 @@ app.conf.result_backend = settings.redis_url
 app.conf.result_extended = True
 app.conf.result_expires = settings.celery_result_expires
 
-# Queues
+# Queues — default + DLQ + per-platform
 default_exchange = Exchange("geo_explorer", type="direct")
 dlq_exchange = Exchange("geo_explorer_dlq", type="direct")
 
 app.conf.task_queues = (
     Queue("geo_default", default_exchange, routing_key="default"),
     Queue("geo_dlq", dlq_exchange, routing_key="dlq"),
+    Queue("geo_deepseek", default_exchange, routing_key="deepseek"),
+    Queue("geo_kimi", default_exchange, routing_key="kimi"),
+    Queue("geo_doubao", default_exchange, routing_key="doubao"),
 )
 
 app.conf.task_default_queue = "geo_default"
 app.conf.task_default_exchange = "geo_explorer"
 app.conf.task_default_routing_key = "default"
+
+# Per-platform task routes
+app.conf.task_routes = {
+    "src.collector.tasks.collect_platform_task": {
+        "queue": "geo_default",
+    },
+}
 
 # Reliability — NO autoretry_for, manual retry only
 app.conf.task_acks_late = True
