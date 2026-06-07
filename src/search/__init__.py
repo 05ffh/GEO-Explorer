@@ -25,7 +25,10 @@ class PlatformCapabilities:
 
 def get_available_backends(config) -> list[SearchBackend]:
     from src.search.duckduckgo_backend import DuckDuckGoBackend
+    from src.search.tavily_backend import TavilyBackend
     backends = [DuckDuckGoBackend()]
+    if config.tavily_api_key:
+        backends.append(TavilyBackend(api_key=config.tavily_api_key))
     if config.google_search_api_key and config.google_search_cx:
         pass  # Google backend registration point
     return backends

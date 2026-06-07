@@ -104,6 +104,7 @@ class Settings(BaseSettings):
     google_search_api_key: str = ""
     google_search_cx: str = ""
     brave_search_api_key: str = ""
+    tavily_api_key: str = ""
 
     # --- Action 触发阈值 ---
     action_thresholds: dict = {

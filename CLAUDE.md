@@ -4,9 +4,9 @@
 
 ## 项目状态
 
-**全部完成。654 tests (3 skipped, 0 failures)。Mock 测试体系就绪。GitHub: https://github.com/05ffh/GEO-Explorer**
+**全部完成。664 tests (3 skipped, 0 failures)。Mock 测试体系+Tavily Search 就绪。GitHub: https://github.com/05ffh/GEO-Explorer**
 
-Phase A + P0 7-10 + P1 1-10 + P2 1-4 + 前端架构补齐 + ClaimNature v2 + 5 模块前端补齐 + 集成审计 + 平台限流治理 + Mock 测试体系。
+Phase A + P0 7-10 + P1 1-10 + P2 1-4 + 前端架构补齐 + ClaimNature v2 + 5 模块前端补齐 + 集成审计 + 平台限流治理 + Mock 测试体系 + Tavily Search API。
 
 ## 完整链路
 
@@ -71,7 +71,6 @@ Data-Dense Dashboard, #1E40AF/#3B82F6/#F59E0B, Fira Code+Fira Sans, Jinja2+HTMX+
 
 ## 长期待办
 
-- Tavily API Key 申请 + 接入
 - Brave Search API Key 申请 + 接入
 - GT Search 前端页面 `/brands/{id}/gt-search`
 - Wenxin RPM/TPM/TPD 实际限额确认
