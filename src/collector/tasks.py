@@ -162,7 +162,7 @@ def collect_brand_task(self, brand_id: str, org_id: str,
 # ── collect_gt_task ─────────────────────────────────────────────────────────
 
 @app.task(bind=True, max_retries=3, acks_late=True, reject_on_worker_lost=True,
-          soft_time_limit=600, time_limit=900)
+          soft_time_limit=1800, time_limit=2400)
 def collect_gt_task(self, brand_id: str, org_id: str, force: bool = False):
     async def _run():
         async with SessionLocal() as db:

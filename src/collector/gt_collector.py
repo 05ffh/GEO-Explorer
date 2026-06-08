@@ -62,27 +62,46 @@ async def collect_gt_candidate(
 
 
 async def _collect_from_ai_platforms(company: str) -> list[dict]:
+    import asyncio
     from src.adapters import get_adapter
+    from src.config import settings
 
-    results = []
-    for platform in ["deepseek", "kimi", "doubao"]:
-        try:
-            adapter = get_adapter(platform)
-            for _dim, template, fields in GT_QUESTIONS:
+    results: list[dict] = []
+
+    async def _query_platform(platform: str):
+        """Query all 10 GT questions for one platform with semaphore-limited concurrency."""
+        sem = asyncio.Semaphore(settings.platform_concurrency_limits.get(platform, 2))
+        adapter = get_adapter(platform)
+
+        async def _query_one(dim: str, template: str, fields: list[str]):
+            async with sem:
                 question = template.replace("{公司}", company)
                 response = await adapter.query(question)
-                results.append({
+                return {
                     "platform": platform,
-                    "dimension": _dim,
+                    "dimension": dim,
                     "question": question,
                     "answer": response.answer_text,
                     "source_type": "ai_platform",
                     "source_quality": "medium",
                     "source_tier": "C",
                     "target_fields": fields,
-                })
-        except Exception as e:
-            logger.warning("GT AI collection failed for %s: %s", platform, e)
+                }
+
+        tasks = [_query_one(dim, tmpl, flds) for dim, tmpl, flds in GT_QUESTIONS]
+        platform_results = await asyncio.gather(*tasks, return_exceptions=True)
+        for r in platform_results:
+            if isinstance(r, Exception):
+                logger.warning("GT AI query failed for %s: %s", platform, r)
+            else:
+                results.append(r)
+
+    # Run all platforms concurrently
+    platform_tasks = [
+        _query_platform(p) for p in ["deepseek", "kimi", "doubao", "wenxin"]
+    ]
+    await asyncio.gather(*platform_tasks, return_exceptions=True)
+
     return results
 
 

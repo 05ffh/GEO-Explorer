@@ -7,6 +7,8 @@ from src.models.ground_truth import GroundTruthVersion
 from src.models.query_result import QueryResult
 from src.models.action_plan import ActionPlan
 from src.models.brand import Brand
+from src.models.hallucination import HallucinationResult as HR
+from src.analyzer.enums import HallucinationVerdict
 from src.actions.executor import _generate_with_llm
 from src.analyzer.sov import compute_sov
 from src.analyzer.first_rec import compute_first_rec
