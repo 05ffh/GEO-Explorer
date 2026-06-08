@@ -18,6 +18,12 @@ services:
       - app_storage:/app/storage
     networks:
       - internal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     deploy:
       resources:
         limits:
@@ -64,9 +70,10 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # No ports exposed — internal network only (P0-10)
     environment:
       POSTGRES_USER: geo
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-geo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-geo}
       POSTGRES_DB: geo_explorer
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -85,6 +92,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # No ports exposed — internal network only (P0-10)
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
@@ -109,6 +117,8 @@ services:
     volumes:
       - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - certs:/etc/nginx/certs:ro
+      - ./deploy/certbot/www:/var/www/certbot:ro
+      - ./deploy/certbot/conf:/etc/letsencrypt:ro
     depends_on:
       - app
     networks:

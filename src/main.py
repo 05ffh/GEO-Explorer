@@ -110,6 +110,22 @@ async def health(db: AsyncSession = Depends(get_db)):
     return checks
 
 
+@app.get("/health/live")
+async def health_live():
+    """Liveness probe — process is alive."""
+    return {"status": "alive"}
+
+
+@app.get("/health/ready")
+async def health_ready(db: AsyncSession = Depends(get_db)):
+    """Readiness probe — DB is reachable."""
+    try:
+        await db.execute(text("SELECT 1"))
+        return {"status": "ready", "database": "ok"}
+    except Exception as e:
+        return {"status": "not_ready", "database": f"error: {e}"}
+
+
 def _empty_dashboard_vm(brand_id: str = "", brand_name: str = "", industry: str = "") -> dict:
     """Minimal VM for empty/no-data dashboard state with all required keys."""
     return {

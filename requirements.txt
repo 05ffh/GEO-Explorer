@@ -55,3 +55,4 @@ fakeredis==2.35.1
 click==8.4.1
 
 # PDF requires Node.js 22+ with Puppeteer + marked (separate from pip)
+gunicorn
