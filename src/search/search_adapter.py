@@ -53,52 +53,6 @@ class SearchAdapter(ABC):
 
     @staticmethod
     def _classify_tier(url: str, field_name: str = "") -> str:
-        """P0-4: Classify source tier by URL/domain, NOT by provider.
-
-        S: gov/edu, brand official sites (determined by canonical domain patterns)
-        A: tianyancha, qichacha, industry association databases
-        B: major media, wikis, business databases
-        C: general news, vertical media, blogs
-        D: forums, self-media, low-quality aggregators
-        """
-        from urllib.parse import urlparse
-        domain = urlparse(url).netloc.lower()
-
-        # S-tier: government, education, official
-        if any(k in domain for k in (".gov.cn", ".gov", ".edu.cn", ".edu")):
-            return "S"
-        # S-tier: official IR/announcement URLs
-        if any(k in url.lower() for k in ("/investor", "/ir", "/announcement", "/about")):
-            if not any(k in domain for k in ("zhihu.com", "zhidao", "tieba", "douban")):
-                return "S"
-
-        # A-tier: authoritative third-party databases
-        if any(k in domain for k in (
-            "tianyancha.com", "qichacha.com", "gsxt.gov.cn",
-            "sec.gov", "sec.report", "bloomberg.com",
-        )):
-            return "A"
-
-        # B-tier: major media, wikis, business databases
-        if any(k in domain for k in (
-            "wikipedia.org", "baidu.com/baike", "36kr.com",
-            "crunchbase.com", "linkedin.com",
-        )):
-            return "B"
-        if any(k in domain for k in (
-            "sina.com", "qq.com", "163.com", "sohu.com",
-            "thepaper.cn", "ft.com", "wsj.com", "reuters.com",
-        )):
-            return "B"
-
-        # D-tier: forums, self-media, low-quality
-        if any(k in domain for k in (
-            "zhihu.com", "zhidao.baidu.com", "tieba.baidu.com",
-            "douban.com", "xiaohongshu.com", "weibo.com",
-        )):
-            return "D"
-        if "blog" in domain or "forum" in domain or "bbs" in domain:
-            return "D"
-
-        # Default: C-tier
-        return "C"
+        """Classify source tier by URL/domain. Delegates to public function (P0-6)."""
+        from src.search.source_tier import classify_source_tier
+        return classify_source_tier(url)

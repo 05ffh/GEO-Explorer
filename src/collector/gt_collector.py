@@ -89,6 +89,7 @@ async def _collect_from_ai_platforms(company: str) -> list[dict]:
 async def _collect_from_search(company: str) -> list[dict]:
     from src.config import settings
     from src.search import get_available_backends
+    from src.search.source_tier import classify_source_tier
 
     results = []
     queries = [f"{company} 公司", f"{company} 产品", f"{company} 官网", f"{company} 怎么样"]
@@ -98,6 +99,7 @@ async def _collect_from_search(company: str) -> list[dict]:
             try:
                 items = await backend.search(q, num=3)
                 for item in items:
+                    tier = classify_source_tier(item.url, title=item.title)
                     results.append({
                         "platform": backend.name,
                         "query": q,
@@ -106,6 +108,7 @@ async def _collect_from_search(company: str) -> list[dict]:
                         "url": item.url,
                         "source_type": "search_result",
                         "source_quality": item.source_quality,
+                        "source_tier": tier,
                     })
             except Exception as e:
                 logger.warning("Search failed for %s/%s: %s", backend.name, q, e)

@@ -2,29 +2,79 @@ from collections import defaultdict
 
 from src.analyzer.gt_confidence import compute_field_confidence
 from src.analyzer.gt_conflict_detector import detect_conflicts
+from src.analyzer.gt_cross_validator import (
+    SourceEvidence, cross_validate_ai_with_search,
+)
 
 
 def aggregate_all_fields(ai_results: list[dict], search_results: list[dict]) -> dict:
+    # Build SourceEvidence for AI results
+    ai_evidence: dict[str, list[SourceEvidence]] = defaultdict(list)
+    for r in ai_results:
+        tier = r.get("source_tier", "C")
+        for field in r.get("target_fields", []):
+            ai_evidence[field].append(SourceEvidence(
+                field_name=field,
+                value=r["answer"][:500],
+                source_type="ai_platform",
+                source_tier=tier,
+                source_quality="medium",
+                provider=r["platform"],
+                original_source_tier=tier,
+            ))
+
+    # Build SourceEvidence for search results
+    search_evidence: dict[str, list[SourceEvidence]] = defaultdict(list)
+    for r in search_results:
+        tier = r.get("source_tier", "C")
+        for field in _infer_fields_from_search(r.get("snippet", "")):
+            search_evidence[field].append(SourceEvidence(
+                field_name=field,
+                value=r.get("snippet", "")[:300],
+                source_type=r.get("source_type", "search_result"),
+                source_tier=tier,
+                source_quality=r.get("source_quality", "low"),
+                provider=r.get("platform", ""),
+                url=r.get("url", ""),
+            ))
+
+    # Cross-validate: upgrade AI tiers based on search evidence
+    for field in list(ai_evidence.keys()):
+        if field in search_evidence:
+            ai_evidence[field] = cross_validate_ai_with_search(
+                ai_evidence[field], search_evidence[field],
+            )
+
+    # Merge back into field_sources dict for downstream compatibility
     field_sources: dict[str, list[dict]] = defaultdict(list)
 
-    for r in ai_results:
-        for field in r.get("target_fields", []):
-            field_sources[field].append({
-                "value": r["answer"][:500],
-                "source_type": "ai_platform",
-                "source_quality": "medium",
-                "platform": r["platform"],
-            })
+    for field, ev_list in ai_evidence.items():
+        for ev in ev_list:
+            src = {
+                "value": ev.value,
+                "source_type": ev.source_type,
+                "source_quality": ev.source_quality,
+                "source_tier": ev.source_tier,
+                "platform": ev.provider,
+                "original_source_tier": ev.original_source_tier,
+                "validation_status": ev.validation_status,
+                "upgrade_reason": ev.upgrade_reason,
+                "match_score": ev.match_score,
+                "matched_search_sources": ev.matched_search_sources,
+            }
+            field_sources[field].append(src)
 
-    for r in search_results:
-        for field in _infer_fields_from_search(r.get("snippet", "")):
-            field_sources[field].append({
-                "value": r["snippet"][:300],
-                "source_type": r["source_type"],
-                "source_quality": r.get("source_quality", "low"),
-                "url": r.get("url", ""),
-                "platform": r["platform"],
-            })
+    for field, ev_list in search_evidence.items():
+        for ev in ev_list:
+            src = {
+                "value": ev.value,
+                "source_type": ev.source_type,
+                "source_quality": ev.source_quality,
+                "source_tier": ev.source_tier,
+                "platform": ev.provider,
+                "url": ev.url,
+            }
+            field_sources[field].append(src)
 
     result = {}
     for field, sources in field_sources.items():
@@ -41,6 +91,7 @@ def aggregate_all_fields(ai_results: list[dict], search_results: list[dict]) -> 
                 set(s["value"][:100] for s in sources if s["source_type"] == "ai_platform")
             ),
             "conflict_count": conflict["conflict_count"],
+            "sources": sources,
         }
     return result
 
