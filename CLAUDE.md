@@ -4,9 +4,9 @@
 
 ## 项目状态
 
-**全部完成。715 tests (3 skipped, 0 failures)。GT Search 链路就绪。GitHub: https://github.com/05ffh/GEO-Explorer**
+**全部完成。748 tests (3 skipped, 0 failures)。GT Search + 来源可信度跨源验证就绪。GitHub: https://github.com/05ffh/GEO-Explorer**
 
-Phase A + P0 7-10 + P1 1-10 + P2 1-4 + 前端架构补齐 + ClaimNature v2 + 5 模块前端补齐 + 集成审计 + 平台限流治理 + Mock 测试体系 + Tavily + Google Search + GT Search 链路。
+Phase A + P0 7-10 + P1 1-10 + P2 1-4 + 前端架构补齐 + ClaimNature v2 + 5 模块前端补齐 + 集成审计 + 平台限流治理 + Mock 测试体系 + Tavily + Google Search + GT Search 链路 + 来源可信度跨源验证。
 
 ## 完整链路
 
@@ -74,5 +74,5 @@ Data-Dense Dashboard, #1E40AF/#3B82F6/#F59E0B, Fira Code+Fira Sans, Jinja2+HTMX+
 - Brave Search API Key 申请 + 接入
 - Google CSE API 在 GCP 启用
 - Wenxin RPM/TPM/TPD 实际限额确认
-- GT 来源升级 C→S/A/B
+- 生产部署基础设施 (TLS/nginx/gunicorn/DB备份/CI)
 - 生产部署基础设施 (TLS/nginx/gunicorn/DB备份/CI)
