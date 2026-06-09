@@ -76,14 +76,22 @@ class TestDashboardReport:
         html = resp.text
         assert "生成报告" in html or "报告" in html
 
-    @pytest.mark.skip(reason="Route exists but requires valid collection_run_id — not testable with empty data")
     async def test_report_generate_api_route_registered(self, mod6_user, mod6_brand, db_session):
         from src.main import app
+        from src.models.collection_run import CollectionRun
+        import uuid
+        run = CollectionRun(
+            id=uuid.uuid4(), organization_id=mod6_brand.organization_id,
+            brand_id=mod6_brand.id, trigger_type="manual", collection_status="completed",
+            total_queries=0, success_count=0, failure_count=0,
+        )
+        db_session.add(run)
+        await db_session.flush()
         token = _token_for(str(mod6_user.id))
         async with _make_client(app, db_session) as client:
             resp = await client.post(f"/api/brands/{mod6_brand.id}/reports/generate",
                                      headers={"Authorization": f"Bearer {token}"},
-                                     json={"collection_run_id": "", "editions": None})
+                                     json={"collection_run_id": str(run.id), "editions": None})
         assert resp.status_code != 404
 
 

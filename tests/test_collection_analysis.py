@@ -92,11 +92,10 @@ async def test_analysis_skipped_when_below_threshold(db_session):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skip(reason="Needs adapter_registry refactor — old monkeypatch pattern")
-async def test_analysis_not_duplicated_on_rerun(db_session, monkeypatch):
+async def test_analysis_not_duplicated_on_rerun(db_session):
     """同一个 collection_run 重试时不重复生成 MetricsSnapshot."""
     from src.collector import engine as collector_engine
-    from src.adapters.mock import MockAdapter
+    from src.adapters.mock import MockPlatformAdapter
 
     org = Organization(name="TestOrg")
     db_session.add(org)
@@ -114,15 +113,27 @@ async def test_analysis_not_duplicated_on_rerun(db_session, monkeypatch):
     db_session.add(prompt)
     await db_session.commit()
 
-    monkeypatch.setattr(collector_engine, "get_adapter", lambda p: MockAdapter(platform_name=p))
-    monkeypatch.setattr(collector_engine, "PLATFORMS", ["deepseek", "kimi"])
+    # Use adapter_registry injection instead of monkeypatch
+    def _make_adapter(p):
+        return MockPlatformAdapter(p, "success", latency_range=(5, 20))
+    registry = {p: lambda p=p: _make_adapter(p) for p in ["deepseek", "kimi"]}
 
     # Override analysis threshold so 2 queries suffice
     from src.config import settings
-    monkeypatch.setattr(settings, "min_success_queries_for_analysis", 2)
-    monkeypatch.setattr(settings, "min_success_platforms_for_analysis", 2)
+    old_min_queries = settings.min_success_queries_for_analysis
+    old_min_platforms = settings.min_success_platforms_for_analysis
+    settings.min_success_queries_for_analysis = 2
+    settings.min_success_platforms_for_analysis = 2
 
-    run = await collector_engine.run_collection(brand.id, org.id, db_session, trigger_type="manual", auto_analyze=True)
+    try:
+        run = await collector_engine.run_collection(
+            brand.id, org.id, db_session, trigger_type="manual",
+            auto_analyze=True, adapter_registry=registry,
+        )
+    finally:
+        settings.min_success_queries_for_analysis = old_min_queries
+        settings.min_success_platforms_for_analysis = old_min_platforms
+
     await db_session.refresh(run)
     assert run.analysis_status == "completed"
 
