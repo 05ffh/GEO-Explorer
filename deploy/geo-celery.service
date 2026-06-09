@@ -8,7 +8,7 @@ Type=simple
 User=ffh
 WorkingDirectory=/home/ffh/geo-explorer
 Environment=PATH=/home/ffh/geo-explorer/.venv/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/home/ffh/geo-explorer/.venv/bin/python -m celery -A src.celery_app worker --loglevel=info --concurrency=4
+ExecStart=/home/ffh/geo-explorer/.venv/bin/python -m celery -A src.celery_app worker --pool=solo --loglevel=info
 Restart=always
 RestartSec=10
 

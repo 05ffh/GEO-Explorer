@@ -44,44 +44,65 @@ class PlatformAdapter(ABC):
         ...
 
 
-# ── Shared httpx client pool for OpenAI-compatible adapters ─────────────────
+# ── HTTP client factory (fork-safe: no global state at import time) ──────────
+# P0 fix: Celery prefork causes fork() — child processes MUST NOT inherit
+# parent's httpx connection pool (sockets/SSL/event loop break after fork).
+# Solution: lazy per-process caching via os.getpid() key, never at import time.
 
-_SHARED_HTTPX_CLIENT: httpx.AsyncClient | None = None
-_SHARED_OPENAI_CLIENTS: dict[str, AsyncOpenAI] = {}
+import os as _os
+
+_PER_PROCESS_HTTP_CLIENTS: dict[int, httpx.AsyncClient] = {}
+_PER_PROCESS_OPENAI_CLIENTS: dict[str, AsyncOpenAI] = {}
 
 
-def _get_shared_httpx_client() -> httpx.AsyncClient:
-    """Build or return a shared httpx.AsyncClient with proper timeouts for WSL2."""
-    global _SHARED_HTTPX_CLIENT
-    if _SHARED_HTTPX_CLIENT is None:
-        from src.config import settings
-        _SHARED_HTTPX_CLIENT = httpx.AsyncClient(
+def _create_http_client() -> httpx.AsyncClient:
+    """Create a NEW httpx.AsyncClient. Cached per OS process (fork-safe)."""
+    pid = _os.getpid()
+    if pid not in _PER_PROCESS_HTTP_CLIENTS:
+        _PER_PROCESS_HTTP_CLIENTS[pid] = httpx.AsyncClient(
             timeout=httpx.Timeout(
-                connect=20.0,    # connect timeout
-                read=90.0,       # read timeout
+                connect=20.0,
+                read=90.0,
                 write=20.0,
-                pool=20.0,       # pool timeout
+                pool=20.0,
             ),
             limits=httpx.Limits(
                 max_connections=20,
                 max_keepalive_connections=10,
             ),
         )
-    return _SHARED_HTTPX_CLIENT
+    return _PER_PROCESS_HTTP_CLIENTS[pid]
 
 
-def _get_openai_client(api_key: str, base_url: str) -> AsyncOpenAI:
-    """Build or return a shared AsyncOpenAI client per (key, url) pair."""
-    cache_key = f"{api_key[:20]}@{base_url}"
-    if cache_key not in _SHARED_OPENAI_CLIENTS:
-        from src.config import settings
-        _SHARED_OPENAI_CLIENTS[cache_key] = AsyncOpenAI(
+def _create_openai_client(api_key: str, base_url: str) -> AsyncOpenAI:
+    """Create an AsyncOpenAI client. Cached per (process, key, url) — fork-safe."""
+    pid = _os.getpid()
+    cache_key = f"{pid}:{api_key[:20]}@{base_url}"
+    if cache_key not in _PER_PROCESS_OPENAI_CLIENTS:
+        _PER_PROCESS_OPENAI_CLIENTS[cache_key] = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url,
-            max_retries=0,  # SDK retries disabled — we handle retries
-            http_client=_get_shared_httpx_client(),
+            max_retries=0,
+            http_client=_create_http_client(),
         )
-    return _SHARED_OPENAI_CLIENTS[cache_key]
+    return _PER_PROCESS_OPENAI_CLIENTS[cache_key]
+
+
+def _close_process_clients() -> None:
+    """Close all HTTP clients for the current process (worker shutdown hook)."""
+    pid = _os.getpid()
+    for key in list(_PER_PROCESS_OPENAI_CLIENTS.keys()):
+        if str(pid) in key:
+            _PER_PROCESS_OPENAI_CLIENTS.pop(key, None)
+    client = _PER_PROCESS_HTTP_CLIENTS.pop(pid, None)
+    if client:
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(client.aclose())
+        except Exception:
+            pass
 
 
 class OpenAICompatibleAdapter(PlatformAdapter):
@@ -93,7 +114,7 @@ class OpenAICompatibleAdapter(PlatformAdapter):
 
     @property
     def client(self) -> AsyncOpenAI:
-        return _get_openai_client(self.api_key, self.base_url)
+        return _create_openai_client(self.api_key, self.base_url)
 
     async def query(self, prompt: str, system_prompt: str = "", **kwargs) -> AIResponse:
         start = time.time()

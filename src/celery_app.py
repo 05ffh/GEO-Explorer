@@ -43,6 +43,10 @@ app.conf.worker_prefetch_multiplier = settings.celery_worker_prefetch_multiplier
 app.conf.task_soft_time_limit = settings.celery_task_soft_time_limit
 app.conf.task_time_limit = settings.celery_task_time_limit
 
+# Worker lifecycle (fork-safe)
+app.conf.worker_max_tasks_per_child = 20
+app.conf.broker_connection_retry_on_startup = True
+
 # Broker transport
 app.conf.broker_transport_options = {
     "visibility_timeout": settings.celery_broker_visibility_timeout,
@@ -74,5 +78,27 @@ app.conf.beat_schedule = {
 app.conf.timezone = "Asia/Shanghai"
 
 app.autodiscover_tasks(['src.collector', 'src.queue', 'src.benchmark'])
+
+
+# ── Fork-safe worker lifecycle (P0: Celery fix) ──────────────────────────────
+
+from celery.signals import worker_process_init, worker_process_shutdown
+
+
+@worker_process_init.connect
+def _on_worker_process_init(**kwargs):
+    """After fork, initialize per-process HTTP clients. Only relevant for prefork pool."""
+    # Force recreate HTTP clients for the new child process
+    from src.adapters.base import _PER_PROCESS_HTTP_CLIENTS, _PER_PROCESS_OPENAI_CLIENTS
+    _PER_PROCESS_HTTP_CLIENTS.clear()
+    _PER_PROCESS_OPENAI_CLIENTS.clear()
+
+
+@worker_process_shutdown.connect
+def _on_worker_process_shutdown(**kwargs):
+    """Before worker exits, close HTTP clients."""
+    from src.adapters.base import _close_process_clients
+    _close_process_clients()
+
 
 celery_app = app  # alias for direct import
