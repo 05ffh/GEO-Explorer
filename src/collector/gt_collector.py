@@ -34,7 +34,7 @@ async def collect_gt_candidate(
     search_results = await _collect_from_search(company)
 
     # P0-1: High-risk field targeted Tavily verification
-    await _verify_high_risk_fields_inline(company, ai_results)
+    await _verify_high_risk_fields_inline(company, ai_results, search_results)
 
     from src.analyzer.gt_aggregator import aggregate_all_fields
     field_results = aggregate_all_fields(ai_results, search_results)
@@ -191,9 +191,14 @@ def _compute_overall(field_results: dict) -> str:
 
 
 async def _verify_high_risk_fields_inline(
-    company: str, ai_results: list[dict],
+    company: str, ai_results: list[dict], search_results: list[dict],
 ) -> None:
-    """Run targeted Tavily verification on high-risk fields and update AI results."""
+    """Run targeted Tavily verification on high-risk fields.
+
+    Updates ai_results in-place (source_tier upgrade) AND injects matched
+    search sources into search_results so they flow through the evidence
+    persistence pipeline (aggregate → _persist_evidence → GroundTruthEvidence).
+    """
     from src.config import settings
     from src.gt.field_policy import get_high_priority_fields
     from src.collector.gt_field_verifier import verify_high_risk_fields
@@ -232,6 +237,21 @@ async def _verify_high_risk_fields_inline(
                         r["source_quality"] = "high" if v["validated_tier"] == "A" else "medium"
                     r.setdefault("verification", {})
                     r["verification"][field] = v
+
+                    # Inject matched search sources into search_results
+                    # so they flow through aggregate → _persist_evidence → GroundTruthEvidence
+                    for src in v.get("matched_sources", []):
+                        search_results.append({
+                            "platform": src.get("provider", "tavily"),
+                            "query": f"verify:{field}",
+                            "title": src.get("matched_text", "")[:100],
+                            "snippet": src.get("matched_text", "")[:300],
+                            "url": src.get("url", ""),
+                            "source_type": "search_result",
+                            "source_quality": "high" if src.get("source_tier") in ("S", "A") else "medium",
+                            "source_tier": src.get("source_tier", "B"),
+                        })
+
         logger.info("Field verification: %d fields, %d upgraded",
                      len(fields_to_verify),
                      sum(1 for v in verification.values() if v.get("validated_tier") != "C"))
