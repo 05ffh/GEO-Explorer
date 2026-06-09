@@ -137,19 +137,22 @@ async def celery_health():
     try:
         venv_python = "/home/ffh/geo-explorer/.venv/bin/python"
         ping = subprocess.run(
-            [venv_python, "-m", "celery", "-A", "src.celery_app", "inspect", "ping"],
+            [venv_python, "-m", "celery", "-A", "src.celery_app", "inspect", "ping", "--json"],
             capture_output=True, text=True, timeout=10,
         )
         if ping.returncode == 0 and ping.stdout.strip():
-            # Parse celery ping output: {"celery@hostname": {"ok": "pong"}}
             try:
                 ping_data = json.loads(ping.stdout.strip())
                 result["workers"] = list(ping_data.keys())
             except json.JSONDecodeError:
-                result["workers"] = ["parsing_error"]
+                # Fallback: parse human-readable celery ping output
+                for line in ping.stdout.strip().split("\n"):
+                    if "OK" in line or "pong" in line:
+                        result["workers"].append(line.split(":")[0].strip())
+                        break
 
         active = subprocess.run(
-            [venv_python, "-m", "celery", "-A", "src.celery_app", "inspect", "active"],
+            [venv_python, "-m", "celery", "-A", "src.celery_app", "inspect", "active", "--json"],
             capture_output=True, text=True, timeout=10,
         )
         if active.returncode == 0 and active.stdout.strip():
@@ -161,7 +164,7 @@ async def celery_health():
                 pass
 
         reserved = subprocess.run(
-            [venv_python, "-m", "celery", "-A", "src.celery_app", "inspect", "reserved"],
+            [venv_python, "-m", "celery", "-A", "src.celery_app", "inspect", "reserved", "--json"],
             capture_output=True, text=True, timeout=10,
         )
         if reserved.returncode == 0 and reserved.stdout.strip():
