@@ -4,7 +4,7 @@
 
 ## 项目状态
 
-**全部完成。748 tests (3 skipped, 0 failures)。生产部署基础设施就绪。GitHub: https://github.com/05ffh/GEO-Explorer**
+**全部完成。766 tests (3 skipped, 0 failures)。GT 质量提升就绪。GitHub: https://github.com/05ffh/GEO-Explorer**
 
 Phase A + P0 7-10 + P1 1-10 + P2 1-4 + 前端架构补齐 + ClaimNature v2 + 5 模块前端补齐 + 集成审计 + 平台限流治理 + Mock 测试体系 + Tavily + Google Search + GT Search 链路 + 来源跨源验证 + 生产部署基础设施。
 
