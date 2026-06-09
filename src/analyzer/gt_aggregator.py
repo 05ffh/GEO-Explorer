@@ -76,12 +76,27 @@ def aggregate_all_fields(ai_results: list[dict], search_results: list[dict]) -> 
             }
             field_sources[field].append(src)
 
+    from src.gt.field_policy import FIELD_POLICIES
+
     result = {}
     for field, sources in field_sources.items():
         confidence = compute_field_confidence(sources)
         conflict = detect_conflicts(sources)
         values = [s["value"] for s in sources if s.get("value")]
-        best_value = values[0] if values else ""
+
+        # P1-1: For search_first fields, prefer search sources over AI
+        policy = FIELD_POLICIES.get(field, {})
+        if policy.get("strategy") == "search_first" and len(sources) > 1:
+            search_vals = [s for s in sources if s.get("source_type") == "search_result"]
+            if search_vals:
+                # Prioritize highest-tier search value
+                search_vals.sort(key=lambda s: {"S": 5, "A": 4, "B": 3, "C": 2, "D": 1}.get(s.get("source_tier", "C"), 0), reverse=True)
+                best_value = search_vals[0]["value"] if search_vals[0].get("value") else values[0]
+            else:
+                best_value = values[0] if values else ""
+        else:
+            best_value = values[0] if values else ""
+
         result[field] = {
             "value": best_value,
             "confidence": confidence,

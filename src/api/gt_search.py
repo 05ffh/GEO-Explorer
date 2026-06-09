@@ -141,22 +141,31 @@ async def _approve_candidate(
         resolved = False
 
     if resolved:
+        # Check if this is a key anchor field (P0-2)
+        from src.gt.field_policy import FIELD_POLICIES
+        is_anchor = field_name in FIELD_POLICIES and FIELD_POLICIES[field_name].get("priority") == "P0"
+
         # Create or update GroundTruthVersion
         if existing_gt is None:
             new_gt = GroundTruthVersion(
                 brand_id=candidate.brand_id,
                 version=1,
-                ground_truth_json={field_name: proposed_value},
+                ground_truth_json={
+                    field_name: proposed_value,
+                    **({f"_{field_name}_anchor": True} if is_anchor else {}),
+                },
                 reviewer=user_id,
                 status="active",
                 required_fields_complete=False,
                 user_confirmed=True,
-                high_risk_fields_reviewed=False,
+                high_risk_fields_reviewed=is_anchor,
             )
             db.add(new_gt)
         else:
             gt_json = existing_gt.get_flat_json() if hasattr(existing_gt, "get_flat_json") else existing_gt.ground_truth_json
             gt_json[field_name] = proposed_value
+            if is_anchor:
+                gt_json[f"_{field_name}_anchor"] = True
             existing_gt.ground_truth_json = gt_json
             existing_gt.reviewer = user_id
 
@@ -240,6 +249,62 @@ async def _reject_candidate(
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
+
+@router.get("/brands/{brand_id}/gt-search/key-fields")
+async def get_key_fields(
+    brand_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """P0-2: Return key anchor fields with review status for the GT Quality panel."""
+    brand = await _get_brand_or_404(brand_id, user, db)
+    from src.gt.field_policy import FIELD_POLICIES, get_high_priority_fields
+    from src.models.gt_candidate import GroundTruthCandidate
+    from src.models.ground_truth import GroundTruthVersion
+
+    key_fields = get_high_priority_fields("P0")
+    active_gt = (await db.execute(
+        select(GroundTruthVersion).where(
+            GroundTruthVersion.brand_id == brand_id,
+            GroundTruthVersion.status == "active",
+        )
+    )).scalars().first()
+
+    gt_json = active_gt.get_flat_json() if active_gt and hasattr(active_gt, "get_flat_json") else (active_gt.ground_truth_json if active_gt else {})
+
+    # Get pending candidates for key fields
+    candidates = (await db.execute(
+        select(GroundTruthCandidate).where(
+            GroundTruthCandidate.brand_id == brand_id,
+            GroundTruthCandidate.status == "pending_review",
+        ).order_by(GroundTruthCandidate.created_at.desc()).limit(10)
+    )).scalars().all()
+
+    fields_status = []
+    for f in key_fields:
+        policy = FIELD_POLICIES.get(f, {})
+        has_gt = f in gt_json
+        is_anchor = has_gt and gt_json.get(f"_{f}_anchor", False)
+        pending_count = sum(1 for c in candidates
+                           if c.candidate_json.get("field_name") == f)
+        fields_status.append({
+            "field_name": f,
+            "category": policy.get("category", ""),
+            "strategy": policy.get("strategy", ""),
+            "has_gt_value": has_gt,
+            "is_anchor": is_anchor,
+            "requires_human_review": policy.get("requires_human_review", False),
+            "pending_candidates": pending_count,
+            "gt_value_preview": str(gt_json.get(f, ""))[:100] if has_gt else "",
+        })
+
+    return {
+        "brand_id": str(brand_id),
+        "key_fields": fields_status,
+        "total_anchors": sum(1 for f in fields_status if f["is_anchor"]),
+        "pending_review": sum(1 for f in fields_status if f["pending_candidates"] > 0),
+    }
 
 
 @router.get("/brands/{brand_id}/gt-search/providers")

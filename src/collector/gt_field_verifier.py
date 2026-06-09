@@ -55,7 +55,7 @@ async def verify_high_risk_fields(
     ai_field_values: dict[str, str],
     search_adapter,
     fields_to_verify: list[str] | None = None,
-) -> dict[str, dict]:
+) -> tuple[dict[str, dict], list[dict]]:
     """Verify AI-proposed values for high-risk fields via Tavily search.
 
     Args:
@@ -65,8 +65,7 @@ async def verify_high_risk_fields(
         fields_to_verify: specific fields to verify (default: all P0 from FIELD_POLICIES)
 
     Returns:
-        {field_name: {validated_tier, validation_status, matched_sources,
-                       match_score, upgrade_reason, original_tier}}
+        ({field_name: {validated_tier, ...}}, summary_evidence_list)
     """
     from src.gt.field_policy import FIELD_POLICIES
 
@@ -77,12 +76,15 @@ async def verify_high_risk_fields(
         ]
 
     result = {}
+    summary_evidence: list[dict] = []
     for field in fields_to_verify:
         ai_value = ai_field_values.get(field, "")
         try:
-            result[field] = await _verify_one_field(
+            field_result, summaries = await _verify_one_field(
                 brand_name, field, ai_value, search_adapter,
             )
+            result[field] = field_result
+            summary_evidence.extend(summaries)
         except Exception as e:
             logger.warning("Field verification failed for %s: %s", field, e)
             result[field] = {
@@ -94,19 +96,35 @@ async def verify_high_risk_fields(
                 "original_tier": "C",
             }
 
-    return result
+    return result, summary_evidence
 
 
 async def _verify_one_field(
     brand_name: str, field_name: str, ai_value: str, adapter,
-) -> dict:
-    """Verify a single field."""
+) -> tuple[dict, list[dict]]:
+    """Verify a single field. Returns (field_result, summary_evidence_list)."""
     queries = _build_verification_queries(brand_name, field_name, ai_value)
     all_results = []
+    summary_evidence = []
     for q in queries[:3]:
         try:
             items = await adapter.search(q, limit=5)
             all_results.extend(items)
+            # P1-2: Capture Tavily answer as summary evidence
+            backend = getattr(adapter, '_backend', None)
+            if backend and hasattr(backend, '_last_answer') and backend._last_answer:
+                answer_urls = getattr(backend, '_last_answer_urls', [])
+                summary_evidence.append({
+                    "field_name": field_name,
+                    "source_type": "search_answer_summary",
+                    "provider": "tavily",
+                    "value": backend._last_answer[:1000],
+                    "source_tier": "B",  # P1-2: max tier B
+                    "source_quality": "medium",
+                    "url": answer_urls[0] if answer_urls else "",
+                    "derived_from_urls": answer_urls,
+                    "query": q,
+                })
         except Exception:
             continue
 
@@ -118,11 +136,11 @@ async def _verify_one_field(
             "match_score": 0.0,
             "upgrade_reason": "No search results found",
             "original_tier": "C",
-        }
+        }, summary_evidence
 
     matches, contradictions = _evaluate_results(field_name, ai_value, all_results)
 
-    return _determine_result(field_name, ai_value, matches, contradictions)
+    return _determine_result(field_name, ai_value, matches, contradictions), summary_evidence
 
 
 def _build_verification_queries(brand: str, field: str, value: str) -> list[str]:

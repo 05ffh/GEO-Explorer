@@ -20,6 +20,8 @@ class TavilyBackend(SearchBackend):
         self.api_key = api_key
 
     async def search(self, query: str, num: int = 5) -> list[SearchResult]:
+        self._last_answer = ""
+        self._last_answer_urls: list[str] = []
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(
@@ -51,6 +53,11 @@ class TavilyBackend(SearchBackend):
                         url=r.get("url", ""),
                         source_quality=self._classify_quality(r.get("url", "")),
                     ))
+
+                # P1-2: Capture Tavily AI answer as summary evidence
+                self._last_answer = data.get("answer", "") or ""
+                self._last_answer_urls = [r.get("url", "") for r in data.get("results", [])[:5]]
+
                 return results
         except Exception:
             logger.warning(

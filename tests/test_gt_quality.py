@@ -66,7 +66,7 @@ class TestFieldVerifier:
         ])
 
         ai_values = {"founded_year": "1971"}
-        result = await verify_high_risk_fields(
+        result, _ = await verify_high_risk_fields(
             brand_name="星巴克", ai_field_values=ai_values,
             search_adapter=adapter,
             fields_to_verify=["founded_year"],
@@ -90,7 +90,7 @@ class TestFieldVerifier:
         ])
 
         ai_values = {"official_name": "星巴克"}
-        result = await verify_high_risk_fields(
+        result, _ = await verify_high_risk_fields(
             brand_name="星巴克", ai_field_values=ai_values,
             search_adapter=adapter, fields_to_verify=["official_name"],
         )
@@ -112,7 +112,7 @@ class TestFieldVerifier:
         ])
 
         ai_values = {"founded_year": "1971"}
-        result = await verify_high_risk_fields(
+        result, _ = await verify_high_risk_fields(
             brand_name="星巴克", ai_field_values=ai_values,
             search_adapter=adapter, fields_to_verify=["founded_year"],
         )
@@ -134,7 +134,7 @@ class TestFieldVerifier:
         ])
 
         ai_values = {"founded_year": "1971"}
-        result = await verify_high_risk_fields(
+        result, _ = await verify_high_risk_fields(
             brand_name="星巴克", ai_field_values=ai_values,
             search_adapter=adapter, fields_to_verify=["founded_year"],
         )
@@ -156,7 +156,7 @@ class TestFieldVerifier:
         ])
 
         ai_values = {"founded_year": "1971"}
-        result = await verify_high_risk_fields(
+        result, _ = await verify_high_risk_fields(
             brand_name="星巴克", ai_field_values=ai_values,
             search_adapter=adapter, fields_to_verify=["founded_year"],
         )
@@ -182,7 +182,7 @@ class TestFieldVerifier:
         ])
 
         ai_values = {"founded_year": "1971"}
-        result = await verify_high_risk_fields(
+        result, _ = await verify_high_risk_fields(
             brand_name="星巴克", ai_field_values=ai_values,
             search_adapter=adapter, fields_to_verify=["founded_year"],
         )
@@ -205,7 +205,7 @@ class TestFieldVerifier:
         ])
 
         ai_values = {"founded_year": "1971"}
-        result = await verify_high_risk_fields(
+        result, _ = await verify_high_risk_fields(
             brand_name="星巴克", ai_field_values=ai_values,
             search_adapter=adapter, fields_to_verify=["founded_year"],
         )
@@ -222,7 +222,7 @@ class TestFieldVerifier:
         adapter.search = AsyncMock(side_effect=Exception("API down"))
 
         ai_values = {"official_name": "星巴克"}
-        result = await verify_high_risk_fields(
+        result, _ = await verify_high_risk_fields(
             brand_name="星巴克", ai_field_values=ai_values,
             search_adapter=adapter, fields_to_verify=["official_name"],
         )
@@ -245,7 +245,7 @@ class TestFieldVerifier:
         ])
 
         ai_values = {"headquarters": "Seattle, Washington, USA"}
-        result = await verify_high_risk_fields(
+        result, _ = await verify_high_risk_fields(
             brand_name="星巴克", ai_field_values=ai_values,
             search_adapter=adapter, fields_to_verify=["headquarters"],
         )

@@ -224,10 +224,23 @@ async def _verify_high_risk_fields_inline(
     try:
         backend = TavilyBackend(api_key=settings.tavily_api_key)
         adapter = TavilySearchAdapter(backend)
-        verification = await verify_high_risk_fields(
+        verification, summary_evidence = await verify_high_risk_fields(
             brand_name=company, ai_field_values=ai_values,
             search_adapter=adapter, fields_to_verify=fields_to_verify,
         )
+        # Inject Tavily answer summary evidence (P1-2)
+        for se in summary_evidence:
+            search_results.append({
+                "platform": se.get("provider", "tavily"),
+                "query": se.get("query", ""),
+                "title": f"Tavily Summary: {se.get('field_name', '')}",
+                "snippet": se.get("value", "")[:300],
+                "url": se.get("url", ""),
+                "source_type": "search_answer_summary",
+                "source_quality": "medium",
+                "source_tier": "B",  # P1-2: max tier B
+            })
+
         for r in ai_results:
             for field in r.get("target_fields", []):
                 if field in verification:
@@ -239,7 +252,6 @@ async def _verify_high_risk_fields_inline(
                     r["verification"][field] = v
 
                     # Inject matched search sources into search_results
-                    # so they flow through aggregate → _persist_evidence → GroundTruthEvidence
                     for src in v.get("matched_sources", []):
                         search_results.append({
                             "platform": src.get("provider", "tavily"),
@@ -252,8 +264,9 @@ async def _verify_high_risk_fields_inline(
                             "source_tier": src.get("source_tier", "B"),
                         })
 
-        logger.info("Field verification: %d fields, %d upgraded",
+        logger.info("Field verification: %d fields, %d upgraded, %d summary",
                      len(fields_to_verify),
-                     sum(1 for v in verification.values() if v.get("validated_tier") != "C"))
+                     sum(1 for v in verification.values() if v.get("validated_tier") != "C"),
+                     len(summary_evidence))
     except Exception as e:
         logger.warning("Field verification failed (non-blocking): %s", e)
