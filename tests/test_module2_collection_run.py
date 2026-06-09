@@ -134,7 +134,6 @@ class TestCancelCollection:
 
 
 class TestPollingRefresh:
-    @pytest.mark.skip(reason="Route /brands/{id}/runs/{run_id} not implemented — only list page exists")
     async def test_detail_page_returns_200(self, mod2_user, mod2_brand, mod2_runs, db_session):
         from src.main import app
         run = mod2_runs[0]

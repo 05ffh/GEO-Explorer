@@ -309,6 +309,24 @@ async def run_list_page(request: Request, brand_id: str,
     ))
 
 
+@app.get("/brands/{brand_id}/runs/{run_id}", response_class=HTMLResponse)
+async def run_detail_page(request: Request, brand_id: str, run_id: str,
+                           user: User = Depends(get_current_user),
+                           db: AsyncSession = Depends(get_db)):
+    """Collection Run detail page with live progress and KPI summary."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.run_detail import build_run_detail_vm
+    vm = await build_run_detail_vm(run_id, brand, user, db)
+    if vm.get("error"):
+        return HTMLResponse(f"<h1>{vm['error']}</h1>", status_code=404)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "runs/detail.html", _page_context(
+        request, "dashboard", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name,
+        vm=vm, user=user,
+    ))
+
+
 # ── Module 3: GT Compare ────────────────────────────────────────────────────
 
 @app.get("/brands/{brand_id}/gt-search", response_class=HTMLResponse)
