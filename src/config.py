@@ -105,6 +105,11 @@ class Settings(BaseSettings):
     google_search_cx: str = ""
     brave_search_api_key: str = ""
 
+    # --- Task execution mode ---
+    task_execution_mode: str = "celery"     # "diagnostic" | "celery"
+    celery_worker_pool: str = "solo"        # "solo" | "prefork"
+    enable_diagnostic_api: bool = False     # Production: disable diagnostic API
+
     # --- GT Search Pipeline ---
     gt_search_tavily_enabled: bool = True
     gt_search_google_cse_enabled: bool = False

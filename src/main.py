@@ -13,6 +13,7 @@ from src.models.user import User
 from src.models.brand import Brand
 from src.api import auth, brands, metrics, collection_runs, hallucinations, actions, dashboard, ground_truth, tasks, publishing, saas, platform, template_versions, reclassifications, templates, gt_search
 from src.schemas.ground_truth import KPI_DISPLAY_NAMES
+from src.collector.execution_dispatcher import get_effective_mode
 
 app = FastAPI(title="GEO Explorer", version="0.1.0")
 
@@ -56,6 +57,9 @@ def _page_context(request: Request, current_page: str, brands: list,
         "is_platform_admin": is_admin,
         "collection_test_mode": settings.collection_test_mode,
         "enable_real_platform_tests": settings.enable_real_platform_tests,
+        "task_execution_mode": settings.task_execution_mode,
+        "effective_execution_mode": get_effective_mode(),
+        "celery_worker_pool": settings.celery_worker_pool,
         **extra,
     }
 

@@ -27,6 +27,7 @@ class CollectionRun(Base, UUIDMixin, TimestampMixin):
     success_count: Mapped[int] = mapped_column(Integer, default=0)
     failure_count: Mapped[int] = mapped_column(Integer, default=0)
 
+    execution_mode: Mapped[str] = mapped_column(String(20), default="celery")
     collection_error_summary: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     analysis_error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     analysis_error_trace: Mapped[str | None] = mapped_column(Text, nullable=True)
