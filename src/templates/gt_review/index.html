@@ -33,6 +33,35 @@
 {{ empty_state("暂无 GT Candidate", "当前品牌还没有 GT Candidate，请先触发 GT 自动采集。", none, none) }}
 {% else %}
 
+{% if vm.quality_summary.total_evidence > 0 %}
+<!-- GT Quality Panel (P0-2) -->
+<div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
+  <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">GT 证据质量</h3>
+  <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-3">
+    {% set tiers = vm.quality_summary.tiers %}
+    {% set total = vm.quality_summary.total_evidence %}
+    {% for t in ['S', 'A', 'B', 'C', 'D'] %}
+    {% set count = tiers.get(t, 0) %}
+    <div class="text-center p-3 rounded-lg {% if t == 'S' %}bg-green-50 text-green-700{% elif t == 'A' %}bg-blue-50 text-blue-700{% elif t == 'B' %}bg-yellow-50 text-yellow-700{% elif t == 'C' %}bg-orange-50 text-orange-700{% else %}bg-red-50 text-red-700{% endif %}">
+      <div class="text-2xl font-bold">{{ count }}</div>
+      <div class="text-xs mt-1">{{ t }}-tier</div>
+      <div class="text-xs opacity-70">{{ (count / total * 100)|int if total else 0 }}%</div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="flex flex-wrap gap-4 text-sm text-slate-600">
+    <span>总证据: <strong>{{ total }}</strong></span>
+    <span>Anchor 字段: <strong>{{ vm.quality_summary.anchors }}/5</strong></span>
+    <span>关键字段待审核: <strong>{{ vm.quality_summary.pending_key_fields_count }}</strong></span>
+  </div>
+  {% if vm.quality_summary.pending_key_fields %}
+  <div class="mt-2 text-xs text-slate-400">
+    待审核: {{ vm.quality_summary.pending_key_fields | join(', ') }}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
 <!-- Progress Bar -->
 <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-4">
     <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">审核进度</h3>

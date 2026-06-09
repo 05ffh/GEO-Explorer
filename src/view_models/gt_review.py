@@ -142,7 +142,31 @@ async def build_gt_review_vm(brand, user, db) -> dict:
     uncertain = sum(1 for f in fields if f["status"] == "flagged")
     conflicts = sum(1 for f in fields if f["has_conflict"])
 
+
+    # P0-2: GT Quality summary
+    quality_summary = {"total_evidence": 0, "tiers": {}, "anchors": 0, "pending_key_fields": []}
+    if candidate:
+        all_ev = (await db.execute(
+            select(GroundTruthEvidence).where(GroundTruthEvidence.candidate_id == candidate.id)
+        )).scalars().all()
+        quality_summary["total_evidence"] = len(all_ev)
+        for ev in all_ev:
+            t = ev.source_tier or "C"
+            quality_summary["tiers"][t] = quality_summary["tiers"].get(t, 0) + 1
+        from src.gt.field_policy import get_high_priority_fields
+        for f in get_high_priority_fields("P0"):
+            if f in (candidate.candidate_json or {}):
+                quality_summary["pending_key_fields"].append(f)
+        quality_summary["pending_key_fields_count"] = len(quality_summary["pending_key_fields"])
+        if active_gt:
+            gt_json = active_gt.get_flat_json() if hasattr(active_gt, "get_flat_json") else active_gt.ground_truth_json
+            for f in get_high_priority_fields("P0"):
+                if gt_json.get(f"_{f}_anchor"):
+                    quality_summary["anchors"] += 1
+
+
     return {
+        "quality_summary": quality_summary,
         "brand": {"id": str(brand.id), "name": brand.name},
         "has_candidate": candidate is not None,
         "candidate_id": str(candidate.id) if candidate else None,
