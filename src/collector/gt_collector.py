@@ -33,6 +33,9 @@ async def collect_gt_candidate(
     ai_results = await _collect_from_ai_platforms(company)
     search_results = await _collect_from_search(company)
 
+    # P0-1: High-risk field targeted Tavily verification
+    await _verify_high_risk_fields_inline(company, ai_results)
+
     from src.analyzer.gt_aggregator import aggregate_all_fields
     field_results = aggregate_all_fields(ai_results, search_results)
 
@@ -182,3 +185,55 @@ def _compute_overall(field_results: dict) -> str:
     if high >= 1 or confs.count("medium") >= len(confs) * 0.5:
         return "medium"
     return "low"
+
+
+# ── P0-1: High-risk field verification ───────────────────────────────────────
+
+
+async def _verify_high_risk_fields_inline(
+    company: str, ai_results: list[dict],
+) -> None:
+    """Run targeted Tavily verification on high-risk fields and update AI results."""
+    from src.config import settings
+    from src.gt.field_policy import get_high_priority_fields
+    from src.collector.gt_field_verifier import verify_high_risk_fields
+    from src.search.tavily_search_adapter import TavilySearchAdapter
+    from src.search.tavily_backend import TavilyBackend
+
+    if not settings.tavily_api_key:
+        return
+
+    ai_values = {}
+    for r in ai_results:
+        for field in r.get("target_fields", []):
+            existing = ai_values.get(field, "")
+            if len(r["answer"]) > len(existing):
+                ai_values[field] = r["answer"]
+
+    high_risk = get_high_priority_fields("P0")
+    fields_to_verify = [f for f in high_risk if f in ai_values][:5]
+
+    if not fields_to_verify:
+        return
+
+    try:
+        backend = TavilyBackend(api_key=settings.tavily_api_key)
+        adapter = TavilySearchAdapter(backend)
+        verification = await verify_high_risk_fields(
+            brand_name=company, ai_field_values=ai_values,
+            search_adapter=adapter, fields_to_verify=fields_to_verify,
+        )
+        for r in ai_results:
+            for field in r.get("target_fields", []):
+                if field in verification:
+                    v = verification[field]
+                    if v.get("validated_tier") != "C":
+                        r["source_tier"] = v["validated_tier"]
+                        r["source_quality"] = "high" if v["validated_tier"] == "A" else "medium"
+                    r.setdefault("verification", {})
+                    r["verification"][field] = v
+        logger.info("Field verification: %d fields, %d upgraded",
+                     len(fields_to_verify),
+                     sum(1 for v in verification.values() if v.get("validated_tier") != "C"))
+    except Exception as e:
+        logger.warning("Field verification failed (non-blocking): %s", e)
