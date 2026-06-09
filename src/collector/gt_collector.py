@@ -109,31 +109,35 @@ async def _collect_from_ai_platforms(company: str) -> list[dict]:
 
 
 async def _collect_from_search(company: str) -> list[dict]:
+    import asyncio
     from src.config import settings
     from src.search import get_available_backends
     from src.search.source_tier import classify_source_tier
 
-    results = []
+    results: list[dict] = []
     queries = [f"{company} 公司", f"{company} 产品", f"{company} 官网", f"{company} 怎么样"]
     backends = get_available_backends(settings)
-    for backend in backends:
-        for q in queries:
-            try:
-                items = await backend.search(q, num=3)
-                for item in items:
-                    tier = classify_source_tier(item.url, title=item.title)
-                    results.append({
-                        "platform": backend.name,
-                        "query": q,
-                        "title": item.title,
-                        "snippet": item.snippet,
-                        "url": item.url,
-                        "source_type": "search_result",
-                        "source_quality": item.source_quality,
-                        "source_tier": tier,
-                    })
-            except Exception as e:
-                logger.warning("Search failed for %s/%s: %s", backend.name, q, e)
+
+    async def _search_one(backend, q: str):
+        try:
+            items = await backend.search(q, num=3)
+            for item in items:
+                tier = classify_source_tier(item.url, title=item.title)
+                results.append({
+                    "platform": backend.name,
+                    "query": q,
+                    "title": item.title,
+                    "snippet": item.snippet,
+                    "url": item.url,
+                    "source_type": "search_result",
+                    "source_quality": item.source_quality,
+                    "source_tier": tier,
+                })
+        except Exception as e:
+            logger.warning("Search failed for %s/%s: %s", backend.name, q, e)
+
+    tasks = [_search_one(backend, q) for backend in backends for q in queries]
+    await asyncio.gather(*tasks, return_exceptions=True)
     return results
 
 

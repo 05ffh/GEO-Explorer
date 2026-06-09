@@ -358,10 +358,18 @@ async def run_collection(
     ]
     responses = await asyncio.gather(*jobs, return_exceptions=True)
 
+    processed = 0
     for result in responses:
         if isinstance(result, Exception):
+            processed += 1
             continue
         response, platform_name, tmpl, retry_info = result
+        processed += 1
+        # Update progress every 8 results (P1: frontend polling visibility)
+        if processed % 8 == 0:
+            run.progress_json = {"completed": processed, "total": run.total_queries,
+                                 "ratio": round(processed / max(run.total_queries, 1), 3)}
+            await db.flush()
         qr = QueryResult(
             brand_id=brand_id,
             organization_id=org_id,
@@ -482,10 +490,13 @@ async def run_collection(
         "pinned_at": datetime.now(timezone.utc).isoformat(),
         "templates": _pinned_snapshot,
     }
+    # Save status before commit — avoid MissingGreenlet on expired object
+    final_status = run.collection_status
+    run_id = run.id
     await db.commit()
 
-    if auto_analyze and run.collection_status in ("completed", "partial"):
+    if auto_analyze and final_status in ("completed", "partial"):
         from src.analyzer.collection_analysis import run_analysis_for_collection
-        await run_analysis_for_collection(run.id, org_id, db)
+        await run_analysis_for_collection(run_id, org_id, db)
 
     return run

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from passlib.hash import bcrypt
@@ -15,13 +15,13 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 class SetupRequest(BaseModel):
     name: str
-    email: EmailStr
+    email: str
     password: str
     org_name: str
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str  # str not EmailStr — EmailStr rejects .local in dev
     password: str
 
 

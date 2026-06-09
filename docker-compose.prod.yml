@@ -32,7 +32,7 @@ services:
   celery-worker:
     build: .
     restart: unless-stopped
-    command: celery -A src.celery_app worker -l info -Q geo_default -c 4
+    command: celery -A src.celery_app worker --pool=solo -l info -Q geo_default
     depends_on:
       postgres:
         condition: service_healthy

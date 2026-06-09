@@ -126,6 +126,59 @@ async def health_ready(db: AsyncSession = Depends(get_db)):
         return {"status": "not_ready", "database": f"error: {e}"}
 
 
+@app.get("/system/celery-health")
+async def celery_health():
+    """Celery worker health — inspect ping + active/reserved tasks."""
+    import subprocess
+    import json
+
+    result = {"workers": [], "active": 0, "reserved": 0}
+
+    try:
+        venv_python = "/home/ffh/geo-explorer/.venv/bin/python"
+        ping = subprocess.run(
+            [venv_python, "-m", "celery", "-A", "src.celery_app", "inspect", "ping"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if ping.returncode == 0 and ping.stdout.strip():
+            # Parse celery ping output: {"celery@hostname": {"ok": "pong"}}
+            try:
+                ping_data = json.loads(ping.stdout.strip())
+                result["workers"] = list(ping_data.keys())
+            except json.JSONDecodeError:
+                result["workers"] = ["parsing_error"]
+
+        active = subprocess.run(
+            [venv_python, "-m", "celery", "-A", "src.celery_app", "inspect", "active"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if active.returncode == 0 and active.stdout.strip():
+            try:
+                active_data = json.loads(active.stdout.strip())
+                for worker_tasks in active_data.values():
+                    result["active"] += len(worker_tasks)
+            except json.JSONDecodeError:
+                pass
+
+        reserved = subprocess.run(
+            [venv_python, "-m", "celery", "-A", "src.celery_app", "inspect", "reserved"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if reserved.returncode == 0 and reserved.stdout.strip():
+            try:
+                reserved_data = json.loads(reserved.stdout.strip())
+                for worker_tasks in reserved_data.values():
+                    result["reserved"] += len(worker_tasks)
+            except json.JSONDecodeError:
+                pass
+
+    except Exception as e:
+        result["error"] = str(e)
+
+    result["healthy"] = len(result["workers"]) > 0
+    return result
+
+
 def _empty_dashboard_vm(brand_id: str = "", brand_name: str = "", industry: str = "") -> dict:
     """Minimal VM for empty/no-data dashboard state with all required keys."""
     return {
