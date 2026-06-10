@@ -121,7 +121,7 @@ async function transitionPkg(id, status) {
 
 async function publishPkg(id) {
     if (!confirm('确认发布此 Content Package？')) return;
-    const resp = await fetch(`/content-packages/${id}/publish`, {
+    const resp = await fetch(`/api/content-packages/${id}/publish`, {
         method: 'POST',
         headers: {'Authorization':'Bearer '+TOKEN},
     });
