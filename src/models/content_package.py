@@ -34,6 +34,8 @@ class ContentPackage(Base, UUIDMixin, TimestampMixin):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     published_platform: Mapped[str] = mapped_column(String(50), default="")
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    platform_variants: Mapped[dict] = mapped_column(JSONB, default=dict)
+    gt_snapshot_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     publish_status_summary: Mapped[str] = mapped_column(String(30), default="not_published")
     published_target_count: Mapped[int] = mapped_column(Integer, default=0)
     failed_target_count: Mapped[int] = mapped_column(Integer, default=0)

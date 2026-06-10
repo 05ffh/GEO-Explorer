@@ -120,6 +120,16 @@ class OpenAICompatibleAdapter(PlatformAdapter):
         start = time.time()
         model = kwargs.get("model", self.default_model)
         try:
+            extra_body = {}
+            # P0-8: search_enabled capability — forwarded to extra_body if supported
+            if kwargs.get("search_enabled"):
+                from src.actions.platform_policy import PLATFORM_KNOWLEDGE_SOURCE_POLICY
+                caps = PLATFORM_KNOWLEDGE_SOURCE_POLICY.get(self.platform_name, {})
+                if caps.get("supports_search_enabled"):
+                    extra_body["search_enabled"] = True
+                else:
+                    logger.debug("search_enabled not supported for %s, skipped", self.platform_name)
+
             response = await self.client.chat.completions.create(
                 model=model,
                 messages=[
@@ -129,6 +139,7 @@ class OpenAICompatibleAdapter(PlatformAdapter):
                 temperature=kwargs.get("temperature", self.default_temperature),
                 max_tokens=kwargs.get("max_tokens", 2048),
                 extra_headers=kwargs.get("extra_headers"),
+                **({"extra_body": extra_body} if extra_body else {}),
             )
             latency = int((time.time() - start) * 1000)
             msg = response.choices[0].message

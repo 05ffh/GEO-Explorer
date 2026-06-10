@@ -11,7 +11,7 @@ from src.config import settings
 from src.api.deps import get_current_user, get_org_brand_or_404
 from src.models.user import User
 from src.models.brand import Brand
-from src.api import auth, brands, metrics, collection_runs, hallucinations, actions, dashboard, ground_truth, tasks, publishing, saas, platform, template_versions, reclassifications, templates, gt_search
+from src.api import auth, brands, metrics, collection_runs, hallucinations, actions, dashboard, ground_truth, tasks, publishing, saas, platform, template_versions, reclassifications, templates, gt_search, platform_variants
 from src.schemas.ground_truth import KPI_DISPLAY_NAMES
 from src.collector.execution_dispatcher import get_effective_mode
 
@@ -29,7 +29,7 @@ for router in [
     actions.router, dashboard.router, ground_truth.router,
     tasks.router, publishing.router, saas.router, platform.router,
     template_versions.router, reclassifications.router, templates.router,
-    gt_search.router,
+    gt_search.router, platform_variants.router,
 ]:
     app.include_router(router)
 
