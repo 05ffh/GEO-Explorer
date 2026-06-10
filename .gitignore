@@ -23,6 +23,8 @@ pip-delete-this-directory.txt
 
 # === Secrets & API Keys ===
 .env
+.env.*
+!*.example
 *.pem
 *.key
 credentials.json
