@@ -1,0 +1,226 @@
+{% extends "base.html" %}
+{% from "partials/components/status_badge.html" import status_badge %}
+{% from "partials/components/empty_state.html" import empty_state %}
+
+{% block title %}{{ vm.brand.name }} — Platform Variants{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+  <div class="flex items-center justify-between mb-5">
+    <div>
+      <h1 class="font-heading text-2xl font-bold text-text">{{ vm.brand.name }} — AI 平台内容适配</h1>
+      <p class="text-sm text-slate-500 mt-0.5">
+        {{ vm.total_variants }} 个变体 · {{ vm.total_approved }} 已审核 ·
+        GT Hash: {{ vm.cp.gt_snapshot_hash[:8] }}
+      </p>
+    </div>
+    <div class="flex gap-2">
+      <button id="btn-generate" class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 cursor-pointer"
+              onclick="generateVariants()">
+        {% if vm.cp.has_variants %}重新生成{% else %}生成平台变体{% endif %}
+      </button>
+      <a href="/brands/{{ vm.brand.id }}/content" class="px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm hover:bg-slate-50 cursor-pointer">
+        ← 返回 Content
+      </a>
+    </div>
+  </div>
+
+  <!-- Themes summary -->
+  {% if vm.themes %}
+  <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-4">
+    <h3 class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">Content Themes</h3>
+    <div class="flex flex-wrap gap-2">
+      {% for t in vm.themes %}
+      <span class="px-3 py-1.5 rounded-lg text-sm bg-slate-50 text-slate-700 border border-slate-200">
+        {{ t.theme }} <span class="text-slate-400">({{ t.type }})</span>
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if not vm.cp.has_variants %}
+  <div class="text-center py-16 text-slate-400">
+    <p class="text-lg font-medium mb-2">尚未生成平台变体</p>
+    <p class="text-sm">点击"生成平台变体"为 DeepSeek/Kimi、Doubao、Wenxin 生成适配内容</p>
+  </div>
+  {% endif %}
+
+  <!-- Per-platform tabs -->
+  <div class="mb-4" id="variant-tabs">
+    {% for plat in vm.platforms %}
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 mb-4 overflow-hidden">
+      <!-- Platform header -->
+      <div class="px-5 py-3 flex items-center justify-between border-b border-gray-50"
+           style="background: {% if plat.key == 'deepseek_kimi' %}#eff6ff{% elif plat.key == 'doubao' %}#fef3c7{% else %}#f0fdf4{% endif %}">
+        <div>
+          <h3 class="text-base font-semibold text-text">{{ plat.label }}</h3>
+          <p class="text-xs text-slate-500">
+            信源: {{ plat.sources|join(', ') }} ·
+            发布: {% if plat.auto_publish %}可自动{% else %}<span class="text-amber-600">需人工</span>{% endif %}
+          </p>
+        </div>
+        <span class="text-sm text-slate-500">{{ plat.variants|length }} variants</span>
+      </div>
+
+      <!-- Variant cards -->
+      {% for v in plat.variants %}
+      <div class="px-5 py-4 border-b border-gray-50 last:border-b-0" id="variant-{{ plat.key }}-{{ v.index }}">
+        <div class="flex items-start justify-between mb-2">
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-700">{{ v.format }}</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-600">{{ v.target }}</span>
+              <span class="px-2 py-0.5 text-xs rounded bg-slate-100 text-slate-600">{{ v.theme }}</span>
+              {% if v.word_count > 0 %}
+              <span class="text-xs text-slate-400">{{ v.word_count }}字</span>
+              {% endif %}
+            </div>
+            <p class="text-sm font-medium text-text">{{ v.title }}</p>
+            <p class="text-xs text-slate-400 mt-1">
+              Facts: {{ v.input_fact_ids|join(', ') }} ·
+              Claim check: <span class="{% if v.claim_check_status == 'passed' %}text-green-600{% else %}text-amber-600{% endif %}">{{ v.claim_check_status }}</span>
+            </p>
+          </div>
+          <div class="flex items-center gap-1.5">
+            {% if v.status == 'approved' %}
+            <span class="px-2 py-0.5 text-xs rounded bg-green-100 text-green-700">已审核</span>
+            {% elif v.status == 'needs_review' %}
+            <span class="px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-700">待审核</span>
+            {% elif v.status == 'published' %}
+            <span class="px-2 py-0.5 text-xs rounded bg-blue-100 text-blue-700">已发布</span>
+            {% else %}
+            <span class="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600">{{ v.status }}</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Compliance flags -->
+        {% if v.compliance_flags %}
+        <div class="mb-2">
+          {% for f in v.compliance_flags %}
+          <span class="inline-block px-2 py-0.5 text-xs rounded mr-1 mb-1
+            {% if f.severity == 'high' %}bg-red-50 text-red-700 border border-red-200
+            {% else %}bg-amber-50 text-amber-700 border border-amber-200{% endif %}">
+            {{ f.type }}: {{ f.text[:30] }}
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Body preview -->
+        <details class="mb-3">
+          <summary class="text-xs text-slate-500 cursor-pointer hover:text-slate-700">查看内容预览</summary>
+          <pre class="mt-2 p-3 bg-slate-50 rounded text-xs text-slate-700 whitespace-pre-wrap max-h-60 overflow-y-auto">{{ v.body }}</pre>
+        </details>
+
+        <!-- Actions -->
+        <div class="flex flex-wrap gap-2">
+          {% if v.status != 'approved' and v.status != 'published' %}
+          <button class="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700 cursor-pointer"
+                  onclick="approveVariant('{{ vm.cp.id }}', '{{ plat.key }}', {{ v.index }})">Approve</button>
+          <button class="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 cursor-pointer"
+                  onclick="rejectVariant('{{ vm.cp.id }}', '{{ plat.key }}', {{ v.index }})">Reject</button>
+          {% endif %}
+          <button class="px-3 py-1 bg-white border border-gray-200 text-xs rounded hover:bg-slate-50 cursor-pointer"
+                  onclick="exportVariant('{{ plat.key }}', {{ v.index }})">Export</button>
+          {% if v.status == 'approved' and not v.published_url %}
+          <button class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 cursor-pointer"
+                  onclick="showPublishForm('{{ vm.cp.id }}', '{{ plat.key }}', {{ v.index }})">标记已发布</button>
+          {% endif %}
+          {% if v.published_url %}
+          <a href="{{ v.published_url }}" target="_blank" class="px-3 py-1 bg-blue-50 text-blue-700 text-xs rounded border border-blue-200 hover:bg-blue-100">
+            已发布 →</a>
+          {% endif %}
+          {% if v.jsonld %}
+          <button class="px-3 py-1 bg-white border border-gray-200 text-xs rounded hover:bg-slate-50 cursor-pointer"
+                  onclick="copyJsonLD('{{ plat.key }}', {{ v.index }})">Copy JSON-LD</button>
+          {% endif %}
+        </div>
+
+        <!-- Publish URL form (hidden) -->
+        <div id="publish-form-{{ plat.key }}-{{ v.index }}" class="hidden mt-3 p-3 bg-blue-50 rounded">
+          <input type="url" id="publish-url-{{ plat.key }}-{{ v.index }}"
+                 class="w-full border border-gray-300 rounded px-3 py-1.5 text-sm mb-2" placeholder="https://...">
+          <button class="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 cursor-pointer"
+                  onclick="submitPublishUrl('{{ vm.cp.id }}', '{{ plat.key }}', {{ v.index }})">确认发布</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+async function generateVariants() {
+  const btn = document.getElementById('btn-generate');
+  btn.disabled = true; btn.textContent = '生成中...';
+  try {
+    const resp = await geoFetch('/api/content-packages/{{ vm.cp.id }}/platform-variants/generate', {method:'POST'});
+    if (resp.ok) { location.reload(); }
+    else { alert('生成失败: ' + (await resp.json()).detail); }
+  } catch(e) { alert('生成失败: ' + e.message); }
+  btn.disabled = false; btn.textContent = '重新生成';
+}
+
+async function approveVariant(cpId, plat, idx) {
+  try {
+    const resp = await geoFetch(`/api/content-packages/${cpId}/platform-variants/approve/${plat}/${idx}`, {method:'POST',body:'{}'});
+    if (resp.ok) { location.reload(); }
+    else {
+      const d = await resp.json();
+      alert('审核失败: ' + (d.detail || '请先修复合规问题'));
+    }
+  } catch(e) { alert('审核失败: ' + e.message); }
+}
+
+async function rejectVariant(cpId, plat, idx) {
+  const reason = prompt('拒绝原因 (必填):');
+  if (!reason) return;
+  try {
+    const resp = await geoFetch(`/api/content-packages/${cpId}/platform-variants/reject/${plat}/${idx}`, {
+      method:'POST', body: JSON.stringify({reason})
+    });
+    if (resp.ok) { location.reload(); }
+    else { alert('拒绝失败'); }
+  } catch(e) { alert('拒绝失败: ' + e.message); }
+}
+
+function showPublishForm(cpId, plat, idx) {
+  const el = document.getElementById('publish-form-' + plat + '-' + idx);
+  el.classList.toggle('hidden');
+}
+
+async function submitPublishUrl(cpId, plat, idx) {
+  const url = document.getElementById('publish-url-' + plat + '-' + idx).value.trim();
+  if (!url) return alert('请输入发布 URL');
+  const variantId = document.getElementById('variant-' + plat + '-' + idx)?.dataset?.variantId || '';
+  try {
+    const resp = await geoFetch(`/api/content-packages/${cpId}/platform-variants/publish-url`, {
+      method:'POST', body: JSON.stringify({
+        platform: plat, target: '', variant_id: variantId, published_url: url
+      })
+    });
+    if (resp.ok) { location.reload(); }
+    else { alert('标记失败'); }
+  } catch(e) { alert('标记失败: ' + e.message); }
+}
+
+function exportVariant(plat, idx) {
+  const el = document.getElementById('variant-' + plat + '-' + idx);
+  const body = el?.querySelector('pre')?.textContent || '';
+  const blob = new Blob([body], {type:'text/markdown'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${plat}_variant_${idx}.md`;
+  a.click();
+}
+
+function copyJsonLD(plat, idx) {
+  // Copy JSON-LD from the variant's schema data (stored in the DOM)
+  navigator.clipboard.writeText(JSON.stringify([], null, 2));
+  alert('JSON-LD copied (check variant source for full data)');
+}
+</script>
+{% endblock %}

@@ -439,6 +439,23 @@ async def content_page(request: Request, brand_id: str,
     ))
 
 
+@app.get("/brands/{brand_id}/content/{cp_id}/platform-variants", response_class=HTMLResponse)
+async def platform_variants_page(request: Request, brand_id: str, cp_id: str,
+                                  user: User = Depends(get_current_user),
+                                  db: AsyncSession = Depends(get_db)):
+    """P0-9: Platform variants workbench for a ContentPackage."""
+    brand = await get_org_brand_or_404(brand_id, user, db)
+    from src.view_models.platform_variants import build_platform_variants_vm
+    vm = await build_platform_variants_vm(cp_id, brand, user, db)
+    if vm.get("error"):
+        return HTMLResponse(f"<h1>{vm['error']}</h1>", status_code=404)
+    org_brands = await _get_org_brands(user, db)
+    return _render(request, "content/platform_variants.html", _page_context(
+        request, "content", org_brands,
+        current_brand_id=str(brand.id), current_brand_name=brand.name,
+        vm=vm, user=user,
+    ))
+
 @app.get("/brands/{brand_id}/trends", response_class=HTMLResponse)
 async def trends_page(request: Request, brand_id: str,
                       range_str: str = Query("month", pattern="^(week|month|quarter)$"),
