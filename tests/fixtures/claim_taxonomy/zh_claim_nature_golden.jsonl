@@ -1,0 +1,100 @@
+{"claim_text": "星巴克成立于1971年", "expected_claim_nature": "fact", "expected_signals": ["成立于"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "品牌成立年份，可核验事实"}
+{"claim_text": "瑞幸咖啡总部位于厦门", "expected_claim_nature": "fact", "expected_signals": ["总部位于"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "总部地点，可核验事实"}
+{"claim_text": "招商银行总部设在深圳", "expected_claim_nature": "fact", "expected_signals": ["总部设在"], "industry": "banking", "expected_confidence_min": 0.55, "notes": "银行总部，客观事实"}
+{"claim_text": "特斯拉在中国拥有超过200家门店", "expected_claim_nature": "fact", "expected_signals": ["拥有", "门店"], "industry": "automotive", "expected_confidence_min": 0.55, "notes": "门店数量，可核验事实"}
+{"claim_text": "该公司注册资本10亿元人民币", "expected_claim_nature": "fact", "expected_signals": ["注册资本"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "注册资本，可核验"}
+{"claim_text": "华为2025年营收达到8621亿元", "expected_claim_nature": "fact", "expected_signals": ["营收", "达到"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "财务数据，包含数字"}
+{"claim_text": "该产品已获得国家药监局批准", "expected_claim_nature": "fact", "expected_signals": ["已获得"], "industry": "healthcare", "expected_confidence_min": 0.55, "notes": "监管批准，可核验"}
+{"claim_text": "星巴克在全球拥有超过38000家门店", "expected_claim_nature": "fact", "expected_signals": ["拥有", "门店"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "门店数量，包含数字"}
+{"claim_text": "截至2025年累计服务超过500万用户", "expected_claim_nature": "fact", "expected_signals": ["累计", "超过"], "industry": "saas", "expected_confidence_min": 0.55, "notes": "累计数据，结构化事实模式"}
+{"claim_text": "该品牌成立于1999年，总部位于杭州", "expected_claim_nature": "fact", "expected_signals": ["成立于", "总部位于"], "industry": "retail", "expected_confidence_min": 0.65, "notes": "成立时间和地点，两个强事实信号"}
+{"claim_text": "喜茶在全国50多个城市开设了超过800家门店", "expected_claim_nature": "fact", "expected_signals": ["开设", "门店", "超过"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "门店分布，客观数据"}
+{"claim_text": "该公司员工人数超过10万人", "expected_claim_nature": "fact", "expected_signals": ["员工", "超过"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "员工规模，可核验"}
+{"claim_text": "该企业2024年市场份额达到15%", "expected_claim_nature": "fact", "expected_signals": ["市场份额", "达到"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "市场份额数据"}
+{"claim_text": "微信支付覆盖超过200个国家和地区", "expected_claim_nature": "fact", "expected_signals": ["覆盖", "超过"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "覆盖范围，包含数字"}
+{"claim_text": "该公司法定代表人张某某", "expected_claim_nature": "fact", "expected_signals": ["法定代表人"], "industry": "fintech", "expected_confidence_min": 0.65, "notes": "法人信息，法律实体"}
+{"claim_text": "公司全称为北京字节跳动科技有限公司", "expected_claim_nature": "fact", "expected_signals": ["全称"], "industry": "technology", "expected_confidence_min": 0.65, "notes": "公司全称，法律实体"}
+{"claim_text": "该产品包括手机、平板和智能手表", "expected_claim_nature": "fact", "expected_signals": ["包括"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "产品列表"}
+{"claim_text": "星巴克与雀巢达成全球合作协议", "expected_claim_nature": "fact", "expected_signals": ["合作"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "合作事实"}
+{"claim_text": "该店提供堂食和外卖服务", "expected_claim_nature": "fact", "expected_signals": ["提供"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "服务类型"}
+{"claim_text": "2025年该品牌推出了全新会员体系", "expected_claim_nature": "fact", "expected_signals": ["推出"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "已推出的产品"}
+{"claim_text": "公司旗下拥有星巴克、瑞幸等多个品牌", "expected_claim_nature": "fact", "expected_signals": ["旗下", "拥有"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "品牌归属"}
+{"claim_text": "该企业年营收同比增长25%", "expected_claim_nature": "fact", "expected_signals": ["年营收", "同比增长"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "增长数据"}
+{"claim_text": "公司估值达到100亿美元", "expected_claim_nature": "fact", "expected_signals": ["估值", "达到"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "估值数据"}
+{"claim_text": "该平台已签约超过1000家商户", "expected_claim_nature": "fact", "expected_signals": ["签约", "超过"], "industry": "saas", "expected_confidence_min": 0.55, "notes": "签约数量"}
+{"claim_text": "企业在深圳、上海、北京设有研发中心", "expected_claim_nature": "fact", "expected_signals": ["设有"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "地点分布"}
+{"claim_text": "该产品已入驻全国主要商超渠道", "expected_claim_nature": "fact", "expected_signals": ["入驻"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "渠道分布"}
+{"claim_text": "品牌注册地为开曼群岛", "expected_claim_nature": "fact", "expected_signals": ["注册地"], "industry": "fintech", "expected_confidence_min": 0.65, "notes": "注册地点"}
+{"claim_text": "该药品已获得FDA认证", "expected_claim_nature": "fact", "expected_signals": ["已获得"], "industry": "healthcare", "expected_confidence_min": 0.55, "notes": "认证事实"}
+{"claim_text": "公司于2020年在港交所上市", "expected_claim_nature": "fact", "expected_signals": ["上市"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "上市事实"}
+{"claim_text": "该企业在全国建立了超过500个服务网点", "expected_claim_nature": "fact", "expected_signals": ["建立", "超过"], "industry": "saas", "expected_confidence_min": 0.55, "notes": "网点数量"}
+{"claim_text": "产品共覆盖30个省份", "expected_claim_nature": "fact", "expected_signals": ["覆盖"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "覆盖范围"}
+{"claim_text": "该品牌获得了ISO9001质量管理体系认证", "expected_claim_nature": "fact", "expected_signals": ["获得"], "industry": "automotive", "expected_confidence_min": 0.55, "notes": "认证事实"}
+{"claim_text": "公司完成了D轮融资，金额达5亿美元", "expected_claim_nature": "fact", "expected_signals": ["融资", "达到"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "融资数据"}
+{"claim_text": "该产品主要原料包括咖啡豆和牛奶", "expected_claim_nature": "fact", "expected_signals": ["包括"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "产品成分"}
+{"claim_text": "星巴克是世界上最好的咖啡品牌", "expected_claim_nature": "opinion", "expected_signals": ["最好"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "主观评价"}
+{"claim_text": "瑞幸是性价比最高的咖啡连锁", "expected_claim_nature": "opinion", "expected_signals": ["最高"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "含\"最\"的主观判断。注：\"最高\"不在信号词列表中但可能通过其他方式匹配"}
+{"claim_text": "招商银行是国内领先的零售银行", "expected_claim_nature": "opinion", "expected_signals": ["领先"], "industry": "banking", "expected_confidence_min": 0.55, "notes": "行业地位评价"}
+{"claim_text": "该品牌深受年轻消费者的喜爱", "expected_claim_nature": "opinion", "expected_signals": ["深受好评", "受欢迎"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "主观受欢迎程度。注：\"深受好评\"可能不直接匹配但\"受欢迎\"会匹配"}
+{"claim_text": "这是一家值得信赖的金融服务平台", "expected_claim_nature": "opinion", "expected_signals": ["值得信赖"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "主观信任评价"}
+{"claim_text": "特斯拉在电动汽车领域遥遥领先", "expected_claim_nature": "opinion", "expected_signals": ["遥遥领先"], "industry": "automotive", "expected_confidence_min": 0.55, "notes": "强主观评价"}
+{"claim_text": "星巴克提供优质的第三空间体验", "expected_claim_nature": "opinion", "expected_signals": ["优质", "体验好"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "体验评价。注：\"体验好\"可能不匹配但\"优质\"会匹配"}
+{"claim_text": "该产品在行业内口碑极好", "expected_claim_nature": "opinion", "expected_signals": ["口碑"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "口碑评价"}
+{"claim_text": "华为是全球最具创新力的企业之一", "expected_claim_nature": "opinion", "expected_signals": ["最具", "创新"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "创新力评价"}
+{"claim_text": "该品牌代表着高端生活方式", "expected_claim_nature": "opinion", "expected_signals": ["高端"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "品牌定位评价"}
+{"claim_text": "学校拥有顶尖的师资力量", "expected_claim_nature": "opinion", "expected_signals": ["顶尖"], "industry": "education", "expected_confidence_min": 0.55, "notes": "师资评价。注：\"顶尖\"不在列表中但\"顶级\"类似"}
+{"claim_text": "该服务受到用户一致好评", "expected_claim_nature": "opinion", "expected_signals": ["好评如潮", "推荐"], "industry": "saas", "expected_confidence_min": 0.55, "notes": "用户评价。注：可能通过\"好评\"匹配"}
+{"claim_text": "这款应用是行业标杆产品", "expected_claim_nature": "opinion", "expected_signals": ["标杆"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "标杆评价"}
+{"claim_text": "该品牌拥有极高的用户忠诚度", "expected_claim_nature": "opinion", "expected_signals": ["极具"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "用户忠诚度评价"}
+{"claim_text": "这家餐厅的食物非常出色", "expected_claim_nature": "opinion", "expected_signals": ["出色"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "质量评价"}
+{"claim_text": "该品牌是年轻人的首选咖啡品牌", "expected_claim_nature": "opinion", "expected_signals": ["首选", "首选品牌"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "偏好评价"}
+{"claim_text": "这是一款专业级的影像处理软件", "expected_claim_nature": "opinion", "expected_signals": ["专业"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "专业性评价"}
+{"claim_text": "该企业在业内备受瞩目", "expected_claim_nature": "opinion", "expected_signals": ["备受瞩目"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "关注度评价"}
+{"claim_text": "该公司拥有强大的技术团队", "expected_claim_nature": "opinion", "expected_signals": ["强大"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "技术团队评价"}
+{"claim_text": "星巴克可能在未来进入更多低线城市", "expected_claim_nature": "speculation", "expected_signals": ["可能", "未来"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "市场扩张推测"}
+{"claim_text": "该银行预计明年营收增长50%", "expected_claim_nature": "speculation", "expected_signals": ["预计"], "industry": "banking", "expected_confidence_min": 0.55, "notes": "财务预测。包含\"预计\"强推测词和数字"}
+{"claim_text": "该品牌有望成为行业领导者", "expected_claim_nature": "speculation", "expected_signals": ["有望"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "行业地位推测"}
+{"claim_text": "公司计划明年推出新的产品线", "expected_claim_nature": "speculation", "expected_signals": ["计划", "将推出"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "产品计划。注：\"将推出\"可能被\"计划\"和\"推出\"分别匹配"}
+{"claim_text": "据传该企业正在筹备上市", "expected_claim_nature": "speculation", "expected_signals": ["据传", "筹备"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "上市传闻"}
+{"claim_text": "该品牌或将进军海外市场", "expected_claim_nature": "speculation", "expected_signals": ["或将", "进军"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "海外扩张推测"}
+{"claim_text": "据报道该公司正在开发新一代AI芯片", "expected_claim_nature": "speculation", "expected_signals": ["据报道", "开发中"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "研发传闻。注：\"开发中\"可能匹配"}
+{"claim_text": "该产品大概率会在下季度发布", "expected_claim_nature": "speculation", "expected_signals": ["大概率"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "发布时间推测"}
+{"claim_text": "有消息称该公司考虑分拆业务", "expected_claim_nature": "speculation", "expected_signals": ["有消息称"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "业务分拆传闻"}
+{"claim_text": "该技术有望彻底改变行业格局", "expected_claim_nature": "speculation", "expected_signals": ["有望"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "技术影响推测"}
+{"claim_text": "未来几年该品牌可能会持续增长", "expected_claim_nature": "speculation", "expected_signals": ["未来", "可能"], "industry": "retail", "expected_confidence_min": 0.65, "notes": "增长推测，两个推测信号"}
+{"claim_text": "该企业正在探索区块链技术的应用", "expected_claim_nature": "speculation", "expected_signals": ["探索"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "技术探索"}
+{"claim_text": "有传言称这家公司将更换CEO", "expected_claim_nature": "speculation", "expected_signals": ["有传言称"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "人事传言"}
+{"claim_text": "该行业远期可能出现爆发式增长", "expected_claim_nature": "speculation", "expected_signals": ["远期"], "industry": "saas", "expected_confidence_min": 0.55, "notes": "行业趋势推测"}
+{"claim_text": "品牌正在考虑进入新能源汽车领域", "expected_claim_nature": "speculation", "expected_signals": ["正在考虑", "进军"], "industry": "automotive", "expected_confidence_min": 0.55, "notes": "跨界推测。注：\"进军\"可能匹配"}
+{"claim_text": "分析师预计该公司下季度盈利将大幅提升", "expected_claim_nature": "speculation", "expected_signals": ["预计"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "分析师预测"}
+{"claim_text": "该平台即将上线全新的智能推荐功能", "expected_claim_nature": "speculation", "expected_signals": ["即将", "将上线"], "industry": "saas", "expected_confidence_min": 0.55, "notes": "功能上线推测"}
+{"claim_text": "公司制定了未来五年的扩张计划", "expected_claim_nature": "speculation", "expected_signals": ["计划", "未来"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "长期计划。包含\"计划\"和\"未来\""}
+{"claim_text": "该品牌有望在下沉市场获得更大份额", "expected_claim_nature": "speculation", "expected_signals": ["有望"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "市场份额推测"}
+{"claim_text": "据说这家初创公司的估值将超过10亿美元", "expected_claim_nature": "speculation", "expected_signals": ["据说"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "估值传说"}
+{"claim_text": "企业正致力于打造全链路数字化解决方案", "expected_claim_nature": "speculation", "expected_signals": ["致力于"], "industry": "saas", "expected_confidence_min": 0.55, "notes": "发展方向推测"}
+{"claim_text": "有分析师指出该行业趋势向好，但尚不确定持续性", "expected_claim_nature": "speculation", "expected_signals": ["趋势", "尚不确定"], "industry": "fintech", "expected_confidence_min": 0.55, "notes": "趋势中带有不确定性"}
+{"claim_text": "预计到2028年该市场规模将达万亿级别", "expected_claim_nature": "speculation", "expected_signals": ["预计"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "市场规模预测，包含远期时间"}
+{"claim_text": "该银行有望进一步提升年轻客户渗透率，但具体成效尚不确定", "expected_claim_nature": "speculation", "expected_signals": ["有望", "尚不确定"], "industry": "banking", "expected_confidence_min": 0.65, "notes": "金融推测+不确定性。两个推测信号"}
+{"claim_text": "好的", "expected_claim_nature": "unknown", "expected_signals": null, "industry": "restaurant_chain", "expected_confidence_min": null, "notes": "短文本，无法分类"}
+{"claim_text": "星巴克", "expected_claim_nature": "unknown", "expected_signals": null, "industry": "restaurant_chain", "expected_confidence_min": null, "notes": "仅品牌名，无法分类"}
+{"claim_text": "这是一个品牌", "expected_claim_nature": "unknown", "expected_signals": null, "industry": "retail", "expected_confidence_min": 0.0, "notes": "无任何信号词"}
+{"claim_text": "咖啡市场的发展与消费者习惯密切相关", "expected_claim_nature": "unknown", "expected_signals": null, "industry": "restaurant_chain", "expected_confidence_min": 0.0, "notes": "中性陈述，无明确信号。注：\"趋势\"可能在列表中"}
+{"claim_text": "根据行业报告数据显示", "expected_claim_nature": "unknown", "expected_signals": null, "industry": "fintech", "expected_confidence_min": 0.0, "notes": "无明确信号词的不完整句子"}
+{"claim_text": "该品牌各方面表现良好", "expected_claim_nature": "unknown", "expected_signals": null, "industry": "retail", "expected_confidence_min": 0.0, "notes": "过于模糊的评价，无明确信号"}
+{"claim_text": "从多个维度来看产品具有竞争力", "expected_claim_nature": "unknown", "expected_signals": null, "industry": "technology", "expected_confidence_min": 0.0, "notes": "缺乏具体信息"}
+{"claim_text": "该品牌成立于1971年且可能是最好的咖啡品牌", "expected_claim_nature": "unknown", "expected_signals": ["成立于", "可能", "最好"], "industry": "restaurant_chain", "expected_confidence_min": 0.0, "notes": "事实+推测+观点三者信号冲突严重"}
+{"claim_text": "该平台既可能是独角兽也可能只是昙花一现", "expected_claim_nature": "unknown", "expected_signals": ["可能"], "industry": "fintech", "expected_confidence_min": 0.0, "notes": "强烈不确定性+自相矛盾的推测"}
+{"claim_text": "该银行预计保本收益达到年化8%", "expected_claim_nature": "speculation", "expected_signals": ["预计", "保本", "年化收益", "达到"], "industry": "banking", "expected_confidence_min": 0.55, "notes": "金融高风险推测：\"预计\"+\"保本\"+\"年化收益\""}
+{"claim_text": "这款保健品的治愈率达到90%且无副作用", "expected_claim_nature": "fact", "expected_signals": ["达到"], "industry": "healthcare", "expected_confidence_min": 0.55, "notes": "医疗事实声明（即使可能虚假，识别为fact供GT核验）。注：\"治愈率\"不在列表中但数字+百分比会触发numeric"}
+{"claim_text": "我们承诺保证提分50分以上不过退款", "expected_claim_nature": "speculation", "expected_signals": [], "industry": "education_training", "expected_confidence_min": 0.0, "notes": "教育行业高风险承诺。注：\"保证提分\"不在信号词中，但\"不过退款\"类表述暗示未来承诺"}
+{"claim_text": "该理财产品零风险稳赚不赔", "expected_claim_nature": "opinion", "expected_signals": [], "industry": "financial_services", "expected_confidence_min": 0.0, "notes": "金融绝对化承诺。注：\"零风险\"、\"稳赚不赔\"是行业高风险词但不在通用观点信号中"}
+{"claim_text": "星巴克并不是最便宜的咖啡品牌", "expected_claim_nature": "opinion", "expected_signals": ["不是"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "否定+观点。否定词不应导致误判为推测"}
+{"claim_text": "该产品尚未获得监管部门的正式批准", "expected_claim_nature": "fact", "expected_signals": ["尚未", "获得"], "industry": "healthcare", "expected_confidence_min": 0.55, "notes": "否定+事实：\"尚未获得批准\"仍可核验"}
+{"claim_text": "该品牌并不一定能在海外市场取得成功", "expected_claim_nature": "speculation", "expected_signals": ["并不", "不一定"], "industry": "retail", "expected_confidence_min": 0.55, "notes": "否定语境中的不确定性推测"}
+{"claim_text": "星巴克在2025年获得了较高的市场份额增长", "expected_claim_nature": "fact", "expected_signals": ["获得", "市场份额", "增长"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "混合信号：\"较高的\"是观点弱信号，但整体是事实陈述。注：\"增长\"不在列表中"}
+{"claim_text": "星巴克未来或将推出更多植物基产品", "expected_claim_nature": "speculation", "expected_signals": ["未来", "或将", "将推出", "推出"], "industry": "restaurant_chain", "expected_confidence_min": 0.65, "notes": "多个推测信号：未来+或将+将推出"}
+{"claim_text": "该银行稳健经营数十年来从未出现过风险事件", "expected_claim_nature": "fact", "expected_signals": ["从未"], "industry": "banking", "expected_confidence_min": 0.55, "notes": "历史事实声明（否定词\"从未\"不改变fact性质）"}
+{"claim_text": "这个城市约有30家星巴克门店", "expected_claim_nature": "fact", "expected_signals": ["门店", "约"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "门店数量，含数字"}
+{"claim_text": "全国范围内的门店数量已经突破2000家", "expected_claim_nature": "fact", "expected_signals": ["门店", "突破"], "industry": "restaurant_chain", "expected_confidence_min": 0.55, "notes": "门店数据。注：\"突破\"不在列表中但2000会触发numeric"}
+{"claim_text": "该品牌是行业内公认的领军企业", "expected_claim_nature": "opinion", "expected_signals": ["公认", "领军"], "industry": "technology", "expected_confidence_min": 0.55, "notes": "公认+领军，两个观点信号"}
+{"claim_text": "消费者对该品牌的产品赞不绝口", "expected_claim_nature": "opinion", "expected_signals": [], "industry": "retail", "expected_confidence_min": 0.0, "notes": "正面评价但无具体信号词。注：\"赞不绝口\"不在列表中"}

@@ -1,0 +1,353 @@
+# 品牌中英文对照 + 官网域名关键词 + 品牌梯队（官网判定 + 档位评定用）
+# 2026-09-01 重设计：去顶奢（并入豪华）、加中高端；tier + adr_range 双字段。
+# tier：品牌行政档位（跨城市稳定）：豪华/高端/中高端/中端/经济。
+# tier_source（2026-09-10 加，provenance）：档位来源——brand=官网自述/品牌官方定位（国际五星等）
+#   / ota=OTA 分类+业界共识 / manual=主 agent 认定（缺省）。改 tier 时同步更新，防无依据篡改。
+# adr_range：[下限, 上限] 中国市场典型 ADR 带（门店 ADR 校准用：低于下限或高于上限 → 取市场价落点）。
+# zh 注意：子品牌用全名（如"希尔顿欢朋"）优先于父品牌（"希尔顿"），避免匹配歧义。
+# domain_keywords：官网域名里最可能出现的子串（英文名小写 + 连字符/拼音变体）。
+category: brand_domains
+description: 品牌中英文对照 + 官网域名关键词 + 品牌行政档位 + 中国市场 ADR 参考带。用于官网判定（T0）和档位评定（品牌梯队 + ADR 校准）。
+items:
+  # 豪华档（顶级品牌，无条件豪华——unconditional=true 跳过 ADR 校准，spec 3.1"无条件豪华"）
+  - id: bulgari
+    zh: 宝格丽
+    en: Bulgari
+    tier: 豪华
+    unconditional: true
+    adr_range: [1500, 5000]
+    domain_keywords: [bulgari, bvlgari]
+  - id: aman
+    zh: 安缦
+    en: Aman
+    tier: 豪华
+    unconditional: true
+    adr_range: [1500, 5000]
+    domain_keywords: [aman]
+  - id: mandarin_oriental
+    zh: 文华东方
+    en: Mandarin Oriental
+    tier: 豪华
+    unconditional: true
+    adr_range: [1500, 5000]
+    domain_keywords: [mandarinoriental, mandarin-oriental]
+  - id: peninsula
+    zh: 半岛
+    en: Peninsula
+    tier: 豪华
+    unconditional: true
+    adr_range: [1500, 5000]
+    domain_keywords: [peninsula]
+  - id: ritz_carlton
+    zh: 丽思卡尔顿
+    en: Ritz-Carlton
+    tier: 豪华
+    unconditional: true
+    adr_range: [1500, 5000]
+    domain_keywords: [ritzcarlton, ritz-carlton]
+  - id: four_seasons
+    zh: 四季
+    en: Four Seasons
+    tier: 豪华
+    unconditional: true
+    adr_range: [1500, 5000]
+    domain_keywords: [fourseasons, four-seasons]
+  - id: park_hyatt
+    zh: 柏悦
+    en: Park Hyatt
+    tier: 豪华
+    unconditional: true
+    adr_range: [1500, 5000]
+    domain_keywords: [parkhyatt, hyatt]
+  # 豪华档（国际奢华品牌，ADR 校准可降档）
+  # 2026-09-02 修正：JW万豪/洲际/凯宾斯基 tier 由"豪华"改"高端"——四 AI md 显示中国市场
+  # 消费者把她们与香格里拉/希尔顿/万豪同档比较（同题共现：世茂洲际11/凯宾斯基6），
+  # 品牌映射表应反映市场实际档位（AI 认知），非全球行政定位。adr_range 上界保留升档空间
+  # （一线城市 ADR >2000 时市场落点仍可升豪华）。
+  - id: jw_marriott
+    zh: JW万豪
+    en: JW Marriott
+    tier: 高端
+    adr_range: [800, 2000]
+    domain_keywords: [jwmarriott, marriott]
+  - id: intercontinental
+    zh: 洲际
+    en: InterContinental
+    tier: 高端
+    tier_source: brand
+    adr_range: [800, 2000]
+    domain_keywords: [intercontinental, ihg]
+  - id: kempinski
+    zh: 凯宾斯基
+    en: Kempinski
+    tier: 高端
+    tier_source: brand
+    adr_range: [800, 2000]
+    domain_keywords: [kempinski]
+  # 高端档（国际 upper upscale）
+  - id: hilton
+    zh: 希尔顿
+    en: Hilton
+    tier: 高端
+    adr_range: [500, 1500]
+    domain_keywords: [hilton]
+  - id: marriott
+    zh: 万豪
+    en: Marriott
+    tier: 高端
+    adr_range: [500, 1500]
+    domain_keywords: [marriott]
+  - id: shangri_la
+    zh: 香格里拉
+    en: Shangri-La
+    tier: 高端
+    tier_source: brand
+    adr_range: [500, 1500]
+    domain_keywords: [shangri-la, shangrila]
+  - id: sheraton
+    zh: 喜来登
+    en: Sheraton
+    tier: 高端
+    tier_source: brand
+    adr_range: [500, 1500]
+    domain_keywords: [sheraton]
+  - id: hyatt
+    zh: 凯悦
+    en: Hyatt
+    tier: 高端
+    adr_range: [500, 1500]
+    domain_keywords: [hyatt]
+  - id: westin
+    zh: 威斯汀
+    en: Westin
+    tier: 高端
+    adr_range: [500, 1500]
+    domain_keywords: [westin]
+  - id: pullman
+    zh: 铂尔曼
+    en: Pullman
+    tier: 高端
+    adr_range: [500, 1500]
+    domain_keywords: [pullman]
+  - id: crowne_plaza
+    zh: 皇冠假日
+    en: Crowne Plaza
+    tier: 高端
+    adr_range: [500, 1500]
+    domain_keywords: [crowneplaza, crowne-plaza]
+  # 本地高端（2026-09-02 加入）：四 AI 常提的福州高端竞对（与香格里拉同题共现高频），
+  # 反映市场实际档位。region=福州 标注地区归属——derive_tier/get_brand 传 city 时自动过滤，
+  # 换地区（广州）不误用福州本地品牌；广州本地高端由主 agent 补表（region=广州）。
+  - id: yuehua
+    zh: 悦华
+    en: C&D Hotel
+    tier: 高端
+    tier_source: manual
+    adr_range: [500, 1500]
+    region: 福州
+    domain_keywords: [yuehua, cand]
+  - id: west_lake_hotel
+    zh: 西湖大酒店
+    en: West Lake Hotel
+    tier: 高端
+    tier_source: manual
+    adr_range: [500, 1500]
+    region: 福州
+    domain_keywords: [xihudajiudian]
+  - id: empark
+    zh: 世纪金源
+    en: Empark
+    tier: 高端
+    adr_range: [400, 1200]
+    region: 福州
+    domain_keywords: [empark]
+  - id: me_hotel
+    zh: 闽都ME
+    en: ME Hotel
+    tier: 高端
+    adr_range: [600, 1500]
+    region: 福州
+    domain_keywords: [me-hotel]
+  - id: zhonggeng
+    zh: 中庚聚龙
+    en: Zhonggeng
+    tier: 高端
+    adr_range: [500, 1500]
+    region: 福州
+    domain_keywords: [zhonggeng]
+  - id: meiyuan
+    zh: 梅园国际
+    en: Meiyuan
+    tier: 高端
+    adr_range: [500, 1500]
+    region: 福州
+    domain_keywords: [meiyuan]
+  # 福州本地补充（2026-09-05 豆包查证）：西湖宾馆=4星高档型国宾馆（估500-1000）→高端；
+  # 中海凯骊=五星/高档（¥504起）→高端；颐豪（南站店）=¥459起（400-700中高端区间）→中高端。
+  - id: xihu_binguan
+    zh: 西湖宾馆
+    en: Xihu Binguan
+    tier: 高端
+    adr_range: [500, 1500]
+    region: 福州
+    domain_keywords: [xihubinguan]
+  - id: zhonghai_kaidili
+    zh: 中海凯骊
+    en: Zhonghai Kaidili
+    tier: 高端
+    adr_range: [500, 1500]
+    region: 福州
+    domain_keywords: [zhonghaikaidili]
+  - id: yihao
+    zh: 颐豪
+    en: Yihao
+    tier: 中高端
+    adr_range: [400, 700]
+    region: 福州
+    domain_keywords: [yihao]
+  # 2026-09-05 修复子串误匹配：本地"四季悦城"（五星 ADR¥500 起 → 高端）此前被误配到
+  # 国际"四季"(Four Seasons=豪华)。本条目 zh 更长，最长子串优先命中，隔离本地品牌与顶级国际品牌。
+  - id: siji_yuecheng
+    zh: 四季悦城
+    en: Siji Yuecheng
+    tier: 高端
+    adr_range: [500, 1500]
+    region: 福州
+    domain_keywords: [sijiyuecheng]
+  # 中高端档（国际 upper midscale 高配 / 精选）
+  - id: mercure
+    zh: 美居
+    en: Mercure
+    tier: 中高端
+    adr_range: [400, 800]
+    domain_keywords: [mercure]
+  - id: voco
+    zh: voco
+    en: voco
+    tier: 中高端
+    adr_range: [400, 800]
+    domain_keywords: [voco]
+  - id: doubletree
+    zh: 希尔顿逸林
+    en: DoubleTree
+    tier: 中高端
+    adr_range: [400, 800]
+    domain_keywords: [doubletree, double-tree]
+  - id: courtyard
+    zh: 万怡
+    en: Courtyard
+    tier: 中高端
+    adr_range: [400, 800]
+    domain_keywords: [courtyard]
+  # 中端档
+  - id: ji_hotel
+    zh: 全季
+    en: JI Hotel
+    tier: 中端
+    tier_source: brand
+    adr_range: [250, 500]
+    domain_keywords: [jihotel, ji-hotel, huazhu]
+  - id: atour
+    zh: 亚朵
+    en: Atour
+    tier: 中端
+    adr_range: [250, 500]
+    domain_keywords: [atour]
+  - id: holiday_inn_express
+    zh: 智选假日
+    en: Holiday Inn Express
+    tier: 中端
+    adr_range: [250, 500]
+    domain_keywords: [holidayinn, holiday-inn, ihg]
+  - id: vienna
+    zh: 维也纳
+    en: Vienna
+    tier: 中端
+    adr_range: [250, 500]
+    domain_keywords: [vienna]
+  - id: four_points
+    zh: 福朋喜来登
+    en: Four Points
+    tier: 中端
+    adr_range: [250, 500]
+    domain_keywords: [fourpoints, four-points]
+  - id: hampton
+    zh: 希尔顿欢朋
+    en: Hampton
+    tier: 中端
+    adr_range: [250, 500]
+    domain_keywords: [hampton]
+  - id: home2
+    zh: 希尔顿惠庭
+    en: Home2
+    tier: 中端
+    adr_range: [250, 500]
+    domain_keywords: [home2, home2suites]
+  - id: ramada
+    zh: 华美达
+    en: Ramada
+    tier: 中端
+    adr_range: [250, 500]
+    domain_keywords: [ramada]
+  - id: garden_inn
+    zh: 希尔顿花园
+    en: Garden Inn
+    tier: 中端
+    adr_range: [250, 500]
+    domain_keywords: [gardeninn, garden-inn, hilton]
+  - id: hyatt_place
+    zh: 凯悦嘉轩
+    en: Hyatt Place
+    tier: 中端
+    adr_range: [250, 500]
+    domain_keywords: [hyattplace, hyatt-place, hyatt]
+  - id: fairfield
+    zh: 万枫
+    en: Fairfield
+    tier: 中端
+    adr_range: [250, 500]
+    domain_keywords: [fairfield]
+  - id: moxy
+    zh: Moxy
+    en: Moxy
+    tier: 中端
+    adr_range: [250, 500]
+    domain_keywords: [moxy]
+  - id: aloft
+    zh: 雅乐轩
+    en: Aloft
+    tier: 中端
+    adr_range: [250, 500]
+    domain_keywords: [aloft]
+  # 经济档
+  - id: home_inn
+    zh: 如家
+    en: Home Inn
+    tier: 经济
+    adr_range: [100, 250]
+    domain_keywords: [homeinn, homeinns]
+  - id: hanting
+    zh: 汉庭
+    en: Hanting
+    tier: 经济
+    tier_source: brand
+    adr_range: [100, 250]
+    domain_keywords: [hanting, huazhu]
+  - id: seven_days_inn
+    zh: 7天
+    en: 7 Days Inn
+    tier: 经济
+    adr_range: [100, 250]
+    domain_keywords: [7daysinn, 7-days-inn]
+  - id: ibis
+    zh: 宜必思
+    en: ibis
+    tier: 经济
+    adr_range: [100, 250]
+    domain_keywords: [ibis]
+  - id: super8
+    zh: 速8
+    en: Super 8
+    tier: 经济
+    adr_range: [100, 250]
+    domain_keywords: [super8, super-8]

@@ -1,0 +1,35 @@
+category: platform_source_profile
+description: 四平台信源调性（P0③ 实测 + WebSearch 查证，2026-08-28）。酒旅场景：OTA（携程等）是所有平台共同第一信源。2026-09-24 去重叠后为「信源调性知识」唯一源（主信源/内容形式/铺放目标），由 industry_knowledge loader 加载，信源调研 / P4 落地消费；adapter 能力开关在 src/actions/platform_policy.py。
+items:
+  - id: deepseek
+    zh: DeepSeek
+    source_profile:
+      primary_sources: [携程, Trip.com, Agoda, Booking, 官网, 知乎, 飞客]
+      source_type: OTA为主 + 官网 + UGC + 投诉平台
+      content_form: [OTA结构化评分, 官网结构化, 知乎问答]
+      publish_targets: [携程, 官网, 知乎]
+      verified_at: "2026-08-28"
+  - id: kimi
+    zh: Kimi
+    source_profile:
+      primary_sources: [永安旅游, Booking, KAYAK, 官网, 知乎, 公众号]
+      source_type: OTA为主 + 官网 + 深度长文
+      content_form: [OTA结构化评分, 官网结构化, 长文]
+      publish_targets: [携程, 官网, 知乎]
+      verified_at: "2026-08-28"
+  - id: wenxin
+    zh: 文心一言
+    source_profile:
+      primary_sources: [百度百科, 百家号, 官网]
+      source_type: 百度系 + 官网，OTA弱
+      content_form: [百科词条, 百家号文章, 官网结构化]
+      publish_targets: [百度百科, 百家号, 官网]
+      verified_at: "2026-08-28"
+  - id: doubao
+    zh: 豆包
+    source_profile:
+      primary_sources: [今日头条, 抖音, 快懂百科, 携程, 官网]
+      source_type: 字节生态 + OTA + 官网
+      content_form: [头条文章, 抖音视频, 快懂百科卡片]
+      publish_targets: [头条, 快懂百科, 携程]
+      verified_at: "2026-08-28"

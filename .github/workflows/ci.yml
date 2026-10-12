@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: geo_test
+          POSTGRES_PASSWORD: geo_test
+          POSTGRES_DB: geo_explorer_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+
+      - name: Check exception policy
+        run: python tools/check_exception_policy.py
+
+      - name: Run tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://geo_test:geo_test@localhost:5433/geo_explorer_test
+        run: |
+          python -m pytest tests/ -q --ignore=tests/e2e
+
+  migration-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: geo_test
+          POSTGRES_PASSWORD: geo_test
+          POSTGRES_DB: geo_explorer_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Alembic migration
+        env:
+          DATABASE_URL: postgresql+asyncpg://geo_test:geo_test@localhost:5433/geo_explorer_test
+        run: alembic upgrade head
+
+  seed-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: geo_test
+          POSTGRES_PASSWORD: geo_test
+          POSTGRES_DB: geo_explorer_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Alembic + Seed (idempotency check)
+        env:
+          DATABASE_URL: postgresql+asyncpg://geo_test:geo_test@localhost:5433/geo_explorer_test
+        run: |
+          alembic upgrade head
+          PYTHONPATH=. python scripts/seed.py
+          PYTHONPATH=. python scripts/seed.py
+          echo "Seed idempotency: PASS"

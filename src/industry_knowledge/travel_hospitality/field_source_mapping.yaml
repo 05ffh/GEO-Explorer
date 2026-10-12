@@ -1,0 +1,50 @@
+# 事实采集·字段×信源×搜索词（spec 6.3）
+# {品牌}{城市} 运行时填充，加"酒店"限定避免品牌名歧义（如"香格里拉"是地名也是品牌）。
+# sources 用信源 tier（T0-T4，见 src/schemas/credibility.py）：T0=官网/文旅局/星级评定，T1=OTA，T2=点评，T3=小红书/百科。
+category: field_source_mapping
+description: 事实采集·字段×信源×搜索词匹配。每个字段多角度搜索词 + 信源 tier + 交叉验证。
+items:
+  - id: official_name
+    zh: 官方全称
+    queries: ["{品牌}酒店 {城市} 全称", "{品牌}酒店 {城市} 酒店名称"]
+    sources: [T0, T1]
+  - id: star_rating
+    zh: 星级
+    queries: ["{品牌}酒店 {城市} 几星", "{品牌}酒店 {城市} 五星级", "{品牌}酒店 {城市} 官网 五星"]
+    sources: [T0, T1]
+  - id: adr
+    zh: 房价/ADR
+    queries: ["{品牌}酒店 {城市} 房价", "{品牌}酒店 {城市} 多少钱一晚"]
+    sources: [T1, T2]
+  - id: location
+    zh: 位置
+    queries: ["{品牌}酒店 {城市} 地址", "{品牌}酒店 {城市} 在哪个区"]
+    sources: [T0, T1]
+  - id: facility
+    zh: 设施
+    queries: ["{品牌}酒店 {城市} 设施", "{品牌}酒店 {城市} 会议室 泳池 儿童乐园"]
+    sources: [T0, T1]
+  - id: room_type
+    zh: 房型
+    queries: ["{品牌}酒店 {城市} 房型", "{品牌}酒店 {城市} 双床房 家庭房"]
+    sources: [T0, T1]
+  - id: opening_year
+    zh: 开业年份
+    queries: ["{品牌}酒店 {城市} 开业 年份"]
+    sources: [T0, T1, T3]
+  - id: official_domain
+    zh: 官网域名
+    queries: ["{品牌}酒店 {城市} 官网"]
+    sources: [T0]
+  - id: official_description
+    zh: 官方描述
+    queries: ["{品牌}酒店 {城市} 酒店介绍", "{品牌}酒店 {城市} 品牌介绍"]
+    sources: [T0]
+  - id: persona_positioning
+    zh: 人群·官网定位
+    queries: ["{品牌}酒店 {城市} 商务 亲子 度假 定位"]
+    sources: [T0]
+  - id: competitors
+    zh: 竞品清单
+    queries: ["{城市} {档位词}酒店 有哪些", "{城市} {档位词}酒店 推荐"]
+    sources: [T1, T2]

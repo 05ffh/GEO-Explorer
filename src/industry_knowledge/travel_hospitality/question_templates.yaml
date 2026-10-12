@@ -1,0 +1,195 @@
+# 向四个 AI 平台提问的问题模板（spec 3.1.1 + 附录 B）。
+# 命中层 25 题（不点名甲方，测 AI 主动推荐）+ 归因层 5 题（点名甲方 vs 竞品，采归因）。
+# 变量：{城市} {档次词} {景点} {预算} {甲方} {竞品}
+# 可选片段用 [方括号] 标记：片段内含变量但变量无值（如 {景点} 缺）→ 实例化时删除整个片段。
+# 档位词分布（每人群 1 题，隔离档位混淆）：商务·交通 / 亲子·面积 / 情侣·私密 / 结伴·热闹 / 独自·交通。
+category: question_templates
+description: 向四个 AI 平台提问的问题模板。命中层25题+归因层5题，口语化短句。
+items:
+  # ── 商务差旅 ──
+  - id: hit_business_generic
+    persona: 商务差旅
+    slot: 泛需求
+    layer: hit
+    template: "{城市}出差住哪家酒店方便"
+  - id: hit_business_transit
+    persona: 商务差旅
+    slot: 交通
+    layer: hit
+    template: "{城市}高铁站附近有什么{档次词}酒店"
+  - id: hit_business_sleep
+    persona: 商务差旅
+    slot: 睡眠
+    layer: hit
+    template: "{城市}出差住哪安静隔音好"
+  - id: hit_business_breakfast
+    persona: 商务差旅
+    slot: 早餐
+    layer: hit
+    template: "{城市}出差住哪家酒店含早餐"
+  - id: hit_business_avoid
+    persona: 商务差旅
+    slot: 避坑
+    layer: hit
+    template: "{城市}出差的酒店哪家口碑好"
+
+  # ── 亲子家庭 ──
+  - id: hit_family_generic
+    persona: 亲子家庭
+    slot: 泛需求
+    layer: hit
+    template: "{城市}带娃住哪家酒店好"
+  - id: hit_family_facility
+    persona: 亲子家庭
+    slot: 设施
+    layer: hit
+    template: "{城市}哪家酒店有亲子房和儿童乐园"
+  - id: hit_family_attraction
+    persona: 亲子家庭
+    slot: 景点
+    layer: hit
+    template: "{城市}[{景点}附近]带娃住哪方便"
+  - id: hit_family_size
+    persona: 亲子家庭
+    slot: 面积
+    layer: hit
+    template: "{城市}带娃住哪家{档次词}酒店房间大能加床"
+  - id: hit_family_avoid
+    persona: 亲子家庭
+    slot: 避坑
+    layer: hit
+    template: "{城市}带娃住酒店哪家评价好"
+
+  # ── 情侣/度假 ──
+  - id: hit_couple_generic
+    persona: 情侣度假
+    slot: 泛需求
+    layer: hit
+    template: "{城市}适合情侣度假的酒店有哪些"
+  - id: hit_couple_view
+    persona: 情侣度假
+    slot: 景观
+    layer: hit
+    template: "{城市}景观好适合纪念日约会的酒店"
+  - id: hit_couple_privacy
+    persona: 情侣度假
+    slot: 私密
+    layer: hit
+    template: "{城市}环境安静私密的{档次词}酒店"
+  - id: hit_couple_influencer
+    persona: 情侣度假
+    slot: 网红
+    layer: hit
+    template: "{城市}有哪些网红酒店适合打卡拍照"
+  - id: hit_couple_avoid
+    persona: 情侣度假
+    slot: 避坑
+    layer: hit
+    template: "{城市}情侣酒店哪家口碑好"
+
+  # ── 朋友/结伴 ──
+  - id: hit_friends_generic
+    persona: 朋友结伴
+    slot: 泛需求
+    layer: hit
+    template: "{城市}和朋友去玩，住哪个区域方便，那片有什么酒店"
+  - id: hit_friends_district
+    persona: 朋友结伴
+    slot: 商圈
+    layer: hit
+    template: "{城市}哪个商圈吃喝玩乐方便，适合朋友住的酒店有哪些"
+  - id: hit_friends_room
+    persona: 朋友结伴
+    slot: 房型
+    layer: hit
+    template: "{城市}适合3-4人一起住的酒店或双床房"
+  - id: hit_friends_lively
+    persona: 朋友结伴
+    slot: 热闹
+    layer: hit
+    template: "{城市}朋友出游住哪家{档次词}酒店周边热闹吃喝方便"
+  - id: hit_friends_avoid
+    persona: 朋友结伴
+    slot: 避坑
+    layer: hit
+    template: "{城市}朋友出游住哪家酒店不踩坑"
+
+  # ── 单人出行 ──
+  - id: hit_solo_generic
+    persona: 单人出行
+    slot: 泛需求
+    layer: hit
+    template: "{城市}一个人住哪家酒店性价比高"
+  - id: hit_solo_safety
+    persona: 单人出行
+    slot: 安全
+    layer: hit
+    template: "{城市}一个人住安全又方便的酒店"
+  - id: hit_solo_budget
+    persona: 单人出行
+    slot: 预算
+    layer: hit
+    template: "{城市}[预算{预算}元以内、]交通方便的酒店"
+  - id: hit_solo_transit
+    persona: 单人出行
+    slot: 交通
+    layer: hit
+    template: "{城市}一个人住哪家{档次词}酒店离市区近"
+  - id: hit_solo_avoid
+    persona: 单人出行
+    slot: 避坑
+    layer: hit
+    template: "{城市}一个人住的酒店哪家安全口碑好"
+
+  # ── 归因层（点名甲方 vs 竞品）──
+  - id: attr_business
+    persona: 商务差旅
+    slot: 对比
+    layer: attribution
+    template: "{甲方}和{竞品}出差住哪家好，为什么"
+  - id: attr_family
+    persona: 亲子家庭
+    slot: 对比
+    layer: attribution
+    template: "{甲方}和{竞品}哪家更适合带娃，为什么"
+  - id: attr_couple
+    persona: 情侣度假
+    slot: 对比
+    layer: attribution
+    template: "{甲方}和{竞品}情侣度假选哪家，为什么"
+  - id: attr_friends
+    persona: 朋友结伴
+    slot: 对比
+    layer: attribution
+    template: "{甲方}和{竞品}朋友出游住哪家好，为什么"
+  - id: attr_solo
+    persona: 单人出行
+    slot: 对比
+    layer: attribution
+    template: "{甲方}和{竞品}一个人住哪家好，为什么"
+  # ── 归因层·平衡问法（P1-② 决策2，2026-09-10）：各自优劣势——补甲方优势对标（二分强制只榨劣势）
+  - id: attr_business_balance
+    persona: 商务差旅
+    slot: 优劣势
+    layer: attribution
+    template: "{甲方}和{竞品}出差住各自有什么优劣势"
+  - id: attr_family_balance
+    persona: 亲子家庭
+    slot: 优劣势
+    layer: attribution
+    template: "{甲方}和{竞品}带娃各自有什么优劣势"
+  - id: attr_couple_balance
+    persona: 情侣度假
+    slot: 优劣势
+    layer: attribution
+    template: "{甲方}和{竞品}情侣度假各自有什么优劣势"
+  - id: attr_friends_balance
+    persona: 朋友结伴
+    slot: 优劣势
+    layer: attribution
+    template: "{甲方}和{竞品}朋友出游各自有什么优劣势"
+  - id: attr_solo_balance
+    persona: 单人出行
+    slot: 优劣势
+    layer: attribution
+    template: "{甲方}和{竞品}一个人住各自有什么优劣势"

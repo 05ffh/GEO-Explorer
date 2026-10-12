@@ -1,0 +1,118 @@
+# ============================================================
+# GEO Explorer — .gitignore (GitHub standard)
+# https://github.com/github/gitignore/blob/main/Python.gitignore
+# ============================================================
+
+# === Byte-compiled / optimized / DLL files ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# === Virtual Environment ===
+.venv/
+venv/
+env/
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+
+# === Secrets & API Keys ===
+.env
+.env.*
+!*.example
+*.pem
+*.key
+credentials.json
+secrets/
+
+# === Environment & Config ===
+.env.local
+.env.*.local
+*.env
+
+# === Databases & Runtime Data ===
+pgdata/
+dump.rdb
+*.dump
+*.sql
+*.sqlite
+*.db
+
+# === 诊断运行产物（不入库，可再生成）===
+output/
+
+# === Testing & Coverage ===
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+.coverage
+*.cover
+
+# === IDE & Editor ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# === CodeGraph ===
+.codegraph/
+
+# === Runtime Outputs ===
+reports/*
+!reports/GEO_Explorer_*.md
+!reports/GEO_Explorer_*.pdf
+logs/
+*.log
+
+# === OS Files ===
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# === Docker ===
+docker-compose.override.yml
+
+# === Jupyter Notebook ===
+.ipynb_checkpoints/
+*.ipynb
+
+# ============================================================
+# SYNCED via Git (everything NOT listed above):
+#   src/             — all source code
+#   tests/           — all tests
+#   alembic/         — database migrations
+#   docs/            — design specs + implementation plans
+#   deploy/          — systemd service files
+#   requirements.txt — Python dependencies
+#   setup.sh         — one-click setup script
+#   README.md        — project overview
+#   SYNC_GUIDE.md    — team collaboration guide
+#   CLAUDE.md        — project instructions for Claude Code
+#   .env.example     — API key template (safe, no real keys)
+#   .gitignore       — this file
+#   docker-compose.yml
+#   Dockerfile
+# ============================================================
+.claude/
+.superpowers/
+
+# Claude Code local settings (per-user)
+.claude/settings.local.json
