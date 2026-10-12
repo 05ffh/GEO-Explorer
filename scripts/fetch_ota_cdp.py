@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import re
 import time
 import urllib.request
@@ -32,7 +33,8 @@ from src.collector.content_filter import filter_client_facts
 from src.config import settings
 from src.gt.source_tier import classify_source_tier
 
-CDP_PORT = 9223
+# 与 bin/start-chrome-geo.sh 的 GEO_CHROME_PORT 对齐（换端口时两侧自动一致，复现者零改代码）
+CDP_PORT = int(os.environ.get("GEO_CHROME_PORT", "9223"))
 
 # ---- 平台规格（白名单 + 边界切分）----
 # boundaries 有序：只在列出的边界名处切分；类型 fact=提取 / opinion=边界不提取 / ignore=不提取。
