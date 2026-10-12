@@ -178,7 +178,6 @@ class Settings(BaseSettings):
     search_max_retries: int = 2
     search_retry_backoff_seconds: float = 1.5
     search_disable_after_failures: int = 2
-    search_health_check_enabled: bool = True
     tavily_independent_client: bool = True
     duckduckgo_auto_disable: bool = True
 
