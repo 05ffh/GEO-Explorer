@@ -467,8 +467,8 @@ async def main() -> int:
         rec = (await db.execute(text("""
             INSERT INTO search_results
               (id, organization_id, brand_id, collection_run_id, search_backend, query, title, url,
-               snippet, source_tier, raw_content, content_text, content_layer, collected_at)
-            VALUES (gen_random_uuid(), :o, :b, :r, 'cdp', :q, :t, :u, '', :tier, :raw, :ct, 'fact', NOW())
+               snippet, source_tier, raw_content, content_text, content_layer, rank, collected_at)
+            VALUES (gen_random_uuid(), :o, :b, :r, 'cdp', :q, :t, :u, '', :tier, :raw, :ct, 'fact', 0, NOW())
             RETURNING id
         """), {"o": org_id, "b": brand_id, "r": args.run_id, "q": f"{city}{brand_name}",
                "t": title, "u": url, "tier": tier, "raw": raw, "ct": content_text})).fetchone()

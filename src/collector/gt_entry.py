@@ -121,7 +121,55 @@ async def write_cdp_facts(db, collection_run_id: uuid.UUID, facts: dict) -> None
         await db.flush()
 
 
-_KV = re.compile(r"([一-龥]{0,2})(\d+(?:\.\d+)?)\s*(平方米|间|层|座|米|㎡|年|人|张|条|个)([一-龥]{0,2})")
+# CDP 平台域名 → 平台名（多平台接入时补；携程/同程/飞猪）
+_CDP_PLATFORM = {"ctrip.com": "携程"}
+
+# 中间处理层固化规范（对齐 _HIT_SPEC/_ATTRIBUTION_SPEC：随待处理输入内嵌下发，防主 agent 手写漂移）。
+_CDP_MIDLAYER_SPEC = (
+    "CDP 中间处理层判定（spec「CDP 中间处理层设计」）：读 OTA 详情页事实原文 → 产 8 类结构化事实，"
+    "供并入 gt_facts_json（第一判决依据，无 8000 字预算截断）。\n"
+    "**输入**：各平台的 content_text（已是过滤后的甲方属性事实层，非整页原文）。\n"
+    "**输出**：{\"facts\": {8 类: [事实...]}, \"consistency\": {铁律字段: \"agree\"/\"conflict\"}}。\n"
+    "1. 归类到 8 类（对齐 gt_facts_json schema；fact 原文一字不改，不压缩成标签）：\n"
+    "   位置交通（地址/交通/周边距离/商圈）｜客房（房型/间数/面积/床型/主题房）｜"
+    "康体设施（泳池/健身/SPA/桑拿/网球场）｜餐饮（餐厅/菜系/米其林/酒廊/早餐）｜"
+    "会议宴会（宴会厅/会议室/场地面积/容量）｜服务（接送/礼宾/加床/儿童政策）｜"
+    "配套（商场/滑雪场/影院/乐园）｜荣誉（星级/奖项/认证）。\n"
+    "   ⚠️ OTA 页 H1 区常混类（地址/房型/评分/附近同区）→ **按行归类**，不整块搬；"
+    "无主语残行（孤立的「免费」「310米」）先并回主语行再判。\n"
+    "2. 一致性核对：**铁律字段优先**（店名/地址/政策/房型）跨平台比对——一致记 agree，矛盾记 conflict。\n"
+    "   ⚠️ 矛盾**标出、不静默取一**（AI 判「有风险」是硬约束）；无冲突字段不入 consistency。\n"
+    "3. 高价值过滤：只留**有主语 + 可验证 + 跨平台不矛盾**的事实；丢观点/营销软文/无主语残渣。"
+    "跨平台相似或包含的行**去重合并**，platforms 记全部出现平台。\n"
+    "4. 每项 schema：{\"fact\": \"<事实原文>\", \"platforms\": [\"携程\", ...]}（来源/时间等由系统补）。\n"
+    "**输出格式**：只输出该 JSON，类名必须 ∈ 8 类；无其他文字。"
+)
+
+
+async def generate_cdp_midlayer_input(db, collection_run_id: uuid.UUID) -> dict:
+    """读 run 的 CDP 采集成品（各平台 content_text）→ 中间处理层待处理输入（内嵌 spec，防漂移）。
+
+    对齐 finalize_attribution.generate_attribution_pending：系统 generate 待处理 → 主 agent 判定 →
+    ingest_cdp_facts（apply）落库。spec 自包含，任何调用方都拿到固化规范（防主 agent 手写漂移）。
+
+    platforms 值取**列表**：同平台多页（同 run 多 --hotel-id）不静默丢，逐页进待处理。
+    """
+    rows = (await db.execute(
+        select(SearchResultRecord.url, SearchResultRecord.query, SearchResultRecord.content_text)
+        .where(SearchResultRecord.collection_run_id == collection_run_id,
+               SearchResultRecord.search_backend == "cdp")
+        .order_by(SearchResultRecord.collected_at)
+    )).all()
+    platforms: dict = {}
+    for url, query, content_text in rows:
+        name = next((n for dom, n in _CDP_PLATFORM.items() if dom in (url or "")), url or "unknown")
+        platforms.setdefault(name, []).append(
+            {"url": url, "query": query, "content_text": content_text or ""})
+    return {"run_id": str(collection_run_id), "platforms": platforms, "spec": _CDP_MIDLAYER_SPEC}
+
+
+_KV = re.compile(r"([一-龥]{0,4})(\d+(?:\.\d+)?)\s*(平方米|间|层|座|米|㎡|年|人|张|条|个)([一-龥]{0,2})")
+_NUM = re.compile(r"\d+(?:\.\d+)?")
 
 
 def _normalize_fact(s: str) -> str:
@@ -130,32 +178,81 @@ def _normalize_fact(s: str) -> str:
 
 
 def _kv(s: str) -> dict[str, str]:
-    """{前后文+单位: 数字}——冲突判定用（同一属性不同值：414间客房 vs 311间客房）。
+    """{属性键: 数字}——冲突判定用（同一属性不同值：414间客房 vs 311间客房）。
 
-    含**前后文**（非仅单位）防假阳性：`楼高26层` 与 `房型6-20层` 共享"层"但属性不同 → 键不同。
+    键取**非空语境**两侧（`前文+单位` 与/或 `单位+后文`），空的一侧不进键：
+    - **后文**（单位+属性名词，如「间客房」）是主判据——领字不同（「酒店共有414间客房」vs「311间客房」）
+      仍有共同后文键 → 不漏报同属性冲突；
+    - 前窗 4 字覆盖到实体名（「茶亭地铁站810米」vs「南门兜地铁站310米」→ 键`茶亭地铁站米`≠`南门兜地铁站米`）
+      → 不把不同实体误判为同属性（2026-10-12 真数据）。
     """
-    return {pre + u + post: num for pre, num, u, post in _KV.findall(s or "")}
+    out: dict[str, str] = {}
+    for pre, num, u, post in _KV.findall(s or ""):
+        if pre:
+            out[pre + u] = num
+        if post:
+            out[u + post] = num
+    return out
 
 
-def _bigrams(s: str) -> set[str]:
-    return {s[i:i + 2] for i in range(len(s) - 1)} or ({s} if s else set())
-
-
-def _overlap(a: str, b: str) -> float:
-    """Jaccard（union 归一）——避免"短事实 ⊂ 长事实"被 min 归一误判为高重叠。"""
-    ga, gb = _bigrams(a), _bigrams(b)
-    return len(ga & gb) / len(ga | gb) if ga and gb else 0.0
+def _skeleton(s: str) -> str:
+    """去数字 + 归一化（冲突兜底用）——「同文本、仅数字不同」即同属性。"""
+    return _normalize_fact(_NUM.sub("", s or ""))
 
 
 def _is_conflict(a: str, b: str) -> bool:
-    """同一属性（前后文+单位）数字不同 → 冲突；或归一化 bigram Jaccard ≥0.45（数字不同的近似句）。
+    """同一属性数字不同 → 冲突。两条并列判据（缺一不判）：
 
-    键含前后文（而非仅单位）防假阳性：`414间客房` 与 `7间多功能厅` 共享"间"但属性不同 → 非冲突。
+    ① 语境键（`_kv`，前文/单位）相同、数字不同 → `414间客房` vs `311间客房`、`共有414间客房` vs `311间客房`；
+    ② **骨架全等**（去数字归一化后完全相同）但数字集不同 → `步行3分钟…` vs `步行5分钟…`（单位不在 `_KV` 表内也兜住）。
+    ② 用**骨架全等**而非 Jaccard 相似度：模板同构但主语不同的事实（`大床房`/`双床房`、`专车送机`/`专车接机`、
+    `茶亭站`/`南门兜站`）骨架不同 → 不误判（2026-10-12 真数据 10 例假冲突全部由此暴露）。
     """
     ka, kb = _kv(a), _kv(b)
     if any(k in kb and kb[k] != v for k, v in ka.items()):
         return True
-    return _overlap(_normalize_fact(a), _normalize_fact(b)) >= 0.45
+    if set(_NUM.findall(a or "")) != set(_NUM.findall(b or "")):
+        return _skeleton(a) == _skeleton(b)
+    return False
+
+
+async def _cdp_provenance(db, collection_run_id: uuid.UUID) -> dict:
+    """run 的 CDP 采集成品 → {平台名: {source_url, source_tier, captured_at}}（溯源注入用）。
+
+    同平台多页取首页（最早采集）；`captured_at` 用采集日期（对齐 build_gt_fact_index 的 YYYY-MM-DD）。
+    """
+    rows = (await db.execute(
+        select(SearchResultRecord.url, SearchResultRecord.source_tier, SearchResultRecord.collected_at)
+        .where(SearchResultRecord.collection_run_id == collection_run_id,
+               SearchResultRecord.search_backend == "cdp")
+        .order_by(SearchResultRecord.collected_at)
+    )).all()
+    out: dict = {}
+    for url, tier, collected_at in rows:
+        name = next((n for dom, n in _CDP_PLATFORM.items() if dom in (url or "")), url or "unknown")
+        out.setdefault(name, {
+            "source_url": url,
+            "source_tier": tier,
+            "captured_at": collected_at.date().isoformat() if collected_at else "",
+        })
+    return out
+
+
+def _enrich_fact_prov(it: dict, prov: dict) -> dict:
+    """CDP 事实并入第一依据前补溯源（spec §545：可信=可追溯；**系统补**，主 agent 不填）。
+
+    拷贝并入（不原地改）→ cdp_facts_json 保持中间处理层原始产出。已有字段不覆盖（setdefault）。
+    """
+    out = dict(it)
+    for plat in (it.get("platforms") or []):
+        p = prov.get(plat)
+        if p:
+            out.setdefault("source_url", p["source_url"])
+            out.setdefault("source_tier", p["source_tier"])
+            out.setdefault("captured_at", p["captured_at"])
+            out.setdefault("source_kind", "corpus")
+            break
+    return out
 
 
 async def merge_cdp_facts_into_gt(
@@ -164,7 +261,8 @@ async def merge_cdp_facts_into_gt(
     """CDP 事实清单并入 gt_facts_json（第一判决依据），三态：去重 / 补充 / 冲突标注。
 
     去重 = CDP 事实**被既有条目覆盖**（CDP ⊆ 既有，归一化后包含）→ 跳过（防冗余）；
-    补充 = 新事实追加；冲突 = 同一属性（单位+名词）数字不同、或归一化 bigram 重叠 ≥0.45
+    补充 = 新事实追加（并入前**系统补溯源** source_url/tier/captured_at，对齐 §545）；
+    冲突 = 同一属性（单位+名词）数字不同、或归一化 bigram 重叠 ≥0.45
     → **默认不并入**，记入 cdp_facts_json["merge_conflicts"] 待主 agent 核验
     （第一判决依据的改动须可控可审计；apply_conflicts=True 才强制并入）。
 
@@ -177,6 +275,7 @@ async def merge_cdp_facts_into_gt(
     gt = dict(run.gt_facts_json or {})
     gt_facts = dict(gt.get("facts") or {})
     cdp = dict(run.cdp_facts_json or {})
+    prov = await _cdp_provenance(db, collection_run_id)
     summary: dict = {"added": [], "deduped": [], "conflicts": []}
     for cls, items in (cdp.get("facts") or {}).items():
         existing = list(gt_facts.get(cls) or [])
@@ -197,8 +296,9 @@ async def merge_cdp_facts_into_gt(
                 summary["conflicts"].append({"class": cls, "cdp": fact, "gt": conflict.get("fact")})
                 if not apply_conflicts:
                     continue  # 默认不并入，待主 agent 核验
-            existing.append(it)
-            ex_norm.append((t, it))
+            enriched = _enrich_fact_prov(it, prov)  # 系统补溯源（不原地改，cdp_facts_json 保原始）
+            existing.append(enriched)
+            ex_norm.append((t, enriched))
             summary["added"].append({"class": cls, "fact": fact})
         gt_facts[cls] = existing
     gt["facts"] = gt_facts

@@ -250,3 +250,75 @@ async def test_merge_cdp_facts_no_false_conflict_or_loss(db_session):
     assert "414间客房及套房，楼高26层，2005年开业" in facts  # 信息未丢
     assert summary["deduped"] == [] and summary["conflicts"] == []
     assert len(summary["added"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_merge_cdp_facts_conflict_with_leading_context(db_session):
+    """H1 回归（对抗审查 2026-10-12）：GT 事实数字前有领字（「酒店共有414间客房」）时，
+    仍须与「311间客房」判为冲突——旧 _kv 键含前文（「共有间客房」≠「间客房」）致同属性漏报。"""
+    org = Organization(name="领字冲突")
+    db_session.add(org)
+    await db_session.flush()
+    brand = await get_or_create_brand(db_session, "香格里拉", org.id)
+    run = await create_collection_run(db_session, org.id, brand.id, "福州", None)
+    run.gt_facts_json = {"facts": {"客房": [{"fact": "酒店共有414间客房"}]}}
+    await write_cdp_facts(db_session, run.id, {"facts": {"客房": [{"fact": "311间客房"}]}})
+
+    summary = await merge_cdp_facts_into_gt(db_session, run.id)
+
+    assert len(summary["conflicts"]) == 1        # 领字不掩盖同属性冲突
+    assert len(run.gt_facts_json["facts"]["客房"]) == 1  # 默认不并入，第一依据未被污染
+
+
+@pytest.mark.asyncio
+async def test_merge_no_false_conflict_on_distinct_similar_facts(db_session):
+    """真数据回归（2026-10-12）：模板同构但主语不同的**不同事实**（大床房/双床房）不得判冲突；
+    同骨架仅数字不同（步行3分钟/步行5分钟）须判冲突——冲突 = 同属性数字不同，②兜底用骨架全等非 Jaccard。"""
+    org = Organization(name="同构异主语")
+    db_session.add(org)
+    await db_session.flush()
+    brand = await get_or_create_brand(db_session, "香格里拉", org.id)
+    run = await create_collection_run(db_session, org.id, brand.id, "福州", None)
+    run.gt_facts_json = {"facts": {
+        "客房": [{"fact": "豪华大床房-尽览榕城繁华城景（1张2米特大床｜40平方米|6-20层）"}],
+        "位置交通": [{"fact": "步行3分钟到地铁南门兜站"}]}}
+    await write_cdp_facts(db_session, run.id, {"facts": {
+        "客房": [{"fact": "豪华双床房-尽览榕城繁华城景（2张1.2米单人床｜40平方米|6-20层）"}],
+        "位置交通": [{"fact": "步行5分钟到地铁南门兜站"}]}})
+
+    summary = await merge_cdp_facts_into_gt(db_session, run.id)
+
+    assert len(summary["added"]) == 1 and summary["added"][0]["fact"].startswith("豪华双床房")  # 同构异主语 → 补充
+    assert len(summary["conflicts"]) == 1                                                        # 同骨架异数字 → 冲突
+    assert summary["conflicts"][0]["cdp"] == "步行5分钟到地铁南门兜站"
+
+
+@pytest.mark.asyncio
+async def test_merge_cdp_facts_injects_provenance(db_session):
+    """M2 回归（对抗审查 2026-10-12）：并入第一依据的 CDP 事实**由系统补溯源**
+    （source_url/tier/captured_at=captured，§545 可信=可追溯）；cdp_facts_json 保原始产出。"""
+    from datetime import datetime, timezone
+    from src.models.search_result import SearchResultRecord
+
+    org = Organization(name="溯源注入")
+    db_session.add(org)
+    await db_session.flush()
+    brand = await get_or_create_brand(db_session, "香格里拉", org.id)
+    run = await create_collection_run(db_session, org.id, brand.id, "福州", None)
+    db_session.add(SearchResultRecord(
+        organization_id=org.id, brand_id=brand.id, collection_run_id=run.id,
+        search_backend="cdp", url="https://hotels.ctrip.com/hotels/429558.html",
+        source_tier="T1", collected_at=datetime(2026, 10, 12, tzinfo=timezone.utc),
+        content_text="414间客房"))
+    await write_cdp_facts(db_session, run.id, {"facts": {"客房": [
+        {"fact": "414间客房", "platforms": ["携程"]}]}})
+    await db_session.flush()
+
+    await merge_cdp_facts_into_gt(db_session, run.id)
+
+    merged = run.gt_facts_json["facts"]["客房"][0]
+    assert merged["source_url"] == "https://hotels.ctrip.com/hotels/429558.html"
+    assert merged["source_tier"] == "T1" and merged["source_kind"] == "corpus"
+    assert merged["captured_at"] == "2026-10-12"
+    # cdp_facts_json 保原始（未原地注入）
+    assert "source_url" not in run.cdp_facts_json["facts"]["客房"][0]
