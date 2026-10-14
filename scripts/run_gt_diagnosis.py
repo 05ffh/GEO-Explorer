@@ -6,6 +6,7 @@
 再调 src.collector.gt_entry 的 write_* 写库。
 """
 import asyncio
+import copy
 import json
 import sys
 from collections import Counter
@@ -15,8 +16,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.collector.gt_collector_v2 import collect_raw, collect_sentiment, group_by_field
 from src.collector.gt_entry import (
-    create_collection_run, get_or_create_brand, write_positioning, write_search_result,
-    write_sentiment,
+    carry_forward_p2, create_collection_run, get_or_create_brand, write_positioning,
+    write_search_result, write_sentiment,
 )
 from src.collector.sentiment import compute_negative_rate
 from src.collector.tier import derive_tier
@@ -30,6 +31,7 @@ def find_brand_en(brand_zh: str) -> str | None:
             return (item.get("en") or "").lower() or None
     return None
 from src.config import settings
+from src.models.collection_run import CollectionRun
 from src.models.organization import Organization
 from src.search.search_all import search_all_backends
 
@@ -45,6 +47,28 @@ def _dump(materials, with_tier: bool) -> list[dict]:
     return out
 
 
+async def _carry_p2_on_rebuild(db, brand_id, city: str, new_run: CollectionRun) -> dict:
+    """重建 P2（run_gt_diagnosis）：从同品牌+城市**最近一个 run** 承接甲方级 P2（gt/cdp/positioning），
+    `sentiment` 重采、`tier` 重算。返回承接的 positioning（供调用方合并新 tier）；无前序 run → 空 dict。
+
+    **第一性原理**：甲方事实（gt/cdp）绑定**诊断单元**（品牌+城市）而非问法 → 重建 P2 时事实不变、应承接；
+    换品牌/城市 = 新诊断单元 → 无前序 run → 不承接。**修 2026-10-14**：原 `run_gt_diagnosis` 只产定位/舆情/
+    页面/CDP，**不产 gt** → 不承接则新 run 第一依据为空（体系B 换舆情词必走此重建路径）。
+    """
+    prev = (await db.execute(
+        select(CollectionRun)
+        .where(CollectionRun.brand_id == brand_id, CollectionRun.city == city,
+               CollectionRun.id != new_run.id)
+        .order_by(CollectionRun.created_at.desc()).limit(1)
+    )).scalar_one_or_none()
+    if prev is None:
+        return {}
+    if not new_run.region and prev.region:
+        new_run.region = prev.region
+    await carry_forward_p2(db, prev, new_run, skip=("sentiment_json",))
+    return copy.deepcopy(new_run.positioning_json or {})
+
+
 async def main(brand_name: str, city: str, region: str | None):
     # ① 建诊断单元
     engine = create_async_engine(settings.database_url)
@@ -57,6 +81,8 @@ async def main(brand_name: str, city: str, region: str | None):
             await db.flush()
         brand = await get_or_create_brand(db, brand_name, org.id)
         run = await create_collection_run(db, org.id, brand.id, city, region)
+        # 重建 P2：承接甲方级 P2（gt/cdp/positioning），sentiment 重采、tier 重算
+        carried_pos = await _carry_p2_on_rebuild(db, brand.id, city, run)
         await db.commit()
         org_id, brand_id, run_id = str(org.id), str(brand.id), str(run.id)
 
@@ -76,11 +102,14 @@ async def main(brand_name: str, city: str, region: str | None):
     # ④½ 写定位 + 负面率（粗筛 preliminary，待主 agent 终判 confirmed）+ 事实/舆情材料落库（带 URL，spec 4.5）
     seen_urls: set[str] = set()
     async with session_factory() as db:
-        await write_positioning(db, run_id, {"tier": tier, "competitors": []})
-        await write_sentiment(db, run.id, {
-            "store_level": {**store, "status": "preliminary"},
-            "brand_level": {**brand_neg, "status": "preliminary"},
-        })
+        # 承接的 positioning（competitors/personas）保留，tier 用本次重算；positioned_at 重新锚定
+        carried_pos.pop("positioned_at", None)
+        await write_positioning(db, run_id, {**carried_pos, "tier": tier,
+                                             "competitors": carried_pos.get("competitors", [])})
+        senti_json = {"store_level": {**store, "status": "preliminary"}}
+        if senti_grouped.get("brand_level"):     # 单档（体系B，无品牌级词）→ 不写 brand_level
+            senti_json["brand_level"] = {**brand_neg, "status": "preliminary"}
+        await write_sentiment(db, run.id, senti_json)
         # 事实 + 舆情材料都落库（事实页是"甲方自己页面全文抓取"的 URL 来源）
         for m in fact + senti:
             if m.url:
@@ -101,10 +130,23 @@ async def main(brand_name: str, city: str, region: str | None):
         if stat.get("reason"):
             print(f"  ⚠️ 甲方页面接地语料为空（归因将退回只用 AI 引用内容）：{stat['reason']}")
 
+        # ④⅞ CDP 抓取（3 平台）：用户已在浏览器打开酒店页 → 系统**验证标题（品牌+城市）** → 抓取落库。
+        # 谨慎边界：Chrome 未起 / 页面未开 / 标题不符 → 跳过 + 告警，**不阻塞 P2 主流程**。
+        from scripts.fetch_ota_cdp import cdp_scrape_all
+        cdp = await cdp_scrape_all(db, run_id, brand_name, city)
+        await db.commit()
+        print(f"CDP 抓取（3 平台）:")
+        for _p, _r in cdp.items():
+            if _r.get("ok"):
+                print(f"  ✓ [{_p}] 落库 {str(_r.get('id', ''))[:8]}  {_r['content_text_len']} 字"
+                      f"（hotelId={_r['hotel_id']}，{_r['hotel_id_src']}）")
+            else:
+                print(f"  ⚠️ [{_p}] 跳过：{_r.get('error')}")
+
     # ⑤ 异常检测（主 agent 补救信号）
     thin_fields = {f: len(ms) for f, ms in fact_grouped.items() if len(ms) < 3}
     providers = Counter(m.provider for m in fact + senti if m.provider)
-    missing_backends = [b for b in ("tavily", "doubao_search", "duckduckgo") if providers.get(b, 0) == 0]
+    missing_backends = [b for b in ("tavily", "doubao_search") if providers.get(b, 0) == 0]
 
     result = {
         "org_id": org_id, "brand_id": brand_id, "collection_run_id": run_id,

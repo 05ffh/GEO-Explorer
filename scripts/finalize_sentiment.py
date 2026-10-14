@@ -72,6 +72,8 @@ async def apply(run_id: str, verdict_path: str) -> None:
         result = {}
         for level, key in (("store", "store_level"), ("brand", "brand_level")):
             level_rows = [r for r in rows if _level(r.query) == level]
+            if not level_rows:
+                continue  # 单档（无品牌级）→ 不写空 brand_level
             excluded = [r for r in level_rows if vmap.get(str(r.id), {}).get("verdict") == "exclude"]
             negative = [r for r in level_rows if vmap.get(str(r.id), {}).get("verdict") == "negative"]
             # 未裁决的候选默认不算负面（粗筛不当细筛）

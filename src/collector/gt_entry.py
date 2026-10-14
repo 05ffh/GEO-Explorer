@@ -94,19 +94,49 @@ async def write_positioning(db, collection_run_id: uuid.UUID, positioning: dict)
 
 
 async def write_sentiment(db, collection_run_id: uuid.UUID, sentiment: dict) -> None:
-    """写负面率结果（store_level/brand_level）到 collection_run 的 sentiment_json。
+    """写负面率结果（store_level[+brand_level]）到 collection_run 的 sentiment_json。
 
-    深合并：主 agent 终判只改 rate/negative_count/status（覆盖 negative_rate 相关字段），
-    保留 total/themes（compute_negative_rate 的原始信息），避免终判覆盖丢主题分布。
+    **档位集合以本次 payload 为准**（重写 level 键集）：单档只留 store_level、清掉陈旧 brand_level——
+    否则深合并会让已换成单档的诊断单元残留旧口径的品牌级。档位**内部**深合并：主 agent 终判只改
+    rate/negative_count/status，保留 total/themes（compute_negative_rate 原始信息），避免终判丢主题分布。
     """
     run = await db.get(CollectionRun, collection_run_id)
     if run is not None:
         existing = dict(run.sentiment_json or {})
-        for level in ("store_level", "brand_level"):
-            if level in sentiment:
-                existing[level] = {**existing.get(level, {}), **sentiment[level]}
-        run.sentiment_json = existing
+        run.sentiment_json = {
+            level: {**existing.get(level, {}), **sentiment[level]}
+            for level in sentiment
+        }
         await db.flush()
+
+
+# 甲方级 P2 字段（诊断单元级，与问法无关）。sentiment_json 列在此（属 P2）但**两条路径都 skip**
+# ——它是测量结果（绑词表+时点），一律重采，不做承接（见 carry_forward_p2 docstring）。
+_P2_FIELDS = ("positioning_json", "gt_facts_json", "cdp_facts_json", "sentiment_json")
+
+
+async def carry_forward_p2(db, src_run: CollectionRun, dst_run: CollectionRun,
+                           *, skip: tuple[str, ...] = ()) -> list[str]:
+    """把「甲方级 P2」从 src_run 承接（深拷贝）到 dst_run，返回实际承接字段。
+
+    甲方事实 = positioning（定位）/ gt_facts_json（第一依据）/ cdp_facts_json（CDP 台账）——
+    随**诊断单元**（品牌+地区）而非问法走，换问法/重建 P2 都应承接。
+    - **换问法**（clone 路径）：承接 `positioning/gt/cdp`，`skip=("sentiment_json",)` 让舆情重采。
+    - **重建 P2**（run_gt_diagnosis，如换舆情词）：同上，`skip=("sentiment_json",)`。
+    **`sentiment_json` 两条路径都 `skip`（2026-10-14，第一性原理）**：舆情是绑「词表+时点」的**测量结果**
+    （同命中率），非甲方事实——换舆情词后旧舆情不可比、时点已旧 → 承接是错的（还会冒充 confirmed）。
+    舆情一律**新基线重采**（`run_measure --refresh-sentiment` 或 `refresh_sentiment.py`）。
+    深拷贝 → 新 run 独立（改一个不动另一个）；**根因**：clone 是 09-05 build，gt_facts_json 09-16 才加，
+    曾漏承接 → 新基线第一依据为空（2026-10-14 修）。
+    """
+    carried: list[str] = []
+    for f in _P2_FIELDS:
+        if f in skip:
+            continue
+        setattr(dst_run, f, copy.deepcopy(getattr(src_run, f) or {}))
+        carried.append(f)
+    await db.flush()
+    return carried
 
 
 async def write_cdp_facts(db, collection_run_id: uuid.UUID, facts: dict) -> None:
@@ -122,14 +152,15 @@ async def write_cdp_facts(db, collection_run_id: uuid.UUID, facts: dict) -> None
 
 
 # CDP 平台域名 → 平台名（多平台接入时补；携程/同程/飞猪）
-_CDP_PLATFORM = {"ctrip.com": "携程"}
+_CDP_PLATFORM = {"ctrip.com": "携程", "ly.com": "同程", "alitrip.com": "飞猪"}
 
 # 中间处理层固化规范（对齐 _HIT_SPEC/_ATTRIBUTION_SPEC：随待处理输入内嵌下发，防主 agent 手写漂移）。
 _CDP_MIDLAYER_SPEC = (
     "CDP 中间处理层判定（spec「CDP 中间处理层设计」）：读 OTA 详情页事实原文 → 产 8 类结构化事实，"
     "供并入 gt_facts_json（第一判决依据，无 8000 字预算截断）。\n"
     "**输入**：各平台的 content_text（已是过滤后的甲方属性事实层，非整页原文）。\n"
-    "**输出**：{\"facts\": {8 类: [事实...]}, \"consistency\": {铁律字段: \"agree\"/\"conflict\"}}。\n"
+    "**输出**：{\"facts\": {8 类: [事实...]}, \"stale_facts\": {8 类: [{\"fact\":\"...\",\"reason\":\"...\"}]}, "
+    "\"consistency\": {铁律字段: \"agree\"/\"conflict\"}}。\n"
     "1. 归类到 8 类（对齐 gt_facts_json schema；fact 原文一字不改，不压缩成标签）：\n"
     "   位置交通（地址/交通/周边距离/商圈）｜客房（房型/间数/面积/床型/主题房）｜"
     "康体设施（泳池/健身/SPA/桑拿/网球场）｜餐饮（餐厅/菜系/米其林/酒廊/早餐）｜"
@@ -139,9 +170,17 @@ _CDP_MIDLAYER_SPEC = (
     "无主语残行（孤立的「免费」「310米」）先并回主语行再判。\n"
     "2. 一致性核对：**铁律字段优先**（店名/地址/政策/房型）跨平台比对——一致记 agree，矛盾记 conflict。\n"
     "   ⚠️ 矛盾**标出、不静默取一**（AI 判「有风险」是硬约束）；无冲突字段不入 consistency。\n"
+    "   ⚠️ **矛盾的事实项不进 `facts`**——自动合并闸门（`_is_conflict`）只拦「数字矛盾」，政策类矛盾"
+    "（加床/退改/宠物/年龄分档/时间窗）拦不住 → 会静默污染第一依据。凡跨平台或与基线矛盾的事实，"
+    "**改记入 `consistency`（值写明双方口径）**，不进 `facts`。\n"
     "3. 高价值过滤：只留**有主语 + 可验证 + 跨平台不矛盾**的事实；丢观点/营销软文/无主语残渣。"
     "跨平台相似或包含的行**去重合并**，platforms 记全部出现平台。\n"
     "4. 每项 schema：{\"fact\": \"<事实原文>\", \"platforms\": [\"携程\", ...]}（来源/时间等由系统补）。\n"
+    "5. **过时/停业事实**（描述里提到已改造/已停业项，如飞猪「酒店介绍」的『夏宫』——已改造为江南灶·融府）："
+    "**不进 `facts`**（避免污染 gt_facts_json 第一依据），单独记 `stale_facts`（同 8 类 schema + `reason`），"
+    "供 P4「改过时信息」落地参考。判据=与 GT 时效审计/跨平台当前在营状态矛盾（输入附 `stale_reference`=GT 已确认的停业/改造项，比对用）。\n"
+    "6. **地址 = 铁律字段**：跨平台对齐为统一口径「市+区+街道号」——某平台缺省/区时取最完整平台口径补全"
+    "（如飞猪页无『鼓楼区』→ 用携程/同程口径补）。\n"
     "**输出格式**：只输出该 JSON，类名必须 ∈ 8 类；无其他文字。"
 )
 
@@ -165,7 +204,18 @@ async def generate_cdp_midlayer_input(db, collection_run_id: uuid.UUID) -> dict:
         name = next((n for dom, n in _CDP_PLATFORM.items() if dom in (url or "")), url or "unknown")
         platforms.setdefault(name, []).append(
             {"url": url, "query": query, "content_text": content_text or ""})
-    return {"run_id": str(collection_run_id), "platforms": platforms, "spec": _CDP_MIDLAYER_SPEC}
+    # stale_reference：GT 已确认的过时项——供主 agent 判 CDP 页面过时描述时比对
+    # （如飞猪「酒店介绍」的夏宫 vs GT「江南灶·融府 由原夏宫改造」）。**注入参照，不自动判**（判断属主 agent）。
+    # 标记放宽到「改造/停业」等非「已」前缀（GT 记法如「由原夏宫改造」无「已」）——只入参照、非闸门，宁多勿漏。
+    run = await db.get(CollectionRun, collection_run_id)
+    gj = (run.gt_facts_json if run else None) or {}
+    stale_reference = [
+        it.get("fact") for items in (gj.get("facts") or {}).values()
+        for it in items
+        if any(m in (it.get("fact") or "") for m in ("停业", "改造", "关闭", "更名", "下线"))
+    ]
+    return {"run_id": str(collection_run_id), "platforms": platforms,
+            "stale_reference": stale_reference, "spec": _CDP_MIDLAYER_SPEC}
 
 
 _KV = re.compile(r"([一-龥]{0,4})(\d+(?:\.\d+)?)\s*(平方米|间|层|座|米|㎡|年|人|张|条|个)([一-龥]{0,2})")
@@ -238,20 +288,29 @@ async def _cdp_provenance(db, collection_run_id: uuid.UUID) -> dict:
     return out
 
 
+def _prov_for(it: dict, prov: dict) -> dict | None:
+    """事实项 → 溯源 dict（按 platforms 顺序取首个有溯源的平台）。"""
+    for plat in (it.get("platforms") or []):
+        p = prov.get(plat)
+        if p:
+            return p
+    return None
+
+
 def _enrich_fact_prov(it: dict, prov: dict) -> dict:
     """CDP 事实并入第一依据前补溯源（spec §545：可信=可追溯；**系统补**，主 agent 不填）。
 
     拷贝并入（不原地改）→ cdp_facts_json 保持中间处理层原始产出。已有字段不覆盖（setdefault）。
+    `captured_at`=首次捕获锚点；`last_seen_at`=最近一次 CDP 观测（重抓重合并会刷新，供时效审计）。
     """
     out = dict(it)
-    for plat in (it.get("platforms") or []):
-        p = prov.get(plat)
-        if p:
-            out.setdefault("source_url", p["source_url"])
-            out.setdefault("source_tier", p["source_tier"])
-            out.setdefault("captured_at", p["captured_at"])
-            out.setdefault("source_kind", "corpus")
-            break
+    p = _prov_for(it, prov)
+    if p:
+        out.setdefault("source_url", p["source_url"])
+        out.setdefault("source_tier", p["source_tier"])
+        out.setdefault("captured_at", p["captured_at"])
+        out.setdefault("source_kind", "corpus")
+        out.setdefault("last_seen_at", p["captured_at"])
     return out
 
 
@@ -285,7 +344,12 @@ async def merge_cdp_facts_into_gt(
             t = _normalize_fact(fact)
             if not t:
                 continue
-            if any(t in en for en, _ in ex_norm if en):  # CDP ⊆ 既有 → 去重
+            matched = next((e for en, e in ex_norm if en and t in en), None)
+            if matched is not None:  # CDP ⊆ 既有 → 去重
+                # 观测=复核：重抓重合并时刷新「最近观测」锚点（否则时间戳停在首次并入日 → 审计误报过时）
+                p = _prov_for(it, prov)
+                if p and p.get("captured_at"):
+                    matched["last_seen_at"] = p["captured_at"]
                 summary["deduped"].append({"class": cls, "fact": fact})
                 continue
             conflict = next(

@@ -35,13 +35,12 @@ async def test_materials_carry_field_and_query():
 
 
 @pytest.mark.asyncio
-async def test_collect_sentiment_scopes():
+async def test_collect_sentiment_single_scope():
     materials = await collect_sentiment("香格里拉", "广州", _mock_search)
     grouped = group_by_field(materials)
     assert "store_level" in grouped
-    assert "brand_level" in grouped
-    assert len(grouped["store_level"]) == 8  # 门店级 8 条 query（2026-09-01 补负面词后）
-    assert len(grouped["brand_level"]) == 7  # 品牌级 7 条 query（2026-09-01 补负面词后）
+    assert "brand_level" not in grouped          # 体系B 单档（2026-10-14）：无品牌级
+    assert len(grouped["store_level"]) == 20     # 门店级 20 条 query（体系B 福州词表）
 
 
 def test_group_by_field():

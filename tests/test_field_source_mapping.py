@@ -48,19 +48,16 @@ class TestFieldSourceMapping:
 
 class TestSentimentQuery:
 
-    def test_load_2_scopes(self):
+    def test_load_single_scope(self):
+        """体系B（2026-10-14）：单档门店级，无品牌级。"""
         kb = IndustryKnowledgeLoader()
         items = kb.load_category("sentiment_query")
-        assert len(items) == 2
-        assert any(i["id"] == "store_level" for i in items)
-        assert any(i["id"] == "brand_level" for i in items)
+        assert len(items) == 1
+        assert items[0]["id"] == "store_level"
 
-    def test_store_level_has_city_placeholder(self):
-        """门店级总量要带城市，品牌级不带（全集团的）。"""
+    def test_queries_are_preset_literals(self):
+        """体系B：词表硬编码（福州香格里拉），不参数化。"""
         kb = IndustryKnowledgeLoader()
-        store = next(i for i in kb.load_category("sentiment_query") if i["id"] == "store_level")
-        brand = next(i for i in kb.load_category("sentiment_query") if i["id"] == "brand_level")
-        for q in store["queries"]:
-            assert "{城市}" in q
-        for q in brand["queries"]:
-            assert "{城市}" not in q
+        store = kb.load_category("sentiment_query")[0]
+        assert len(store["queries"]) == 20
+        assert all("福州香格里拉" in q for q in store["queries"])

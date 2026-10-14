@@ -23,8 +23,8 @@ else
     START_URLS=(
         "https://hotels.ctrip.com/hotels/429558.html"   # 携程·福州香格里拉
         "https://hotel.meituan.com/"                    # 美团酒店
-        "https://www.fliggy.com/"                       # 飞猪
-        "https://www.ly.com/hotel/"                     # 同程
+        "https://hotel.alitrip.com/hotel_detail2.htm?shid=10015487"  # 飞猪·福州香格里拉（干净 URL，去 spm 追踪参数）
+        "https://www.ly.com/hotel/hoteldetail?hotelId=51402013"  # 同程·福州香格里拉
     )
 fi
 
@@ -54,6 +54,9 @@ nohup google-chrome \
   --no-default-browser-check \
   --disable-gpu \
   --disable-gpu-sandbox \
+  --disable-background-timer-throttling \
+  --disable-backgrounding-occluded-windows \
+  --disable-renderer-backgrounding \
   --ozone-platform=wayland \
   "${START_URLS[@]}" \
   > /tmp/chrome_geo.log 2>&1 &

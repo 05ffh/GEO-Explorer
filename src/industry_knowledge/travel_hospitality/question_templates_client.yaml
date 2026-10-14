@@ -1,0 +1,62 @@
+# 【体系B·甲方指定】命中层问题（spec 3.1.2）。甲方**给了关键词词组**时走此套。
+# 命中层题源 = 甲方关键词优化出的标准题（不点名甲方者归命中层；点名甲方/舆情类归归因/舆情）。
+# 归因层**不在此文件**——两套体系共用 `question_templates.yaml` 的归因层（system="B" 时自动合并）。
+# ⚠️ 本文件是**当前甲方（福州香格里拉）专属预设**（硬编码城市/本地资产，不参数化）——换甲方由人工替换。
+# 例：本次词表见桌面图 → 20 条中「#14 亲子房怎么样」「#19 婚宴多少钱」转舆情、其余 18 条入命中层。
+category: question_templates_client
+description: 【体系B·甲方指定】命中层18题（福州香格里拉预设）。归因层共用体系A文件。
+items:
+  - id: hit_b1
+    layer: hit
+    template: "福州市中心有哪些高端酒店推荐"
+  - id: hit_b2
+    layer: hit
+    template: "福州商务出差住哪个酒店方便"
+  - id: hit_b3
+    layer: hit
+    template: "福州五一广场附近有什么好的五星级酒店"
+  - id: hit_b4
+    layer: hit
+    template: "福州三坊七巷附近酒店推荐"
+  - id: hit_b5
+    layer: hit
+    template: "福州地铁沿线高档酒店有哪些"
+  - id: hit_b6
+    layer: hit
+    template: "福州哪家酒店有米其林餐厅"
+  - id: hit_b7
+    layer: hit
+    template: "福州米其林一星餐厅推荐"
+  - id: hit_b8
+    layer: hit
+    template: "福州江南灶融府在哪个酒店"
+  - id: hit_b9
+    layer: hit
+    template: "福州高端酒店哪家餐饮最好"
+  - id: hit_b10
+    layer: hit
+    template: "福州适合美食之旅的酒店有哪些"
+  - id: hit_b11
+    layer: hit
+    template: "福州适合亲子游的五星级酒店推荐"
+  - id: hit_b12
+    layer: hit
+    template: "福州带娃住哪个酒店好"
+  - id: hit_b13
+    layer: hit
+    template: "福州酒店有亲子房和泳池的有哪些"
+  - id: hit_b14
+    layer: hit
+    template: "福州周末亲子度假酒店推荐"
+  - id: hit_b15
+    layer: hit
+    template: "福州婚宴酒店哪个宴会厅大"
+  - id: hit_b16
+    layer: hit
+    template: "福州举办婚礼的五星级酒店推荐"
+  - id: hit_b17
+    layer: hit
+    template: "福州大型会议酒店有哪些"
+  - id: hit_b18
+    layer: hit
+    template: "福州办酒席最好的酒店"

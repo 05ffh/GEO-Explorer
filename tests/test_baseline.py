@@ -1,7 +1,8 @@
 """基线变更模式测试（spec 11.9）：问法指纹 → 同基线复用 / 问法变更新开 run + 复制 P2。"""
 import pytest
 
-from src.collector.gt_entry import create_collection_run, get_or_create_brand, write_measurement
+from src.collector.gt_entry import (carry_forward_p2, create_collection_run, get_or_create_brand,
+                                    write_measurement)
 from src.collector.question_builder import fingerprint
 from src.models.collection_run import CollectionRun
 from src.models.organization import Organization
@@ -40,6 +41,8 @@ async def _mk_run(db, org, brand):
                             "positioned_at": "2026-08-29T21:12:56"}
     run.sentiment_json = {"brand_level": {"rate": 0.14, "status": "confirmed"},
                           "store_level": {"rate": 0.15, "status": "confirmed"}}
+    run.gt_facts_json = {"facts": {"客房": [{"fact": "414间客房"}]}}
+    run.cdp_facts_json = {"facts": {"客房": [{"fact": "414间客房", "platforms": ["携程"]}]}}
     await db.flush()
     return run
 
@@ -56,10 +59,13 @@ async def test_clone_run_copies_p2_independently(db_session):
     assert cloned.id != old.id
     assert cloned.city == old.city
     assert cloned.positioning_json == old.positioning_json
-    assert cloned.sentiment_json == old.sentiment_json
+    assert cloned.gt_facts_json == old.gt_facts_json        # 第一依据承接（2026-10-14 修）
+    assert cloned.cdp_facts_json == old.cdp_facts_json
+    assert cloned.sentiment_json == {}                      # 舆情**不承接**（测量结果，重采）
 
     # 深拷贝独立：改克隆的内存 dict 不影响旧 run（不同对象）
     assert cloned.positioning_json is not old.positioning_json
+    assert cloned.gt_facts_json is not old.gt_facts_json
     cloned.positioning_json["tier"] = "豪华"
     assert old.positioning_json["tier"] == "高端"
 
@@ -108,7 +114,7 @@ async def test_baseline_decision_same_keeps_run_changed_clones(db_session):
     new_run = await _clone_run_for_new_baseline(db_session, row)
     assert new_run.id != run.id
     assert new_run.positioning_json == row.positioning_json
-    assert new_run.sentiment_json == row.sentiment_json
+    assert new_run.sentiment_json == {}                    # 舆情不承接（测量结果，重采）
 
 
 @pytest.mark.asyncio
@@ -145,10 +151,30 @@ async def test_resolve_measure_target_multibaseline(db_session):
     target_c, is_new_c = await _resolve_measure_target(db_session, row_a, ["client_kw2::又一个新词"])
     assert is_new_c is True
     assert target_c != str(run_a.id) and target_c != str(run_b.id)
-    # 新开的 run 复制了 P2
+    # 新开的 run 承接甲方事实（定位/gt/cdp）；舆情不承接（测量结果，重采）
     new_run = await db_session.get(CollectionRun, target_c)
     assert new_run.positioning_json == row_a.positioning_json
-    assert new_run.sentiment_json == row_a.sentiment_json
+    assert new_run.sentiment_json == {}
+    assert new_run.gt_facts_json == row_a.gt_facts_json
+    assert new_run.cdp_facts_json == row_a.cdp_facts_json
+
+
+@pytest.mark.asyncio
+async def test_carry_forward_p2_skip(db_session):
+    """承接原语：默认全量承接甲方级 P2；skip 的字段不承接（重建 P2 时舆情重采）；深拷贝独立。"""
+    org = Organization(name="承接测试")
+    db_session.add(org)
+    await db_session.flush()
+    brand = await get_or_create_brand(db_session, "香格里拉", org.id)
+    src = await _mk_run(db_session, org, brand)
+    dst = await create_collection_run(db_session, org.id, brand.id, "福州", None)
+    carried = await carry_forward_p2(db_session, src, dst, skip=("sentiment_json",))
+    assert set(carried) == {"positioning_json", "gt_facts_json", "cdp_facts_json"}
+    assert dst.positioning_json == src.positioning_json
+    assert dst.gt_facts_json == src.gt_facts_json
+    assert dst.cdp_facts_json == src.cdp_facts_json
+    assert dst.sentiment_json == {}                      # skip → 不承接（重采）
+    assert dst.gt_facts_json is not src.gt_facts_json    # 深拷贝独立
 
 
 def _j(qid):
@@ -189,3 +215,34 @@ async def test_find_run_rejects_mismatched_run_id(db_session):
     assert await _find_run(db_session, "香格里拉", "广州", str(run.id)) is None
     # 完全匹配 → 返回 run
     assert (await _find_run(db_session, "香格里拉", "福州", str(run.id))).id == run.id
+
+
+@pytest.mark.asyncio
+async def test_carry_p2_on_rebuild(db_session):
+    """重建 P2（run_gt_diagnosis）承接：同品牌+城市最近 run 的 gt/cdp/positioning 承接；
+    sentiment 不承接（重采）；换城市（新诊断单元）不承接。"""
+    from scripts.run_gt_diagnosis import _carry_p2_on_rebuild
+    org = Organization(name="重建承接")
+    db_session.add(org)
+    await db_session.flush()
+    brand = await get_or_create_brand(db_session, "重建承接品牌", org.id)
+    prev = await _mk_run(db_session, org, brand)          # 有 gt/cdp/positioning/sentiment
+
+    new = await create_collection_run(db_session, org.id, brand.id, "福州", None)
+    carried_pos = await _carry_p2_on_rebuild(db_session, brand.id, "福州", new)
+    assert new.gt_facts_json == prev.gt_facts_json        # 第一依据承接
+    assert new.cdp_facts_json == prev.cdp_facts_json
+    assert new.sentiment_json == {}                       # 重采（不承接）
+    assert carried_pos == prev.positioning_json           # 承接 positioning（供 tier 合并）
+
+    # 换城市 = 新诊断单元 → 无前序 run → 不承接
+    other = await create_collection_run(db_session, org.id, brand.id, "厦门", None)
+    assert await _carry_p2_on_rebuild(db_session, brand.id, "厦门", other) == {}
+    assert other.gt_facts_json == {}
+
+
+def test_parse_args_refresh_sentiment_flag():
+    """run_measure --refresh-sentiment 开关解析（刷舆情融入链路，spec ⑨）。"""
+    from scripts.run_measure import _parse_args
+    assert _parse_args(["香格里拉", "福州", "--refresh-sentiment"])[4] is True
+    assert _parse_args(["香格里拉", "福州"])[4] is False

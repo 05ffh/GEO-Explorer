@@ -60,9 +60,11 @@ def judge_block(j: dict) -> str:
     rec = j.get("recommendation")
     rec_cn = REC_CN.get(rec, str(rec))
     scene = j.get("scene")
-    if scene and scene.get("rank_in_scene"):
+    if scene and (scene.get("val") or scene.get("dim")):
         dim = DIM_CN.get(scene.get("dim"), scene.get("dim"))
-        scene_str = f"{dim}「{scene.get('val')}」rank {scene.get('rank_in_scene')}/{scene.get('in_scene_count')}"
+        scene_str = f"{dim}「{scene.get('val')}」"
+        if scene.get("rank_in_scene"):     # rank 缺（子 agent 未给）→ 只显示 维度「场景名」，不显示 null
+            scene_str += f"rank {scene.get('rank_in_scene')}/{scene.get('in_scene_count')}"
     else:
         scene_str = "null"
     same = j.get("same_tier_pushed")

@@ -115,3 +115,16 @@ def test_missing_brand_or_city_raises():
         build_questions("", "福州")
     with pytest.raises(ValueError):
         build_questions("香格里拉", "")
+
+
+def test_system_b_client_hit_layer():
+    """体系B（spec 3.1.2）：命中层=甲方指定（18 题硬编码）+ 归因层=共用体系A（10 题）= 28。"""
+    qs = build_questions("香格里拉", "福州", tier="高端", competitor="希尔顿", system="B")
+    assert len(qs) == 28
+    hit = [q for q in qs if q["layer"] == "hit"]
+    attr = [q for q in qs if q["layer"] == "attribution"]
+    assert len(hit) == 18 and len(attr) == 10
+    assert all("{" not in q["question"] for q in hit)      # 硬编码，无变量
+    assert any("福州市中心" in q["question"] for q in hit)
+    # 归因层与体系A 一致（两套共用）
+    assert _by_id(qs, "attr_business")["question"] == "福州香格里拉和福州希尔顿出差住哪家好，为什么"

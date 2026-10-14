@@ -275,14 +275,16 @@ def close_measurement(
     remaining = finalize_measurement(measurement)
     store_s, brand_s = {}, {}
     if sentiment:
-        store_s = sentiment.get("store_level", {})
-        brand_s = sentiment.get("brand_level", {})
-    if store_s.get("rate") is not None and brand_s.get("rate") is not None:
-        combined = combine_negative_rate(store_s["rate"], brand_s["rate"])
+        store_s = sentiment.get("store_level", {}) or {}
+        brand_s = sentiment.get("brand_level", {}) or {}
+    if store_s.get("rate") is not None:
+        # 单档（无品牌级）→ combine 直接返回门店级；品牌级在则按 8:2。
+        combined = combine_negative_rate(store_s["rate"], brand_s.get("rate"))
         measurement["effective_visibility"] = effective_visibility(
             measurement["overall"]["overall_hit_rate"], combined)
+        brand_ok = (brand_s.get("status") == "confirmed") if brand_s else True
         measurement["effective_visibility_status"] = (
-            "confirmed" if store_s.get("status") == "confirmed" and brand_s.get("status") == "confirmed"
+            "confirmed" if store_s.get("status") == "confirmed" and brand_ok
             else "preliminary")
         measurement["negative_rate_combined"] = combined  # 钉负面率输入（审计/复算用）
     if competitors:

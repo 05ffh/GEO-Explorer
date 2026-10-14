@@ -1,4 +1,4 @@
-"""四引擎并列搜索测试：URL 去重、并发容错、限流重试、防无限重试。"""
+"""并列搜索测试（两路后端）：URL 去重、并发容错、限流重试、防无限重试。"""
 
 import pytest
 
@@ -45,20 +45,20 @@ def _fast_limiter(name: str = "tavily") -> PlatformRateLimiter:
 @pytest.mark.asyncio
 async def test_dedup_by_url_first_provider_wins():
     b1 = _MockBackend("tavily", [SearchResult(title="A", snippet="s1", url="https://a.com/1")])
-    b2 = _MockBackend("duckduckgo", [
+    b2 = _MockBackend("doubao_search", [
         SearchResult(title="A dup", snippet="s1", url="https://a.com/1"),  # 重复 URL
         SearchResult(title="B", snippet="s2", url="https://b.com/2"),
     ])
     out = await search_all_backends("香格里拉 广州", backends=[b1, b2])
     assert [r["url"] for r in out] == ["https://a.com/1", "https://b.com/2"]
     assert out[0]["provider"] == "tavily"
-    assert out[1]["provider"] == "duckduckgo"
+    assert out[1]["provider"] == "doubao_search"
 
 
 @pytest.mark.asyncio
 async def test_single_backend_failure_does_not_block():
     b1 = _MockBackend("tavily", error=RuntimeError("boom"))
-    b2 = _MockBackend("duckduckgo", [SearchResult(title="B", snippet="s2", url="https://b.com/2")])
+    b2 = _MockBackend("doubao_search", [SearchResult(title="B", snippet="s2", url="https://b.com/2")])
     out = await search_all_backends("q", backends=[b1, b2])
     assert [r["url"] for r in out] == ["https://b.com/2"]
 

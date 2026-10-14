@@ -1,4 +1,4 @@
-"""四引擎并列搜索：三个系统后端（Tavily/豆包/DDG）并发 + URL 去重 + 限流。
+"""并列搜索：**两路搜索后端（Tavily/豆包搜索）**并发 + URL 去重 + 限流（DDG 2026-10-14 移除）。
 
 WebSearch（主 agent）不在此函数内，由主 agent 并列补入同一去重池。
 限流复用 PlatformRateLimiter（semaphore + RPM + 退避），从源头防 429/封禁。

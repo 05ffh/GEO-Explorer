@@ -25,27 +25,25 @@ class PlatformCapabilities:
 
 
 def get_available_backends(config) -> list[SearchBackend]:
-    from src.search.duckduckgo_backend import DuckDuckGoBackend
+    """可用搜索后端 = **Tavily + 豆包搜索（两路）**。
+
+    DDG 于 2026-10-14 移除：Lite 端点不可达（走代理/绕过代理都超时）→ 每次采集每个查询白等 20s 超时
+    （`duckduckgo_backend` 的 `timeout=20`），拖慢 GT/舆情采集。Google CSE 早已移除。
+    """
     from src.search.tavily_backend import TavilyBackend
-    backends = [DuckDuckGoBackend()]
+    backends: list[SearchBackend] = []
     if config.tavily_api_key:
         backends.append(TavilyBackend(api_key=config.tavily_api_key))
     if config.doubao_search_api_key:
         from src.search.doubao_search_backend import DoubaoSearchBackend
         backends.append(DoubaoSearchBackend(api_key=config.doubao_search_api_key))
-    # Google CSE removed — GCP Custom Search JSON API not yet enabled
     return backends
 
 
 def get_gt_search_adapters(config) -> list:
-    """Build ordered GT Search adapters: Tavily → DuckDuckGo → Doubao.
-
-    Returns list of SearchAdapter instances for use by GTSearchService.
-    """
+    """Build ordered GT Search adapters: Tavily → Doubao（DDG 2026-10-14 移除）。"""
     from src.search.tavily_search_adapter import TavilySearchAdapter
     from src.search.tavily_backend import TavilyBackend
-    from src.search.duckduckgo_search_adapter import DuckDuckGoSearchAdapter
-    from src.search.duckduckgo_backend import DuckDuckGoBackend
 
     adapters = []
 
@@ -55,9 +53,6 @@ def get_gt_search_adapters(config) -> list:
         adapters.append(TavilySearchAdapter(backend))
     else:
         adapters.append(TavilySearchAdapter(None))
-
-    # DuckDuckGo (fallback)
-    adapters.append(DuckDuckGoSearchAdapter(DuckDuckGoBackend()))
 
     # Doubao Search (字节系信源)
     if config.doubao_search_api_key:

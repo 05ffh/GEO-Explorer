@@ -29,7 +29,7 @@ class TavilyBackend(SearchBackend):
         self._last_answer = ""
         self._last_answer_urls: list[str] = []
         try:
-            async with httpx.AsyncClient(timeout=30) as client:
+            async with httpx.AsyncClient(timeout=30, trust_env=False) as client:  # 绕过坏代理（同 client_pages）
                 resp = await client.post(
                     TAVILY_API_URL,
                     json={

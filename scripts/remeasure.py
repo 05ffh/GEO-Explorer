@@ -96,7 +96,8 @@ async def main():
         sys.exit(1)
     brand_en = find_brand_en(args.brand)
 
-    full_questions = build_platform_questions(args.brand, args.city, positioning)
+    system = (existing or {}).get("system", "A")   # 提问体系随 run（A/B），复算指纹须一致
+    full_questions = build_platform_questions(args.brand, args.city, positioning, system=system)
     current_fp = fingerprint(full_questions)
     print(f"[round {args.round}] 分层: " + ", ".join(f"{pl}:{'/'.join(L)}" for pl, L in layers.items())
           + f"（全量指纹 {len(current_fp)} 题）")
@@ -113,7 +114,7 @@ async def main():
             adapter = PLATFORM_ADAPTERS[pl]()
             results[pl] = await measure_platform(
                 args.brand, args.city, brand_en, positioning,
-                make_ask_fn(adapter, limiters[pl]), platform=pl, layers=set(layer_set))
+                make_ask_fn(adapter, limiters[pl]), platform=pl, layers=set(layer_set), system=system)
         now = datetime.now().isoformat(timespec="seconds")
         measurement = merge_round_measurements(existing, results, layers, args.round, current_fp, now)
         remaining = finalize_measurement(measurement)

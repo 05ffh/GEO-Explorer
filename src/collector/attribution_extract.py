@@ -21,6 +21,8 @@
 """
 from __future__ import annotations
 
+import re
+
 DIMS = ("服务", "设施", "价格", "位置", "品牌", "餐饮", "其他")
 PICK_VALUES = ("competitor", "client", "tie", "no_choice")
 # 接地分类（用户 2026-09-10 定）：决定落地方案方向
@@ -55,10 +57,13 @@ _ATTRIBUTION_SPEC = (
     "不是\"如果...选 X\"的条件句（条件句=按需求分流=tie/按 AI 主倾向）。\n"
     "2. client_disadvantage_dims：AI 认为甲方不如竞品的维度（服务/设施/价格/位置/品牌/餐饮/其他），每条：\n"
     "   - dim：维度（必须从枚举里选最贴合的）\n"
-    "   - evidence：**必须逐字/极近原文来自 AI 回答**（一句话内），禁止混入【甲方页面内容】或你自己的知识。"
+    "   - evidence：**必须来自 AI 回答原话**（一句话内），禁止混入【甲方页面内容】或你自己的知识。"
     "AI 原文没说的维度 → 不记。\n"
-    "     ⚠️ 逐字操作约束：**直接剪贴回答原文**，禁止①加\"维度名：\"前缀（如\"设施：…\"）②自己加\"（竞对：…）\"括号注释"
-    "③缩写/拼接/改写（删除中间短语或把两处拼一句都不行）；回答是表格 → 取单元格原文，不含表头维度名。\n"
+    "     ⚠️ evidence 约束（2026-10-14 修订）：**核心 = 内容必须来自 AI 原话（可机械回查）**。"
+    "①**改写/拼接/缩写（伪造 AI 没说过的话）→ 严禁**；"
+    "②**\"维度名：\"前缀 / \"（…）\"补充注释（= 加工措辞，内容仍是 AI 原话）→ 允许**"
+    "（系统落库时自动剥离前缀/注释，保机械可核验，子 agent 不必因此重判）。"
+    "回答是表格 → 取单元格原文，不含表头维度名。\n"
     "   - corpus_fact（关键，先查【甲方事实清单】、无则回【甲方页面内容】检索；资产类维度 设施/餐饮/服务/位置/其他 **必填**）：\n"
     "     **对这条 AI 负面说法，语料有没有「针对同一属性的具体事实」直接反驳它？三选一：**\n"
     "     - none：没有能反驳的同属性事实。**⚠️ 仅有「甲方有该资产」不足以反驳质量评价**——AI 说"
@@ -214,6 +219,38 @@ def generate_attribution_pending(
     return out
 
 
+_PREFIX_RE = re.compile(r'^([^：，。]{1,10})：')
+_PAREN_RE = re.compile(r'[（(][^（）()]*[）)]')
+_MD_KILL = re.compile(r'<br\s*/?>|[*#`|>_\s]+')     # markdown/空白归一（子 agent 复制时去掉 ** 等）
+
+
+def _md_norm(s: str) -> str:
+    return _MD_KILL.sub('', s or '')
+
+
+def _strict_evidence(evidence: str, answer: str) -> str:
+    """剥掉子 agent 自己加的「前缀/注释」（**内容仍是 AI 原话时**）→ 保 evidence 机械可核验（2026-10-14 方案A）。
+
+    第一性原理：前缀/注释是「加工措辞」（内容仍原话）→ **允许存在**，但系统落库时归一化，
+    使 evidence 恒可回到 AI 原文核对（防幻觉、可自动复核）。
+    - 前缀「XX：」：**剥前缀后剩余在原文** → 前缀是自加 → 剥；若前缀本身也在原文（AI 自己写的标签）→ 保留。
+    - 括号「（…）」：整段不在回答原文 → 自加注释 → 剥。
+    - 比对前**归一去 markdown**（AI 原文的 `**`/表格符/`<br>` ≠ 改写）。
+    - **改写/拼接**（正文对不上原文）无法机械修 → 原样返回（由复核/重判把关，勿静默改内容）。
+    """
+    e = (evidence or "").strip()
+    a = _md_norm(answer)
+    if _md_norm(e) in a:
+        return e                                        # 逐字（模 markdown）→ 不动
+    m = _PREFIX_RE.match(e)
+    if m:
+        rest = e[len(m.group(0)):].strip()
+        if rest and _md_norm(rest) in a:
+            e = rest                                    # 前缀自加、剩余是原文 → 剥前缀
+    e = _PAREN_RE.sub(lambda mm: mm.group(0) if _md_norm(mm.group(0)) in a else "", e).strip()
+    return e or evidence
+
+
 def apply_attribution(m: dict, patch: dict) -> int:
     """把子 agent 劣势提取写回 judgment.attribution_result。返回回填题数。
 
@@ -247,7 +284,10 @@ def apply_attribution(m: dict, patch: dict) -> int:
             if bad_adv:
                 print(f"  警告: [{p}] {qid} 优势维度非法/缺证据：{bad_adv}，跳过")
                 continue
-            dis = [dict(d, type=_derive_type(d["dim"], d.get("corpus_fact"))) for d in dis]
+            _ans = j.get("answer") or ""
+            dis = [dict(d, evidence=_strict_evidence(d["evidence"], _ans),
+                        type=_derive_type(d["dim"], d.get("corpus_fact"))) for d in dis]
+            adv = [dict(d, evidence=_strict_evidence(d["evidence"], _ans)) for d in adv]
             j["attribution_result"] = {
                 "pick": pick,
                 "client_disadvantage_dims": dis,

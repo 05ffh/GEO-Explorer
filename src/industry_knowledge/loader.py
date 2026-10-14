@@ -22,6 +22,7 @@ _CATEGORY_FILES = {
     "sentiment_query": "sentiment_query.yaml",
     "brand_domains": "brand_domains.yaml",
     "question_templates": "question_templates.yaml",
+    "question_templates_client": "question_templates_client.yaml",
 }
 
 # brand_domains 档位合法枚举（与 platform_baseline.TIER_ORDER / tier._ORDER 一致）

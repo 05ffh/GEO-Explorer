@@ -12,8 +12,8 @@ def test_attribution_dispatch_has_core_constraints():
 def test_hit_dispatch_has_core_constraints():
     p = HIT_DISPATCH.format(platform="deepseek", path="/tmp/y.json")
     for k in ("命中判定员", "deepseek", "/tmp/y.json", "recommendation", "hotels_recommended",
-              "必须完整列出", "scene", "只输出", "没有写文件权限"):
-        assert k in p, f"命中调度外壳缺 {k}"
+              "必须完整列出", "scene", "rank_in_scene", "in_scene_count", "只输出", "没有写文件权限"):
+        assert k in p, f"命中调度外壳缺 {k}"     # scene 必须含 rank_in_scene/in_scene_count（2026-10-14 修）
 
 
 def test_dispatch_formats_are_stable():

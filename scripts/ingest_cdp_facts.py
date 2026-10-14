@@ -51,6 +51,20 @@ def load_cdp_facts(text: str) -> dict:
         for it in items:
             if not isinstance(it, dict) or not isinstance(it.get("fact"), str) or not it["fact"].strip():
                 raise ValueError(f"facts[{cls!r}] 每项须为 dict 且含非空 str 'fact'")
+    # stale_facts（可选）：过时/停业事实独立存，**不并入 gt_facts_json**（merge 只读 facts）——
+    # 防污染第一依据；供 P4「改过时信息」参考。仅校验结构（类名/非空 fact）。
+    stale = data.get("stale_facts")
+    if stale is not None:
+        if not isinstance(stale, dict):
+            raise ValueError("stale_facts 须为 {类名: [事实...]}")
+        for cls, items in stale.items():
+            if cls not in _CLASSES:
+                raise ValueError(f"stale_facts 类名 {cls!r} 不在 GT 8 类内：{sorted(_CLASSES)}")
+            if not isinstance(items, list):
+                raise ValueError(f"stale_facts[{cls!r}] 须为列表")
+            for it in items:
+                if not isinstance(it, dict) or not isinstance(it.get("fact"), str) or not it["fact"].strip():
+                    raise ValueError(f"stale_facts[{cls!r}] 每项须为 dict 且含非空 str 'fact'")
     return data
 
 

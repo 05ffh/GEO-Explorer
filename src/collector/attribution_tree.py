@@ -57,7 +57,8 @@ def compute_attribution_tree(measurement: dict, sentiment: dict | None = None) -
         brand_s = sentiment.get("brand_level", {}) or {}
     store_rate, brand_rate = store_s.get("rate"), brand_s.get("rate")
     combined = measurement.get("negative_rate_combined")
-    if combined is None and store_rate is not None and brand_rate is not None:
+    if combined is None and store_rate is not None:
+        # 单档（无品牌级）→ combine 直接返回门店级；品牌级在则按 8:2。
         combined = combine_negative_rate(store_rate, brand_rate)
     level = _risk_level(combined)
 

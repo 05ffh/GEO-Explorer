@@ -15,7 +15,7 @@ class SearchResultRecord(Base, UUIDMixin):
     brand_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("brands.id"), nullable=False, index=True)
     organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False)
     collection_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("collection_runs.id"), nullable=True, index=True)
-    search_backend: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # tavily/doubao_search/duckduckgo
+    search_backend: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # tavily/doubao_search/cdp
     query: Mapped[str] = mapped_column(Text, default="")
     title: Mapped[str] = mapped_column(Text, default="")
     url: Mapped[str] = mapped_column(Text, default="")

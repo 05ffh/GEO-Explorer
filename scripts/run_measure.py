@@ -3,6 +3,7 @@
 用法：
   python scripts/run_measure.py <品牌名> <城市> [collection_run_id]
   python scripts/run_measure.py <品牌名> <城市> [collection_run_id] --platforms doubao   # 补测
+  python scripts/run_measure.py <品牌名> <城市> --refresh-sentiment   # 换舆情搜索词后：测量前重采舆情
 
 落库 measurement_json 标 status=partial（题待子 agent 判六字段），
 子 agent 判完用 finalize_hit --apply 回填（recommendation/scene 等六字段）后改 status=complete。
@@ -16,7 +17,6 @@ P2（定位/舆情），新基线独立可自消费 P2；指纹相同（同基�
 """
 import argparse
 import asyncio
-import copy
 import json
 import sys
 from datetime import datetime
@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.adapters import DeepSeekAdapter, KimiAdapter, WenxinAdapter, DoubaoAdapter
 from src.collector.ai_hotels import extract_hotels
-from src.collector.gt_entry import write_measurement
+from src.collector.gt_entry import carry_forward_p2, write_measurement
 from src.collector.hit_rate import finalize_measurement
 from src.collector.measure import measure_platform
 from src.collector.question_builder import fingerprint
@@ -37,6 +37,8 @@ from src.industry_knowledge.loader import get_knowledge_loader
 from src.models.brand import Brand
 from src.models.collection_run import CollectionRun
 from src.models.measurement_snapshot import MeasurementSnapshot
+from src.search.search_all import search_all_backends
+from scripts.refresh_sentiment import refresh_run_sentiment
 
 PLATFORM_ADAPTERS = {
     "deepseek": DeepSeekAdapter,
@@ -81,12 +83,14 @@ def find_brand_en(brand_zh: str) -> str | None:
     return None
 
 
-# 酒旅定位字段（tier/星级/竞品/ADR 带）月级稳定，定位超 30 天才建议刷新
-POSITIONING_FRESH_DAYS = 30
+# 酒旅定位字段（tier/星级/竞品/ADR 带）月级稳定，定位超 60 天才建议刷新。
+# 2026-10-14 30→60：GT 经多轮人工审核、定位（tier/竞品）稳定，换问法走轻路径（不重采 GT）时
+# 旧定位仍可用；30 天过苛会强迫重跑 run_gt_diagnosis 重采 GT → 徒增审核成本。
+POSITIONING_FRESH_DAYS = 60
 
 
 def check_positioning_freshness(positioning: dict) -> bool:
-    """校验定位新鲜度（强制）：positioned_at 缺失或 >30 天 → 拒绝测量，强制先跑 P2。
+    """校验定位新鲜度（强制）：positioned_at 缺失或 >60 天 → 拒绝测量，强制先跑 P2。
 
     定位是 P3 测量的前置（tier/competitors 决定题目），P3 不能跳过 P2 复用旧定位。
     返回 True（新鲜可用）/ False（过时/缺失，应退出）。
@@ -182,7 +186,14 @@ async def _latest_fingerprint(db, run_id: str) -> list | None:
 
 
 async def _clone_run_for_new_baseline(db, old: CollectionRun) -> CollectionRun:
-    """问法基线变更 → 新开 run 行 + 完整复制 P2（定位/舆情），真实 run 独立后可自消费 P2。"""
+    """问法基线变更 → 新开 run 行 + 承接**甲方事实**（定位/gt/cdp），新 run 独立可自消费 P2。
+
+    用单一承接原语 `carry_forward_p2`（`skip=("sentiment_json",)`）。**修 2026-10-14**：原实现只复制定位/舆情，
+    漏 `gt_facts_json`（09-16 才加、clone 未同步）→ 新基线**第一依据为空**（归因退化成只用原文佐证）。
+    **不承接舆情**（2026-10-14，第一性原理）：舆情是绑「词表+时点」的**测量结果**（同命中率），非甲方事实——
+    换舆情词后旧舆情不可比、且时点已旧 → clone 进来是错的（还会冒充 confirmed）。舆情一律**新基线重采**
+    （`run_measure --refresh-sentiment`），与重建路径 `_carry_p2_on_rebuild(skip=sentiment_json)` 对齐。
+    """
     new = CollectionRun(
         organization_id=old.organization_id,
         brand_id=old.brand_id,
@@ -190,10 +201,9 @@ async def _clone_run_for_new_baseline(db, old: CollectionRun) -> CollectionRun:
         region=old.region,
         collection_status="pending",
     )
-    new.positioning_json = copy.deepcopy(old.positioning_json or {})
-    new.sentiment_json = copy.deepcopy(old.sentiment_json or {})
     db.add(new)
     await db.flush()
+    await carry_forward_p2(db, old, new, skip=("sentiment_json",))   # 甲方事实承接；舆情重采
     return new
 
 
@@ -239,7 +249,8 @@ def _build_measurement(brand, city, is_new_baseline, platforms, platform_results
     return _remeasure_merge(existing_measurement, platform_results, platforms), "remeasure"
 
 
-async def main(brand: str, city: str, run_id: str | None = None, platforms: list[str] | None = None):
+async def main(brand: str, city: str, run_id: str | None = None, platforms: list[str] | None = None,
+               refresh_sentiment: bool = False, system: str = "A"):
     engine = create_async_engine(settings.database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -268,7 +279,7 @@ async def main(brand: str, city: str, run_id: str | None = None, platforms: list
     # 并发提问 + 判定（每平台独立 limiter + adapter，gather 并发安全）
     async def _measure_one(p: str):
         adapter = PLATFORM_ADAPTERS[p]()
-        result = await measure_platform(brand, city, brand_en, positioning, make_ask_fn(adapter, limiters[p]), platform=p)
+        result = await measure_platform(brand, city, brand_en, positioning, make_ask_fn(adapter, limiters[p]), platform=p, system=system)
         return p, {
             "judgments": result["judgments"],
             "agent_notes": result["agent_notes"],
@@ -286,12 +297,29 @@ async def main(brand: str, city: str, run_id: str | None = None, platforms: list
         run_row = await db.get(CollectionRun, run_id_str)
         target_run_id, is_new_baseline = await _resolve_measure_target(db, run_row, current_fp)
 
+        # 换舆情搜索词 → 在**最终目标 run** 上重采舆情（轻路径：两路搜索，不碰 GT/CDP）。
+        # 放在解析之后：新基线时刷在新 clone 上 → 舆情材料与 sentiment_json 同 run，消除 run_id 分叉。
+        if refresh_sentiment:
+            target_run = await db.get(CollectionRun, target_run_id)
+            s = await refresh_run_sentiment(db, target_run, search_all_backends)
+            if s.get("written"):
+                line = (f"[舆情刷新] {s['materials']} 材料 → 新落库 {s['new_rows']} 行 | "
+                        f"门店级负面率(初筛) {s['store_level']['rate']}")
+                if s.get("brand_level"):
+                    line += f" / 品牌级 {s['brand_level']['rate']}"
+                print(line)
+            else:
+                print("[舆情刷新] ⚠️ 两路后端均无结果 → 未覆盖已有舆情（保留原值）；请核查后端后重跑")
+
         # 构造 measurement：基线变更 → 新基线第一版只用本次平台（不合并旧基线其他平台，防污染）；
         # 同基线全量 → 全新建；同基线补测 → 只替换目标平台
         measurement, _ = _build_measurement(
             brand, city, is_new_baseline, platforms, platform_results, existing_measurement)
         if is_new_baseline:
-            print(f"\n[问法基线变更] 检测到问法集变化（与现有基线指纹不同）→ 新开 run {target_run_id}，复制 P2（定位/舆情），第一版仅本次测的 {', '.join(platforms)} 平台；后续判定/归因/报告以新 run 为入口")
+            print(f"\n[问法基线变更] 检测到问法集变化（与现有基线指纹不同）→ 新开 run {target_run_id}，承接甲方事实（定位/gt/cdp），第一版仅本次测的 {', '.join(platforms)} 平台；后续判定/归因/报告以新 run 为入口")
+            if not refresh_sentiment:
+                print("  ⚠️ 新基线**未承接舆情**且**未刷舆情**（未带 --refresh-sentiment）→ 本 run 舆情为空；"
+                      "换舆情词请加 --refresh-sentiment，或事后跑 scripts/refresh_sentiment.py")
         elif set(platforms) != set(PLATFORM_ADAPTERS):
             print(f"[补测] 平台 {', '.join(platforms)} 已更新；其他平台结果原样保留（含主 agent 已判内容）")
 
@@ -300,6 +328,7 @@ async def main(brand: str, city: str, run_id: str | None = None, platforms: list
         if is_new_baseline:
             measurement["baseline_of"] = run_id_str
         measurement["question_fingerprint"] = current_fp
+        measurement["system"] = system   # 提问体系（A/B）——remeasure/converge 复算指纹与追溯用
         # 采集=草稿（spec ⑫）：只写 run.measurement_json，不开快照；
         # 全部派生指标（命中率/有效可见度/竞对相对可见度）在判定盖章（finalize_hit --apply →
         # close_measurement）时一次算齐，采集阶段 judgments 未判、派生无意义。
@@ -358,11 +387,15 @@ def _parse_args(argv):
     p.add_argument("run_id", nargs="?", default=None)
     p.add_argument("--platforms", default=None,
                    help="只测指定平台，逗号分隔（如 doubao / deepseek,kimi）。默认四平台全量")
+    p.add_argument("--refresh-sentiment", action="store_true",
+                   help="测量前在目标 run 上重采舆情（轻路径，两路搜索；换 sentiment_query.yaml 后用）")
+    p.add_argument("--system", default="A", choices=["A", "B"],
+                   help="提问体系（spec 3.1.2）：A=通用内置命中层（默认）；B=甲方指定命中层")
     args = p.parse_args(argv)
     platforms = [x.strip() for x in args.platforms.split(",")] if args.platforms else None
-    return args.brand, args.city, args.run_id, platforms
+    return args.brand, args.city, args.run_id, platforms, args.refresh_sentiment, args.system
 
 
 if __name__ == "__main__":
-    brand, city, run_id, platforms = _parse_args(sys.argv[1:])
-    asyncio.run(main(brand, city, run_id, platforms))
+    brand, city, run_id, platforms, refresh_sentiment, system = _parse_args(sys.argv[1:])
+    asyncio.run(main(brand, city, run_id, platforms, refresh_sentiment, system))

@@ -3,9 +3,12 @@
 背景：GT 是归因/落地/报告的共同地基，但**酒旅资产会随时间变**（餐厅开闭/改造、商场店铺变动、
 荣誉年评、设施开放、政策调整）——韩香馆（已停业）曾被当"甲方资产"，暴露 GT 时效从未系统校验。
 
-本脚本：读 `collection_runs.gt_facts_json` → 对「易过时类别」列待复核清单 + 计算距
-`last_verified_at` 的时效 → 输出人工复核清单（含建议搜索词）。**不自动联网**（时效判断需主 agent
-联网+人工确认，见 spec 教训）。
+本脚本：读 `collection_runs.gt_facts_json` → 对「易过时类别」列待复核清单 + 计算时效 →
+输出人工复核清单（含建议搜索词）。**不自动联网**（时效判断需主 agent 联网+人工确认，见 spec 教训）。
+
+**时效双层**：① run 级 = 距 `last_verified_at`（整批）；② **逐条** = 易变类别的事实距其
+`last_seen_at`（最近一次 CDP 观测，重抓重合并刷新）或 `captured_at`（首次捕获）——逐条超期打 ⏳。
+数据侧只存**锚点**（时间戳），是否过时在读取时临算（锚点不能冻结成标志，否则标志自己会过时）。
 
 用法：
   PYTHONPATH=. .venv/bin/python scripts/audit_gt_freshness.py <brand> <city> [--stale-days 180] [--out 报告.md]
@@ -59,7 +62,8 @@ def build_report(gj: dict, stale_days: int = DEFAULT_STALE_DAYS,
          f"- 时效状态: {'⚠️ **已超期，需复核**' if stale else '✅ 在时效内'}（阈值 {stale_days} 天）\n",
          f"## 待复核清单（易过时类别：{'/'.join(sorted(volatile_cats))}）\n",
          "> 复核方式：对每条用联网搜索确认**当前在营/有效状态**（注意：搜索摘要含历史资料，"
-         "判在营优先看**甲方官网当前页面**；「信源存在」≠「现在在营」）。\n"]
+         "判在营优先看**甲方官网当前页面**；「信源存在」≠「现在在营」）。\n",
+         f"> `⏳ N 天未复核` = 该条自 `last_seen_at`/`captured_at` 起已超阈（逐条数据时效）。\n"]
     n = 0
     for cat, items in facts.items():
         if cat not in volatile_cats:
@@ -71,7 +75,9 @@ def build_report(gj: dict, stale_days: int = DEFAULT_STALE_DAYS,
         hint = VOLATILE_HINTS.get(cat, "")
         for it in pending:
             n += 1
-            L.append(f"- [ ] {it.get('fact','')}  `[{it.get('source_tier','')}]`")
+            age = _days_since(it.get("last_seen_at") or it.get("captured_at"), today)
+            flag = f"  ⏳**{age} 天未复核**" if (age is not None and age > stale_days) else ""
+            L.append(f"- [ ] {it.get('fact','')}  `[{it.get('source_tier','')}]`{flag}")
             L.append(f"      ↳ 建议搜索：`{gj.get('city','')}{gj.get('brand','')} {hint}`")
         L.append("")
     L.append(f"\n**共 {n} 条待复核**（已标停业/改造的条目已跳过）")

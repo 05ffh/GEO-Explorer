@@ -39,6 +39,24 @@ def test_stale_detection():
     assert stale_none is True            # 未记录 = 需复核
 
 
+def test_per_fact_age_flag():
+    """逐条时效：易变类别事实距 last_seen_at（或回退 captured_at）超阈 → 打 ⏳；未超阈不打。"""
+    gj = {
+        "brand": "香格里拉", "city": "福州", "last_verified_at": "2026-09-18",
+        "volatile_categories": ["餐饮"],
+        "facts": {"餐饮": [
+            {"fact": "江南灶·融府", "source_tier": "T1", "last_seen_at": "2026-01-01"},  # 260 天前
+            {"fact": "榕城厝里", "source_tier": "T1", "captured_at": "2026-09-01"},       # 17 天前（回退 captured_at）
+        ]},
+    }
+    text, n, _ = build_report(gj, 180, "r", today=date(2026, 9, 18))
+    assert n == 2
+    js_line = [l for l in text.splitlines() if "江南灶·融府" in l][0]
+    rl_line = [l for l in text.splitlines() if "榕城厝里" in l][0]
+    assert "⏳" in js_line and "260" in js_line       # 超阈 → 逐条标 ⏳
+    assert "⏳" not in rl_line                         # 未超阈
+
+
 def test_days_since():
     assert _days_since("2026-09-18", date(2026, 9, 18)) == 0
     assert _days_since("2026-09-01", date(2026, 9, 18)) == 17

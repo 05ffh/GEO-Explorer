@@ -110,3 +110,13 @@ async def test_measure_guest_mix_from_personas_ok():
     ]}
     result = await measure_platform("香格里拉", "福州", None, positioning, await _ask({}))
     assert len(result["questions"]) == 35
+
+
+@pytest.mark.asyncio
+async def test_measure_system_b_client_hit_layer():
+    # 体系B（spec 3.1.2）：命中层 18（甲方指定）+ 归因层 10（共用体系A）= 28
+    positioning = {"tier": "高端", "competitors": ["福州世茂洲际酒店"]}
+    result = await measure_platform("香格里拉", "福州", None, positioning, await _ask({}), system="B")
+    assert len(result["questions"]) == 28
+    assert sum(q["layer"] == "hit" for q in result["questions"]) == 18
+    assert sum(q["layer"] == "attribution" for q in result["questions"]) == 10

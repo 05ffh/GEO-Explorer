@@ -41,6 +41,12 @@ def test_combine_negative_rate_8_2():
     assert combine_negative_rate(0.0, 1.0) == 0.2  # 门店 0 负面时，品牌 100% 只占 0.2
 
 
+def test_combine_negative_rate_single_scope():
+    """单档（无品牌级，brand_rate=None）→ 直接用门店级（权重 1.0），不做 8:2 稀释。"""
+    assert combine_negative_rate(0.3) == 0.3
+    assert combine_negative_rate(0.0) == 0.0
+
+
 def test_compute_negative_rate_dedup_and_zero():
     assert compute_negative_rate([])["rate"] == 0.0
     results = [
@@ -71,6 +77,21 @@ async def test_write_sentiment(db_session):
     }
     await write_sentiment(db_session, run.id, sentiment)
     assert run.sentiment_json == sentiment
+
+
+@pytest.mark.asyncio
+async def test_write_sentiment_single_scope_drops_stale_brand(db_session):
+    """单档写入清掉陈旧品牌级（档位集合以本次 payload 为准）——防旧口径残留。"""
+    org = Organization(name="单档清残留")
+    db_session.add(org)
+    await db_session.flush()
+    brand = await get_or_create_brand(db_session, "香格里拉", org.id)
+    run = await create_collection_run(db_session, org.id, brand.id, "福州", None)
+    await write_sentiment(db_session, run.id, {
+        "store_level": {"rate": 0.1}, "brand_level": {"rate": 0.2, "status": "confirmed"}})
+    await write_sentiment(db_session, run.id, {"store_level": {"rate": 0.3, "status": "preliminary"}})
+    assert set(run.sentiment_json.keys()) == {"store_level"}     # 品牌级被清
+    assert run.sentiment_json["store_level"]["rate"] == 0.3
 
 
 @pytest.mark.asyncio

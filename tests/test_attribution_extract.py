@@ -172,3 +172,19 @@ def test_build_client_context_two_tier_grounding_order():
     assert "未提到≠没有" in joined                   # 三态裁决语义
     assert "不判「甲方没有」" in joined
     assert "AI 声称但此处无" not in joined           # 旧"不算甲方资产"表述已替换为未证实语义
+
+
+def test_strict_evidence_strips_self_added_prefix_only():
+    """方案A（2026-10-14）：自加「前缀/注释」系统剥；AI 原文标签（含 markdown）保留；改写原样。"""
+    from src.collector.attribution_extract import _strict_evidence
+    ans = "酒店位置优越，毗邻五一广场，步行可达南门兜地铁站。"
+    # ① 自加前缀（标签不在原文）→ 剥
+    assert _strict_evidence("位置：毗邻五一广场", ans) == "毗邻五一广场"
+    # ② AI 原文自己带标签（markdown 加粗）→ 保留（比markdown 归一等价即视为逐字）
+    ans2 = "- **位置优越**：毗邻五一广场，步行可达南门兜地铁站"
+    assert _strict_evidence("位置优越：毗邻五一广场，步行可达南门兜地铁站", ans2) \
+        == "位置优越：毗邻五一广场，步行可达南门兜地铁站"
+    # ③ 括号注释：不在原文 → 剥；在原文 → 留
+    assert _strict_evidence("毗邻五一广场（我加的注释）", ans) == "毗邻五一广场"
+    # ④ 改写/拼接（正文对不上原文）→ 原样返回，不静默改内容
+    assert _strict_evidence("完全不存在于原文的话", ans) == "完全不存在于原文的话"

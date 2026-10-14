@@ -85,3 +85,83 @@ async def test_generate_cdp_midlayer_input(db_session):
     # 无 CDP 行 → 空 platforms（供 CLI 报"先跑 fetch_ota_cdp"）
     empty = await create_collection_run(db_session, org.id, brand.id, "厦门", None)
     assert (await generate_cdp_midlayer_input(db_session, empty.id))["platforms"] == {}
+
+
+def test_load_cdp_facts_stale_facts():
+    """stale_facts（过时/停业项）可选；结构非法（非 dict/类名错/非 str fact）则拦。"""
+    ok = load_cdp_facts('{"facts": {"餐饮": [{"fact": "江南灶·融府"}]}, '
+                        '"stale_facts": {"餐饮": [{"fact": "夏宫中餐厅", "reason": "已改造为江南灶·融府"}]}}')
+    assert ok["stale_facts"]["餐饮"][0]["fact"] == "夏宫中餐厅"
+    for bad in ('{"facts": {"餐饮": [{"fact": "x"}]}, "stale_facts": []}',
+                '{"facts": {"餐饮": [{"fact": "x"}]}, "stale_facts": {"夸房": [{"fact": "y"}]}}',
+                '{"facts": {"餐饮": [{"fact": "x"}]}, "stale_facts": {"餐饮": [{"fact": 1}]}}'):
+        with pytest.raises(ValueError):
+            load_cdp_facts(bad)
+
+
+@pytest.mark.asyncio
+async def test_stale_facts_not_merged_into_gt(db_session):
+    """过时项进 stale_facts：留档但不掺入 gt_facts_json（merge 只读 facts）——防污染第一依据。"""
+    org = Organization(name="过时")
+    db_session.add(org)
+    await db_session.flush()
+    brand = await get_or_create_brand(db_session, "香格里拉", org.id)
+    run = await create_collection_run(db_session, org.id, brand.id, "福州", None)
+    run.gt_facts_json = {"facts": {}}
+    facts = {"facts": {"餐饮": [{"fact": "江南灶·融府"}]},
+             "stale_facts": {"餐饮": [{"fact": "夏宫中餐厅", "reason": "已改造为江南灶·融府"}]}}
+    await ingest(db_session, run.id, facts)
+    gt = [f["fact"] for f in run.gt_facts_json["facts"].get("餐饮", [])]
+    assert "江南灶·融府" in gt
+    assert "夏宫中餐厅" not in gt                                              # 过时项不掺入第一依据
+    assert run.cdp_facts_json["stale_facts"]["餐饮"][0]["fact"] == "夏宫中餐厅"  # 但留档供 P4
+
+
+@pytest.mark.asyncio
+async def test_dedup_refreshes_last_seen_at(db_session):
+    """去重命中时刷新「最近观测」锚点（重抓重合并=复核）——否则时效审计误报过时。"""
+    org = Organization(name="复核")
+    db_session.add(org)
+    await db_session.flush()
+    brand = await get_or_create_brand(db_session, "香格里拉", org.id)
+    run = await create_collection_run(db_session, org.id, brand.id, "福州", None)
+    run.gt_facts_json = {"facts": {"客房": [{"fact": "414间客房，楼高26层"}]}}
+    db_session.add(SearchResultRecord(
+        organization_id=org.id, brand_id=brand.id, collection_run_id=run.id,
+        search_backend="cdp", query="福州香格里拉",
+        url="https://hotels.ctrip.com/hotels/429558.html",
+        content_text="414间客房，楼高26层", source_tier="T1"))
+    await db_session.flush()
+
+    summary = await ingest(db_session, run.id, {
+        "facts": {"客房": [{"fact": "414间客房，楼高26层", "platforms": ["携程"]}]}})
+    assert len(summary["deduped"]) == 1
+    entry = run.gt_facts_json["facts"]["客房"][0]
+    assert entry.get("last_seen_at")            # 观测=复核：刷新最近观测锚点
+    assert "captured_at" not in entry           # 既有基线事实的首次捕获锚点不被覆盖
+
+
+@pytest.mark.asyncio
+async def test_generate_includes_stale_reference(db_session):
+    """generate 注入 GT 已确认过时项（停业/改造）→ 供主 agent 判 CDP 页面过时描述（如夏宫）。"""
+    org = Organization(name="参照")
+    db_session.add(org)
+    await db_session.flush()
+    brand = await get_or_create_brand(db_session, "香格里拉", org.id)
+    run = await create_collection_run(db_session, org.id, brand.id, "福州", None)
+    run.gt_facts_json = {"facts": {"餐饮": [
+        {"fact": "江南灶·融府— 由原「夏宫」中餐厅改造"},   # 「改造」无「已」前缀 → 仍应入参照
+        {"fact": "韩香馆（韩国烧烤）（已停业）"},
+        {"fact": "大堂酒廊·榕城厝里"},                      # 在营 → 不入参照
+    ]}}
+    db_session.add(SearchResultRecord(
+        organization_id=org.id, brand_id=brand.id, collection_run_id=run.id,
+        search_backend="cdp", query="福州香格里拉",
+        url="https://hotel.alitrip.com/hotel_detail2.htm?shid=10015487",
+        content_text="酒店介绍…夏宫…", source_tier="T1"))
+    await db_session.flush()
+
+    ref = (await generate_cdp_midlayer_input(db_session, run.id))["stale_reference"]
+    assert any("夏宫" in r for r in ref)
+    assert any("韩香馆" in r for r in ref)
+    assert not any("榕城厝里" in r for r in ref)

@@ -33,36 +33,21 @@ class TestBuildSearchQueries:
 
 class TestBuildSentimentQueries:
 
-    def test_store_level_has_city(self):
+    def test_single_scope_store_level(self):
+        """体系B 单档（2026-10-14）：只有 store_level，词表硬编码福州香格里拉（不参数化）。"""
         queries = build_sentiment_queries("香格里拉", "广州")
-        store = [q for q in queries if q["field"] == "store_level"]
-        assert store, "门店级 query 应存在"
-        assert any("广州" in q["query"] for q in store)
+        assert queries and all(q["field"] == "store_level" for q in queries)
+        assert all("福州香格里拉" in q["query"] for q in queries)  # 硬编码，与传入品牌/城市无关
+        assert len(queries) == 20
 
-    def test_brand_level_no_city(self):
-        queries = build_sentiment_queries("香格里拉", "广州")
-        brand = [q for q in queries if q["field"] == "brand_level"]
-        assert brand, "品牌级 query 应存在"
-        for q in brand:
-            assert "广州" not in q["query"]
-
-    def test_city_none_only_brand_level(self):
-        queries = build_sentiment_queries("香格里拉", city=None)
-        assert all(q["field"] == "brand_level" for q in queries)
+    def test_city_none_same_words(self):
+        queries = build_sentiment_queries("香格里拉", "福州")
+        assert all(q["field"] == "store_level" for q in queries)
 
     def test_negative_recall_words_present(self):
-        """负面倾向搜索词（spec 4.5 双形态）：门店级 UGC 差评 + 品牌级舆情新闻。"""
-        queries = build_sentiment_queries("香格里拉", "福州")
-        store = [q["query"] for q in queries if q["field"] == "store_level"]
-        brand = [q["query"] for q in queries if q["field"] == "brand_level"]
-        # UGC 差评形态
+        """负面倾向搜索词覆盖差评/投诉/卫生/押金…（体系B 词表）。"""
+        store = [q["query"] for q in build_sentiment_queries("香格里拉", "福州")]
         assert any("差评" in q for q in store)
         assert any("投诉" in q for q in store)
-        assert any("踩雷" in q for q in store)
-        # 舆情新闻形态
-        assert any("曝光" in q for q in brand)
-        assert any("约谈" in q for q in brand)
-        assert any("处罚" in q for q in brand)
-        # 总量分母仍保留（评价/推荐/口碑）
-        assert any("评价" in q for q in store)
-        assert any("口碑" in q for q in brand)
+        assert any("卫生" in q for q in store)
+        assert any("押金" in q for q in store)

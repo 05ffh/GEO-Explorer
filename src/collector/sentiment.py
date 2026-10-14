@@ -87,11 +87,14 @@ def compute_negative_rate(results) -> dict:
     }
 
 
-def combine_negative_rate(store_rate: float, brand_rate: float) -> float:
-    """合成负面率：门店级 0.8 + 品牌级 0.2（spec 4.6）。
+def combine_negative_rate(store_rate: float, brand_rate: float | None = None) -> float:
+    """合成负面率：门店级 0.8 + 品牌级 0.2（spec 4.6）；**单档**（无品牌级）→ 直接用门店级（权重 1.0）。
 
-    brand_rate 应为主 agent 终判后、已做地区过滤（跨省算/跨国不算）的品牌级负面率。
+    brand_rate 应为主 agent 终判后、已做地区过滤（跨省算/跨国不算）的品牌级负面率；
+    brand_rate=None 表示本诊断单元只有门店级（体系B，2026-10-14 起）→ 不做 8:2 稀释。
     """
+    if brand_rate is None:
+        return round(store_rate, 4)
     return round(0.8 * store_rate + 0.2 * brand_rate, 4)
 
 

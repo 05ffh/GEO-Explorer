@@ -13,10 +13,11 @@ from src.collector.judgment import LAYER_ATTRIBUTION, LAYER_HIT, new_judgment
 from src.collector.question_builder import build_questions
 
 
-def build_platform_questions(brand: str, city: str, positioning: dict) -> list[dict]:
+def build_platform_questions(brand: str, city: str, positioning: dict, system: str = "A") -> list[dict]:
     """生成单平台**全量**题（命中+归因），measure_platform 与复测收敛的指纹共用——单一来源防指纹漂移。
 
     竞对解析（主竞对 / 场景竞对）收敛在这里，remeasure 算指纹必须和实际采集同一套题。
+    `system` 透传 build_questions（两套体系，spec 3.1.2）：A=通用命中层 / B=甲方指定命中层。
     """
     tier = positioning.get("tier")
     competitors = positioning.get("competitors") or []
@@ -28,7 +29,8 @@ def build_platform_questions(brand: str, city: str, positioning: dict) -> list[d
         primary = select_primary(competitors, tier, client_adr=positioning.get("adr"), client_guest=client_guest)
         competitor = primary["name"] if primary else (competitors[0].get("name") if competitors else None)
     return build_questions(brand, city, tier=tier, competitor=competitor,
-                           scenario_competitors=positioning.get("scenario_competitors") or {})
+                           scenario_competitors=positioning.get("scenario_competitors") or {},
+                           system=system)
 
 _AGENT_TASK = (
     "命中语义判定：判 recommendation（推荐/提及/排除/未出现）+ scene（子场景维度/值/子场景内排名/数）"
@@ -51,20 +53,21 @@ async def measure_platform(
     platform: str = "",
     layers: set[str] | None = None,
     qids: set[str] | None = None,
+    system: str = "A",
 ) -> dict:
     """单平台测量：读定位 → 生成命中层+归因层题 → 提问 → 判定。
 
     positioning = collection_run.positioning_json（tier/competitors/scenario_competitors）。
-    命中层 25 题测可见度（进命中率分母）；归因层 10 题（5 对比"选哪家为什么" + 5 平衡"各自优劣势"，
-    按场景匹配竞对点名各自头号对手）采"为什么"证据，不进命中率分母
-    （compute_platform_rate 过滤 layer=attribution，spec 3.1.1）。
+    `system`（spec 3.1.2）：A=通用命中层 25 题 / B=甲方指定命中层（client 文件）；命中层进命中率分母；
+    归因层 10 题两套共用（5 对比"选哪家为什么" + 5 平衡"各自优劣势"，按场景匹配竞对点名头号对手），
+    不进命中率分母（compute_platform_rate 过滤 layer=attribution，spec 3.1.1）。
 
     layers：只采集指定层（如 {"attribution"}）——复测收敛分层用（稳定平台 DS/Kimi 只重采归因层，
-    命中层沿用第 1 轮）；None = 全采。**指纹仍按全 35 题算**（build_questions 全集），
+    命中层沿用第 1 轮）；None = 全采。**指纹仍按全题集算**（build_questions 全集），
     只过滤"提问/判定"子集，保证同基线指纹不变（spec 复测收敛设计）。
     返回 {"questions", "judgments"}，judgments 每项 = judge 结果 + question/question_id。
     """
-    questions = build_platform_questions(brand, city, positioning)
+    questions = build_platform_questions(brand, city, positioning, system=system)
     if layers:
         questions = [q for q in questions if q["layer"] in layers]
     if qids:

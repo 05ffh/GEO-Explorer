@@ -52,9 +52,7 @@ def test_verify_search_backends_no_longer_bare_except():
     """Verify the 7 fixed search backends no longer have bare except Exception."""
     search_dir = Path(__file__).resolve().parents[1] / "src" / "search"
     fixed_files = [
-        "tavily_backend.py",
-        "duckduckgo_search_adapter.py", "tavily_search_adapter.py",
-        "duckduckgo_backend.py",
+        "tavily_backend.py", "tavily_search_adapter.py",
     ]
     for fname in fixed_files:
         fpath = search_dir / fname

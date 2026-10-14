@@ -165,7 +165,6 @@ class Settings(BaseSettings):
 
     # --- GT Search Pipeline ---
     gt_search_tavily_enabled: bool = True
-    gt_search_duckduckgo_enabled: bool = True
     gt_search_doubao_enabled: bool = True
     gt_search_cache_ttl_seconds: int = 86400  # 24h
     tavily_api_key: str = ""
@@ -179,10 +178,9 @@ class Settings(BaseSettings):
     search_retry_backoff_seconds: float = 1.5
     search_disable_after_failures: int = 2
     tavily_independent_client: bool = True
-    duckduckgo_auto_disable: bool = True
 
-    # --- 搜索后端限流（三引擎并发采集，防 429/封禁）---
-    # Tavily/Doubao 为 API（RPM 按套餐浮动），DDG 为爬取（无 key、最敏感，从严）
+    # --- 搜索后端限流（两引擎并发采集，防 429/封禁）---
+    # Tavily/Doubao 为 API（RPM 按套餐浮动）；DDG 已于 2026-10-14 移除（端点不可达、拖慢采集）
     search_rate_limits: dict = {
         "tavily": {
             "max_concurrent": 2, "min_interval_seconds": 0.2,
@@ -191,10 +189,6 @@ class Settings(BaseSettings):
         "doubao_search": {
             "max_concurrent": 2, "min_interval_seconds": 0.2,
             "max_requests_per_minute": 15, "backoff_base_seconds": 5, "backoff_max_seconds": 60,
-        },
-        "duckduckgo": {
-            "max_concurrent": 1, "min_interval_seconds": 0.5,
-            "max_requests_per_minute": 8, "backoff_base_seconds": 10, "backoff_max_seconds": 120,
         },
     }
 

@@ -18,7 +18,7 @@ class EnhancedSearchResult:
     title: str
     url: str
     snippet: str
-    provider: str          # "tavily", "google_cse", "duckduckgo"
+    provider: str          # "tavily", "doubao_search"
     rank: int              # 1-based position in provider results
     source_tier: str = "C"  # S/A/B/C/D — determined by source_url, not provider
     published_at: str | None = None

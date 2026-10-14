@@ -43,11 +43,17 @@ def build_questions(
     attraction: str | None = None,
     budget: str | None = None,
     scenario_competitors: dict | None = None,
+    system: str = "A",
 ) -> list[dict]:
-    """实例化命中层 + 归因层问题。
+    """实例化命中层 + 归因层问题（spec 3.1.2 两套体系）。
+
+    `system`：
+      - **"A"（默认）**：甲方未指定关键词 → 命中层用内置通用模板（`question_templates.yaml`，25 题变量化）。
+      - **"B"**：甲方指定关键词 → 命中层用甲方专属预设（`question_templates_client.yaml`，硬编码）；
+        **归因层两套共用** `question_templates.yaml` 的归因层（10 题）。
 
     返回 [{"id", "persona", "slot", "layer", "question"}, ...]。
-    - 档位词题（含 {档次词}）：tier 未定则跳过（定位失败，问不出正确档位）。
+    - 档位词题（含 {档次词}）：tier 未定则跳过（定位失败，问不出正确档位）——仅体系A 命中层含此。
     - 归因层题：竞品未识别则跳过（无对比对象）。
     - **场景匹配竞对（P1-②，2026-09-10）**：scenario_competitors = {场景(persona): 竞对名}，
       归因题按该场景头号对手注入（从最终确认竞对里选）；该场景无映射回退单主竞对 competitor。
@@ -66,8 +72,18 @@ def build_questions(
         "竞品": competitor,
     }
 
+    kb = get_knowledge_loader()
+    if system == "B":
+        # 体系B：命中层 = 甲方指定（client 文件）；归因层共用体系A 文件的归因层
+        items = list(kb.load_category("question_templates_client")) + [
+            it for it in kb.load_category("question_templates")
+            if it.get("layer", "hit") == "attribution"
+        ]
+    else:
+        items = kb.load_category("question_templates")
+
     questions: list[dict] = []
-    for item in get_knowledge_loader().load_category("question_templates"):
+    for item in items:
         tmpl = item["template"]
         layer = item.get("layer", "hit")
 

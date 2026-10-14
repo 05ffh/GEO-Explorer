@@ -1,7 +1,7 @@
 """酒旅 GT 采集器（P2）—— 生成搜索词 → 搜索 → 判 tier → 返回原始材料。
 
 字段值提取由主 agent 辅助（语义判断），系统做确定性部分：
-query_builder（搜索词）+ search_fn（搜索，四引擎并列由主 agent 编排）+ source_tier（判 tier）。
+query_builder（搜索词）+ search_fn（搜索，两路并列由主 agent 编排）+ source_tier（判 tier）。
 可信度 assess_credibility 由主 agent 提取归一化字段值后调用（值依赖语义，不进此骨架）。
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ class RawMaterial:
     title: str = ""     # 标题
     snippet: str = ""   # 摘要
     tier: str = "T3"    # 信源 tier（source_tier 判定，事实采集用）
-    provider: str = ""  # 来源引擎（tavily/doubao_search/duckduckgo/websearch）
+    provider: str = ""  # 来源引擎（tavily/doubao_search/websearch；DDG 2026-10-14 移除）
     published_at: str = ""   # 发布时间（时效验证；搜索引擎返回则存，无则空）
 
 
