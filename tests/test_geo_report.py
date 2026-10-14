@@ -4,10 +4,13 @@ from src.report.geo_report import render_report
 
 _DATA = {"brand": "香格里拉", "city": "福州", "hit_rate": 0.7873, "question_count": 28,
          "platform_hit_rates": {"deepseek": 0.9375}, "competitors": {"main": [], "secondary": []},
-         "scenes": [], "attribution": {}, "sentiment": {"themes": {}}, "content_assets": [],
+         "scenes": [], "attribution": {}, "sentiment": {"rate": 0.1735, "negative_count": 17, "themes": {}}, "content_assets": [],
          "effective_visibility": 0.6917, "negative_rate": 0.1735, "appendix": {}}
 _NARR = {"exec_summary": {"conclusion": "结论", "highlights": [], "risks": [], "priority": []},
-         "sections": {}}
+         "hit_rate_explain": "命中率说明", "scenes": {},
+         "competitors": {"summary": "竞对", "source_note": "来源"},
+         "sentiment": {"summary": "舆情"}, "assets": {"summary": "资产"},
+         "attribution": {"key_quotes": []}, "directions": [], "method": "方法"}
 
 
 def test_render_contains_brand_and_rate():
