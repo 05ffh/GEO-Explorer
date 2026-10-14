@@ -73,5 +73,21 @@ def test_appendix_judgments_per_platform():
     d = build_report_data(_run(_M))
     ds = d["appendix"]["deepseek"]
     assert ds[0]["question_id"] == "hit_b1"
-    assert ds[0]["recommended"] is True
+    assert ds[0]["state"] == "推荐"
     assert ds[0]["summary"] == "老牌五星，位置核心"
+
+
+def test_content_themes_merged():
+    d = build_report_data(_run(_M))
+    themes = {t["theme"]: t["count"] for t in d["content_themes"]}
+    # "地址：福州市鼓楼区新权南路9号"（count=2）含"地址"→归入位置与交通
+    assert sum(themes.values()) == 2
+    assert "位置与交通（五一广场 / 南门兜地铁）" in themes
+
+
+def test_gt_facts_by_category():
+    gt = {"facts": {"客房": [{"fact": "a"}, {"fact": "b"}], "餐饮": [{"fact": "c"}]}}
+    d = build_report_data(_run(_M, gt=gt))
+    by = {c["category"]: c for c in d["gt_facts_by_category"]}
+    assert by["客房"]["count"] == 2 and by["客房"]["sample"] == "a"
+    assert by["餐饮"]["count"] == 1

@@ -82,6 +82,11 @@ async def apply(run_id: str, verdict_path: str) -> None:
             for r in negative:
                 for h in classify_negative(r.snippet or ""):
                     themes[h.theme] = themes.get(h.theme, 0) + 1
+            items = [{
+                "title": r.title or "", "url": r.url or "",
+                "themes": sorted({h.theme for h in classify_negative(r.snippet or "")}),
+                "snippet": (r.snippet or "")[:160],
+            } for r in negative]
             result[key] = {
                 "total": total_clean,
                 "negative_count": len(negative),
@@ -89,6 +94,7 @@ async def apply(run_id: str, verdict_path: str) -> None:
                 "themes": themes,
                 "status": "confirmed",
                 "excluded_count": len(excluded),
+                "items": items,
             }
         await write_sentiment(db, run_id, result)
         await db.commit()

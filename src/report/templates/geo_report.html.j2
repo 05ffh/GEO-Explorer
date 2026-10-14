@@ -123,6 +123,8 @@
     {% for c in competitors.main %}<tr><td>{{ c.name }}</td><td class="num">{{ (c.rate*100)|round(1) }}%</td><td>主要竞对</td></tr>{% endfor %}
     {% for c in competitors.secondary %}<tr><td>{{ c.name }}</td><td class="num">{{ (c.rate*100)|round(1) }}%</td><td>次要竞对</td></tr>{% endfor %}
   </table>
+  <h3 class="sub">主要竞对与次要竞对如何区分</h3>
+  <p class="lede">{{ narrative.competitors.band_note }}</p>
   <p class="note">{{ narrative.competitors.source_note }}</p>
   <div class="foot"><span>{{ FOOT }}</span><span>03 · 竞对</span></div>
 </div>
@@ -140,6 +142,11 @@
     {% for t, n in sentiment.themes.items() %}<tr><td>{{ t }}</td><td class="num">{{ n }}</td></tr>{% endfor %}
   </table>
   <p class="lede">{{ narrative.sentiment.summary }}</p>
+  <h3 class="sub">负面条目（含来源，可逐条核验）</h3>
+  <table><tr><th>主题</th><th>条目</th><th>来源</th></tr>
+    {% for it in sentiment['items'] %}<tr><td>{{ it.theme }}</td><td>{{ it.title }}</td>
+      <td style="word-break:break-all;font-size:11px;color:#6b7280">{{ it.url }}</td></tr>{% endfor %}
+  </table>
   <div class="foot"><span>{{ FOOT }}</span><span>04 · 舆情</span></div>
 </div>
 
@@ -147,11 +154,20 @@
 <div class="page divider"><div class="no">05</div><h2>被低估的资产</h2><div class="dsub">AI 眼中的 {{ city }}{{ brand }}</div></div>
 <div class="page">
   <h2 class="sec">五、被低估的资产：AI 眼中的 {{ city }}{{ brand }}</h2>
-  <h3 class="sub">AI 实际引用了什么</h3>
-  <table><tr><th>AI 引用的内容</th><th>出现次数</th></tr>
-    {% for a in content_assets[:12] %}<tr><td>{{ a.content }}</td><td class="num">{{ a.count }}</td></tr>{% endfor %}
+  <h3 class="sub">AI 实际引用了什么（按资产主题归并）</h3>
+  <table><tr><th>资产主题</th><th>被引用次数</th></tr>
+    {% for t in content_themes %}<tr><td>{{ t.theme }}</td><td class="num">{{ t.count }}</td></tr>{% endfor %}
   </table>
   <p class="lede">{{ narrative.assets.summary }}</p>
+  <div class="foot"><span>{{ FOOT }}</span><span>05 · 资产</span></div>
+</div>
+<div class="page">
+  <h2 class="sec">五、对比：甲方掌握的完整资产（{{ gt_facts_count }} 条）</h2>
+  <p class="lede">AI 能检索到的，只是甲方资产的冰山一角。以下是甲方（含三大平台页面）掌握的完整资产清单，按类别：</p>
+  <table><tr><th>类别</th><th>条数</th><th>示例</th></tr>
+    {% for c in gt_facts_by_category %}<tr><td>{{ c.category }}</td><td class="num">{{ c.count }}</td><td>{{ c.sample }}</td></tr>{% endfor %}
+  </table>
+  <p class="note">这些资产部分尚未被 AI 引用——正是可以铺出去的内容机会。</p>
   <div class="foot"><span>{{ FOOT }}</span><span>05 · 资产</span></div>
 </div>
 
@@ -163,6 +179,14 @@
     {% for dim, d in attribution.items() %}
     <tr><td>{{ dim }}</td><td class="num">{{ d.advantage }}</td><td class="num">{{ d.true_disadvantage }}</td></tr>
     {% endfor %}
+  </table>
+  <h3 class="sub">各维度具体内容（AI 原话）</h3>
+  <table><tr><th>维度</th><th>甲方优势（AI 这么说）</th><th>甲方劣势（AI 这么说）</th></tr>
+    {% for dim, d in attribution.items() %}<tr>
+      <td>{{ dim }}</td>
+      <td style="font-size:12px">{{ d.advantage_evidence[:2] | join("；") or "—" }}</td>
+      <td style="font-size:12px">{{ d.disadvantage_evidence[:2] | join("；") or "—" }}</td>
+    </tr>{% endfor %}
   </table>
   <h3 class="sub">最该解决的短板（AI 原话）</h3>
   {% for q in narrative.attribution.key_quotes %}<blockquote>{{ q }}</blockquote>{% endfor %}
@@ -182,10 +206,11 @@
 {% for p, rows in appendix.items() %}
 <div class="page">
   <h2 class="sec">附录 · {{ PLAT_CN.get(p, p) }} 逐题命中明细</h2>
-  <table><tr><th>#</th><th>问题</th><th>是否推荐</th><th>命中摘要</th></tr>
+  <table><tr><th>#</th><th>问题</th><th>判定</th><th>命中摘要</th></tr>
     {% for r in rows %}<tr><td>{{ loop.index }}</td><td>{{ r.question }}</td>
-      <td>{{ "推荐" if r.recommended else "未推荐" }}</td><td>{{ r.summary }}</td></tr>{% endfor %}
+      <td>{{ r.state }}</td><td>{{ r.summary }}</td></tr>{% endfor %}
   </table>
+  <p class="note">判定口径：推荐 = AI 主动推荐甲方；引用 = AI 提到了甲方但未列入推荐；未提及 = AI 未提到甲方。</p>
   <div class="foot"><span>{{ FOOT }}</span><span>附录 · {{ PLAT_CN.get(p, p) }}</span></div>
 </div>
 {% endfor %}
