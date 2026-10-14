@@ -80,9 +80,9 @@ def test_appendix_judgments_per_platform():
 def test_content_themes_merged():
     d = build_report_data(_run(_M))
     themes = {t["theme"]: t["count"] for t in d["content_themes"]}
-    # "地址：福州市鼓楼区新权南路9号"（count=2）含"地址"→归入位置与交通
+    # "地址：福州市鼓楼区新权南路9号"（count=2）含"地址"→归入 8 类的「位置交通」
     assert sum(themes.values()) == 2
-    assert "位置与交通（五一广场 / 南门兜地铁）" in themes
+    assert "位置交通" in themes
 
 
 def test_gt_facts_by_category():

@@ -7,30 +7,25 @@ from __future__ import annotations
 
 _THEME_CN = {"hygiene": "卫生", "service": "服务", "dining": "餐饮", "price": "价格"}
 
-# AI 引用内容 → 资产主题归并（B2：人工定规则、代码套用，可复现）。按优先级匹配，命中即停。
-_CONTENT_THEMES: list[tuple[str, tuple[str, ...]]] = [
-    ("米其林星级餐饮（江南灶·融府）", ("江南灶", "米其林", "融府", "淮扬", "狮子头", "佛跳墙", "主厨", "黑珍珠", "闽和南", "葵香鸡", "融小馆")),
-    ("宴会与会议（1725㎡ 无柱宴会厅）", ("宴会厅", "婚宴", "婚礼", "会议", "剧院式", "无柱", "桌起", "宴席", "酒席")),
-    ("位置与交通（五一广场 / 南门兜地铁）", ("五一广场", "地铁", "南门兜", "三坊七巷", "地址", "地段", "心脏地带", "于山", "乌山", "公里", "步行", "鼓楼区", "交通便利", "地标")),
-    ("亲子设施（芽宝乐园 / 亲子房）", ("亲子", "儿童", "芽宝", "带娃", "婴儿床", "家庭房", "游乐", "两大两小")),
-    ("康体（室内泳池 / 健身）", ("泳池", "按摩浴缸", "健身", "恒温")),
-    ("客房与视野（高层俯瞰）", ("客房", "房型", "天际房", "高层", "俯瞰", "间客房", "床")),
-    ("商场配套（八匚汇）", ("八匚汇", "商业体", "商场", "购物")),
-    ("口碑评分", ("评分", "口碑", "好评", "TOP1", "评价")),
-    ("餐饮（香宫 / 夏宫 / 自助）", ("餐厅", "香宫", "夏宫", "自助", "闽菜", "粤菜", "餐", "酒廊")),
-    ("服务（宴会管家 / 服务稳定）", ("服务", "管家", "接待", "周到")),
-    ("老牌五星与品牌", ("老牌", "五星", "2005", "开业", "香格里拉集团", "国际品牌", "品牌")),
-]
+def _content_themes() -> list[tuple[str, tuple[str, ...]]]:
+    """从词库读资产主题归并规则（对齐 8 类资产分类，顺序匹配先命中先归）。"""
+    from src.industry_knowledge.loader import get_knowledge_loader
+    try:
+        items = get_knowledge_loader().load_category("content_theme_grouping")
+    except Exception:
+        return []
+    return [(it["theme"], tuple(str(k) for k in (it.get("keywords") or []))) for it in items if it.get("theme")]
 
 
 def _group_content_assets(assets: list[dict]) -> list[dict]:
-    """AI 引用内容按资产主题归并（B2）：同义措辞合并、主题计数。"""
+    """AI 引用内容按 8 类资产归并（顺序匹配，先命中先归）；未归类落「其他」。"""
+    rules = _content_themes()
     tally: dict[str, int] = {}
     other = 0
     for a in assets:
         text = a.get("content") or ""
         n = a.get("count") or 1
-        for theme, kws in _CONTENT_THEMES:
+        for theme, kws in rules:
             if any(k in text for k in kws):
                 tally[theme] = tally.get(theme, 0) + n
                 break
