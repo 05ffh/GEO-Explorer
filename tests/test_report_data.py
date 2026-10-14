@@ -91,3 +91,14 @@ def test_gt_facts_by_category():
     by = {c["category"]: c for c in d["gt_facts_by_category"]}
     assert by["客房"]["count"] == 2 and by["客房"]["sample"] == "a"
     assert by["餐饮"]["count"] == 1
+
+
+def test_sentiment_status_gate():
+    """终判闸门：报告前须**全部层级** confirmed，否则识别为未终判。"""
+    from src.report.report_data import sentiment_status
+    assert sentiment_status(_run(_M, sentiment={"store_level": {"status": "confirmed"}})) == "confirmed"
+    assert sentiment_status(_run(_M, sentiment={"store_level": {"status": "preliminary"}})) == "preliminary"
+    assert sentiment_status(_run(_M)) == "missing"
+    # 体系A 两档：brand 未终判 → 也应拦
+    two = {"store_level": {"status": "confirmed"}, "brand_level": {"status": "preliminary"}}
+    assert sentiment_status(_run(_M, sentiment=two)) == "preliminary"

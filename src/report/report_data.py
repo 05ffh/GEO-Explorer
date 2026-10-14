@@ -94,6 +94,21 @@ def _count_facts(facts_json) -> int:
 _REC_CN = {"recommend": "推荐", "mention": "引用", "exclude": "排除", "absent": "未提及"}
 
 
+def sentiment_status(run) -> str:
+    """舆情终判状态（报告闸门用）：confirmed=全部层级已终判 / 其他=未终判 / missing=无。
+
+    查**所有**层级（体系B 只有 store_level；体系A 还有 brand_level）——任一层未 confirmed
+    即视为未终判（负面率仍含粗筛误判），报告不得出，由 CLI 校验后拒绝。
+    """
+    s = run.sentiment_json or {}
+    levels = [v.get("status") for v in s.values() if isinstance(v, dict)]
+    if not levels:
+        return "missing"
+    if all(x == "confirmed" for x in levels):
+        return "confirmed"
+    return next((x for x in levels if x != "confirmed"), "missing") or "missing"
+
+
 def _appendix(platforms: dict) -> dict:
     """附录：每平台逐题命中明细（题面 / 判定状态 / 命中摘要）。"""
     out: dict[str, list] = {}
