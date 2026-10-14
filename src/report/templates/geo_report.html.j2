@@ -7,7 +7,7 @@
   :root{--blue:#1e3a8a;--blue2:#2563eb;--bluebg:#eff6ff;--ink:#111827;--mut:#6b7280;--line:#e5e7eb;}
   @page{size:A4;margin:0;}
   *{box-sizing:border-box;}
-  body{margin:0;font-family:'Microsoft YaHei','Noto Sans SC',sans-serif;color:var(--ink);background:#fff;line-height:1.75;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  body{margin:0;font-family:'Microsoft YaHei','Noto Sans CJK SC','Noto Sans SC','PingFang SC',sans-serif;color:var(--ink);background:#fff;line-height:1.75;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   .page{width:210mm;min-height:297mm;padding:22mm 20mm;margin:0 auto;position:relative;page-break-after:always;}
   .page:last-child{page-break-after:auto;}
   .foot{position:absolute;bottom:10mm;left:20mm;right:20mm;font-size:9px;color:var(--mut);
@@ -44,6 +44,10 @@
   .note{font-size:11.5px;color:var(--mut);margin-top:6px;}
   ul.plain{margin:8px 0;padding-left:20px;}
   ul.plain li{margin:4px 0;font-size:14px;}
+  table.compact{font-size:11px;margin:8px 0;}
+  table.compact td{padding:3px 6px;line-height:1.4;}
+  table.compact th{padding:5px 6px;font-size:11px;}
+  .ellip{overflow:hidden;text-overflow:ellipsis;}
 </style>
 </head>
 <body>
@@ -57,7 +61,7 @@
   <h1>{{ city }}{{ brand }}</h1>
   <div class="sub">在生成式 AI 世界里的品牌可见度</div>
   <div class="big">{{ (hit_rate*100)|round(1) }}%</div>
-  <div class="biglabel">综合命中率 · 基于 {{ question_count }} 个高频问题 × 4 个主流 AI</div>
+  <div class="biglabel">综合命中率 · 基于 {{ hit_question_count }} 个高频问题 × 4 个主流 AI</div>
   <div class="meta">数据时间：{{ date }}</div>
 </div>
 
@@ -143,9 +147,9 @@
   </table>
   <p class="lede">{{ narrative.sentiment.summary }}</p>
   <h3 class="sub">负面条目（含来源，可逐条核验）</h3>
-  <table><tr><th>主题</th><th>条目</th><th>来源</th></tr>
-    {% for it in sentiment['items'] %}<tr><td>{{ it.theme }}</td><td>{{ it.title }}</td>
-      <td style="word-break:break-all;font-size:11px;color:#6b7280">{{ it.url }}</td></tr>{% endfor %}
+  <table class="compact"><tr><th style="width:12%">主题</th><th style="width:48%">条目</th><th style="width:40%">来源</th></tr>
+    {% for it in sentiment['items'] %}<tr><td>{{ it.theme }}</td><td>{{ it.title[:34] }}</td>
+      <td style="word-break:break-all;font-size:10px;color:#6b7280">{{ it.url }}</td></tr>{% endfor %}
   </table>
   <div class="foot"><span>{{ FOOT }}</span><span>04 · 舆情</span></div>
 </div>
@@ -181,11 +185,11 @@
     {% endfor %}
   </table>
   <h3 class="sub">各维度具体内容（AI 原话）</h3>
-  <table><tr><th>维度</th><th>甲方优势（AI 这么说）</th><th>甲方劣势（AI 这么说）</th></tr>
+  <table class="compact"><tr><th style="width:10%">维度</th><th style="width:45%">甲方优势（AI 这么说）</th><th style="width:45%">甲方劣势（AI 这么说）</th></tr>
     {% for dim, d in attribution.items() %}<tr>
       <td>{{ dim }}</td>
-      <td style="font-size:12px">{{ d.advantage_evidence[:2] | join("；") or "—" }}</td>
-      <td style="font-size:12px">{{ d.disadvantage_evidence[:2] | join("；") or "—" }}</td>
+      <td>{{ d.advantage_evidence[:2] | join("；") | truncate(46, true, "…") or "—" }}</td>
+      <td>{{ d.disadvantage_evidence[:2] | join("；") | truncate(46, true, "…") or "—" }}</td>
     </tr>{% endfor %}
   </table>
   <h3 class="sub">最该解决的短板（AI 原话）</h3>
@@ -206,9 +210,9 @@
 {% for p, rows in appendix.items() %}
 <div class="page">
   <h2 class="sec">附录 · {{ PLAT_CN.get(p, p) }} 逐题命中明细</h2>
-  <table><tr><th>#</th><th>问题</th><th>判定</th><th>命中摘要</th></tr>
+  <table class="compact"><tr><th style="width:5%">#</th><th style="width:40%">问题</th><th style="width:10%">判定</th><th style="width:45%">命中摘要</th></tr>
     {% for r in rows %}<tr><td>{{ loop.index }}</td><td>{{ r.question }}</td>
-      <td>{{ r.state }}</td><td>{{ r.summary }}</td></tr>{% endfor %}
+      <td>{{ r.state }}</td><td>{{ r.summary[:52] }}{% if r.summary|length > 52 %}…{% endif %}</td></tr>{% endfor %}
   </table>
   <p class="note">判定口径：推荐 = AI 主动推荐甲方；引用 = AI 提到了甲方但未列入推荐；未提及 = AI 未提到甲方。</p>
   <div class="foot"><span>{{ FOOT }}</span><span>附录 · {{ PLAT_CN.get(p, p) }}</span></div>

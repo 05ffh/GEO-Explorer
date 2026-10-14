@@ -3,6 +3,7 @@ from src.report.geo_report import render_report
 
 
 _DATA = {"brand": "香格里拉", "city": "福州", "hit_rate": 0.7873, "question_count": 28,
+         "hit_question_count": 18,
          "platform_hit_rates": {"deepseek": 0.9375}, "competitors": {"main": [], "secondary": []},
          "scenes": [], "attribution": {}, "sentiment": {"rate": 0.1196, "negative_count": 11, "themes": {}, "items": []},
          "content_assets": [], "content_themes": [], "gt_facts_count": 139, "gt_facts_by_category": [],

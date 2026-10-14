@@ -80,6 +80,13 @@ def _scenes(platforms: dict, scenario_of: dict[str, str]) -> list[dict]:
     return list(agg.values())
 
 
+def _hit_question_count(platforms: dict) -> int:
+    """命中层题数（口径声明说"基于 N 个高频问题"，N 须=命中层题数，非全指纹题数）。"""
+    qids = {j.get("question_id") for info in platforms.values()
+            for j in info.get("judgments", []) if j.get("layer") == "hit"}
+    return len(qids)
+
+
 def _count_facts(facts_json) -> int:
     if not isinstance(facts_json, dict):
         return 0
@@ -141,6 +148,7 @@ def build_report_data(run) -> dict:
         "city": getattr(run, "city", "") or m.get("city", ""),
         "collected_at": m.get("collected_at", ""),
         "question_count": len(m.get("question_fingerprint") or []),
+        "hit_question_count": _hit_question_count(m.get("platforms") or {}),
         "hit_rate": (m.get("overall") or {}).get("overall_hit_rate"),
         "platform_hit_rates": (m.get("overall") or {}).get("platform_hit_rates") or {},
         "effective_visibility": m.get("effective_visibility"),
