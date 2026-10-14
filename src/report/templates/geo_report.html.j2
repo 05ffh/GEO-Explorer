@@ -12,7 +12,6 @@
   .page:last-child{page-break-after:auto;}
   .foot{position:absolute;bottom:10mm;left:20mm;right:20mm;font-size:9px;color:var(--mut);
         border-top:1px solid var(--line);padding-top:4px;display:flex;justify-content:space-between;}
-  /* 封面 */
   .cover{background:var(--blue);color:#fff;display:flex;flex-direction:column;justify-content:center;}
   .cover .kicker{font-size:13px;letter-spacing:2px;opacity:.8;}
   .cover h1{font-size:40px;margin:8px 0 4px;font-weight:800;}
@@ -20,12 +19,10 @@
   .cover .big{font-size:64px;font-weight:800;color:#93c5fd;margin-top:32px;line-height:1;}
   .cover .biglabel{font-size:14px;opacity:.85;}
   .cover .meta{margin-top:40px;font-size:12px;opacity:.7;}
-  /* 章节分隔页 */
   .divider{background:var(--blue);color:#fff;display:flex;flex-direction:column;justify-content:center;}
   .divider .no{font-size:72px;font-weight:800;color:#60a5fa;line-height:1;}
   .divider h2{font-size:30px;margin:6px 0;font-weight:700;}
   .divider .dsub{opacity:.85;font-size:15px;}
-  /* 正文 */
   h2.sec{color:var(--blue);font-size:22px;border-bottom:3px solid var(--blue2);padding-bottom:8px;margin:0 0 14px;}
   h3.sub{font-size:16px;color:var(--blue2);margin:20px 0 8px;}
   p{margin:8px 0;}
@@ -45,9 +42,14 @@
   .kpi .l{font-size:12px;color:var(--mut);}
   blockquote{border-left:3px solid var(--blue2);background:var(--bluebg);margin:8px 0;padding:6px 12px;font-size:13px;color:#374151;}
   .note{font-size:11.5px;color:var(--mut);margin-top:6px;}
+  ul.plain{margin:8px 0;padding-left:20px;}
+  ul.plain li{margin:4px 0;font-size:14px;}
 </style>
 </head>
 <body>
+
+{% set PLAT_CN = {"deepseek":"DeepSeek","kimi":"Kimi","doubao":"豆包","wenxin":"文心一言"} %}
+{% set FOOT = city ~ brand ~ " · AI 可见度诊断报告" %}
 
 <!-- 封面 -->
 <div class="page cover">
@@ -59,7 +61,123 @@
   <div class="meta">数据时间：{{ date }}</div>
 </div>
 
-{# 后续章节：执行摘要 / ①..⑥ / 方向 / 附录，Task 4-5 逐章补 #}
+<!-- 执行摘要 -->
+<div class="page">
+  <h2 class="sec">执行摘要</h2>
+  <p class="lede">{{ narrative.exec_summary.conclusion }}</p>
+  <div class="cards">
+    {% for h in narrative.exec_summary.highlights %}
+    <div class="card"><h4>{{ h.title }}</h4><p>{{ h.text }}</p></div>
+    {% endfor %}
+    {% for r in narrative.exec_summary.risks %}
+    <div class="card risk"><h4>{{ r.title }}</h4><p>{{ r.text }}</p></div>
+    {% endfor %}
+  </div>
+  <h3 class="sub">优先方向</h3>
+  <ul class="plain">{% for p in narrative.exec_summary.priority %}<li>{{ p }}</li>{% endfor %}</ul>
+  <div class="foot"><span>{{ FOOT }}</span><span>执行摘要</span></div>
+</div>
+
+<!-- ① 可见度 -->
+<div class="page divider"><div class="no">01</div><h2>我们做得怎么样</h2><div class="dsub">AI 可见度现状</div></div>
+<div class="page">
+  <h2 class="sec">一、我们做得怎么样</h2>
+  <div class="kpi">
+    <div><div class="v">{{ (hit_rate*100)|round(1) }}%</div><div class="l">综合命中率</div></div>
+    <div><div class="v">{{ (effective_visibility*100)|round(1) }}%</div><div class="l">有效可见度（含舆情折损）</div></div>
+  </div>
+  <h3 class="sub">各 AI 平台命中率</h3>
+  <table><tr><th>AI 平台</th><th>命中率</th></tr>
+    {% for p, r in platform_hit_rates.items() %}<tr><td>{{ PLAT_CN.get(p, p) }}</td><td class="num">{{ (r*100)|round(1) }}%</td></tr>{% endfor %}
+  </table>
+  <h3 class="sub">命中率是怎么得出的</h3>
+  <p class="lede">{{ narrative.hit_rate_explain }}</p>
+  <div class="foot"><span>{{ FOOT }}</span><span>01 · 可见度</span></div>
+</div>
+
+<!-- ② 主战场四场景 -->
+<div class="page divider"><div class="no">02</div><h2>AI 可见度主战场</h2><div class="dsub">四大搜索场景</div></div>
+{% for s in scenes %}
+<div class="page">
+  <h2 class="sec">二、主战场 · {{ s.name }}</h2>
+  <div class="kpi">
+    <div><div class="v">{{ (s.hit_rate*100)|round(1) }}%</div><div class="l">该场景命中率</div></div>
+    <div><div class="v">{{ s.hit }}/{{ s.valid }}</div><div class="l">被推荐 / 有效提问</div></div>
+  </div>
+  <h3 class="sub">这一场景，用户会这样问 AI</h3>
+  <ul class="plain">{% for q in s.questions %}<li>{{ q }}</li>{% endfor %}</ul>
+  <h3 class="sub">AI 的回答</h3>
+  <p class="lede">{{ narrative.scenes[s.name].summary }}</p>
+  {% for q in narrative.scenes[s.name].quotes %}<blockquote>{{ q }}</blockquote>{% endfor %}
+  <div class="foot"><span>{{ FOOT }}</span><span>02 · 主战场 · {{ s.name }}</span></div>
+</div>
+{% endfor %}
+
+<!-- ③ 竞对 -->
+<div class="page divider"><div class="no">03</div><h2>威胁：竞对正在追赶</h2><div class="dsub">竞争格局</div></div>
+<div class="page">
+  <h2 class="sec">三、威胁：竞对正在追赶</h2>
+  <p class="lede">{{ narrative.competitors.summary }}</p>
+  <table><tr><th>品牌</th><th>命中率</th><th>定位</th></tr>
+    <tr><td><b>{{ city }}{{ brand }}</b>（我们）</td><td class="num">{{ (hit_rate*100)|round(1) }}%</td><td>—</td></tr>
+    {% for c in competitors.main %}<tr><td>{{ c.name }}</td><td class="num">{{ (c.rate*100)|round(1) }}%</td><td>主要竞对</td></tr>{% endfor %}
+    {% for c in competitors.secondary %}<tr><td>{{ c.name }}</td><td class="num">{{ (c.rate*100)|round(1) }}%</td><td>次要竞对</td></tr>{% endfor %}
+  </table>
+  <p class="note">{{ narrative.competitors.source_note }}</p>
+  <div class="foot"><span>{{ FOOT }}</span><span>03 · 竞对</span></div>
+</div>
+
+<!-- ④ 舆情 -->
+<div class="page divider"><div class="no">04</div><h2>拖累：舆情在拉低可见度</h2><div class="dsub">舆情健康</div></div>
+<div class="page">
+  <h2 class="sec">四、拖累：舆情在拉低可见度</h2>
+  <div class="kpi">
+    <div><div class="v">{{ (sentiment.rate*100)|round(1) }}%</div><div class="l">负面率</div></div>
+    <div><div class="v">{{ sentiment.negative_count }}</div><div class="l">负面条目</div></div>
+  </div>
+  <h3 class="sub">负面主题分布</h3>
+  <table><tr><th>负面主题</th><th>条目</th></tr>
+    {% for t, n in sentiment.themes.items() %}<tr><td>{{ t }}</td><td class="num">{{ n }}</td></tr>{% endfor %}
+  </table>
+  <p class="lede">{{ narrative.sentiment.summary }}</p>
+  <div class="foot"><span>{{ FOOT }}</span><span>04 · 舆情</span></div>
+</div>
+
+<!-- ⑤ 被低估的资产 -->
+<div class="page divider"><div class="no">05</div><h2>被低估的资产</h2><div class="dsub">AI 眼中的 {{ city }}{{ brand }}</div></div>
+<div class="page">
+  <h2 class="sec">五、被低估的资产：AI 眼中的 {{ city }}{{ brand }}</h2>
+  <h3 class="sub">AI 实际引用了什么</h3>
+  <table><tr><th>AI 引用的内容</th><th>出现次数</th></tr>
+    {% for a in content_assets[:12] %}<tr><td>{{ a.content }}</td><td class="num">{{ a.count }}</td></tr>{% endfor %}
+  </table>
+  <p class="lede">{{ narrative.assets.summary }}</p>
+  <div class="foot"><span>{{ FOOT }}</span><span>05 · 资产</span></div>
+</div>
+
+<!-- ⑥ 归因 -->
+<div class="page divider"><div class="no">06</div><h2>为什么</h2><div class="dsub">归因分析</div></div>
+<div class="page">
+  <h2 class="sec">六、为什么：归因分析</h2>
+  <table><tr><th>维度</th><th>优势条目</th><th>真实劣势</th></tr>
+    {% for dim, d in attribution.items() %}
+    <tr><td>{{ dim }}</td><td class="num">{{ d.advantage }}</td><td class="num">{{ d.true_disadvantage }}</td></tr>
+    {% endfor %}
+  </table>
+  <h3 class="sub">最该解决的短板（AI 原话）</h3>
+  {% for q in narrative.attribution.key_quotes %}<blockquote>{{ q }}</blockquote>{% endfor %}
+  <div class="foot"><span>{{ FOOT }}</span><span>06 · 归因</span></div>
+</div>
+
+<!-- 方向 -->
+<div class="page divider"><div class="no">07</div><h2>方向</h2><div class="dsub">怎么改</div></div>
+<div class="page">
+  <h2 class="sec">七、方向</h2>
+  <ul class="plain">{% for d in narrative.directions %}<li><b>{{ d.title }}</b> —— {{ d.text }}</li>{% endfor %}</ul>
+  <div class="foot"><span>{{ FOOT }}</span><span>07 · 方向</span></div>
+</div>
+
+{# 附录：Task 5 补 #}
 
 </body>
 </html>
