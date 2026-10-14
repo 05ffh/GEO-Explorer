@@ -177,7 +177,24 @@
   <div class="foot"><span>{{ FOOT }}</span><span>07 · 方向</span></div>
 </div>
 
-{# 附录：Task 5 补 #}
+<!-- 附录 -->
+<div class="page divider"><div class="no">附录</div><h2>原始数据与明细</h2><div class="dsub">逐题命中明细 · 口径与方法</div></div>
+{% for p, rows in appendix.items() %}
+<div class="page">
+  <h2 class="sec">附录 · {{ PLAT_CN.get(p, p) }} 逐题命中明细</h2>
+  <table><tr><th>#</th><th>问题</th><th>是否推荐</th><th>命中摘要</th></tr>
+    {% for r in rows %}<tr><td>{{ loop.index }}</td><td>{{ r.question }}</td>
+      <td>{{ "推荐" if r.recommended else "未推荐" }}</td><td>{{ r.summary }}</td></tr>{% endfor %}
+  </table>
+  <div class="foot"><span>{{ FOOT }}</span><span>附录 · {{ PLAT_CN.get(p, p) }}</span></div>
+</div>
+{% endfor %}
+<div class="page">
+  <h2 class="sec">附录 · 口径与方法</h2>
+  <p class="lede">{{ narrative.method }}</p>
+  <p class="note">数据时间：{{ date }}</p>
+  <div class="foot"><span>{{ FOOT }}</span><span>附录 · 方法</span></div>
+</div>
 
 </body>
 </html>

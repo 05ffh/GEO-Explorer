@@ -67,3 +67,11 @@ def test_sentiment_and_attribution():
         "themes": {"hygiene": 12, "service": 3, "dining": 2, "price": 1}}}))
     assert d["sentiment"]["themes"]["卫生"] == 12
     assert d["attribution"]["设施"]["true_disadvantage"] == 22
+
+
+def test_appendix_judgments_per_platform():
+    d = build_report_data(_run(_M))
+    ds = d["appendix"]["deepseek"]
+    assert ds[0]["question_id"] == "hit_b1"
+    assert ds[0]["recommended"] is True
+    assert ds[0]["summary"] == "老牌五星，位置核心"

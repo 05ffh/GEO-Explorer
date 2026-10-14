@@ -45,6 +45,24 @@ def _count_facts(facts_json) -> int:
     return sum(len(v) for v in (facts_json.get("facts") or {}).values() if isinstance(v, list))
 
 
+def _appendix(platforms: dict) -> dict:
+    """附录：每平台逐题命中明细（题面 / 是否被推荐 / 命中摘要）。"""
+    out: dict[str, list] = {}
+    for pname, info in platforms.items():
+        rows = []
+        for j in info.get("judgments", []):
+            if j.get("layer") != "hit":
+                continue
+            rows.append({
+                "question_id": j.get("question_id"),
+                "question": j.get("question"),
+                "recommended": j.get("recommendation") == "recommend",
+                "summary": "；".join(j.get("referred_content") or []) or "—",
+            })
+        out[pname] = rows
+    return out
+
+
 def build_report_data(run) -> dict:
     m = run.measurement_json or {}
     cv = m.get("competitor_visibility") or {}
@@ -81,4 +99,5 @@ def build_report_data(run) -> dict:
         "cdp_facts_count": _count_facts(run.cdp_facts_json),
         "cdp_consistency": (run.cdp_facts_json or {}).get("consistency") or {},
         "cdp_stale": (run.cdp_facts_json or {}).get("stale_facts") or {},
+        "appendix": _appendix(m.get("platforms") or {}),
     }
