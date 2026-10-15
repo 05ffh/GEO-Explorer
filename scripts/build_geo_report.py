@@ -31,7 +31,7 @@ from src.report.geo_report import render_report
 from src.report.narrative import _NARRATIVE_SPEC, answer_corpus, lint_narrative
 from src.report.report_data import build_report_data, sentiment_status
 
-_DESKTOP = os.environ.get("GEO_REPORT_DESKTOP", "/mnt/c/Users/25468/Desktop")
+_DESKTOP = settings.geo_report_desktop or os.path.expanduser("~/Desktop")
 
 
 async def _resolve_run(db, run_id: str) -> CollectionRun | None:

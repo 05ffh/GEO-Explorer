@@ -32,6 +32,9 @@ class Settings(BaseSettings):
 
     collector_query_timeout_seconds: int = 60    # wenxin 适配器 httpx.Timeout 用
 
+    # 报告交付目录（build_geo_report --deliver；留空 → ~/Desktop；WSL 示例：/mnt/c/Users/<user>/Desktop）
+    geo_report_desktop: str = ""
+
     # --- 平台级限流 (rate_limiter) ---
     # 2026-08-28 联网查证后上调（仍保守，低于各平台真实上限）：
     # DeepSeek: 仅并发限制（无 RPM/TPM）→ 并发 8 安全

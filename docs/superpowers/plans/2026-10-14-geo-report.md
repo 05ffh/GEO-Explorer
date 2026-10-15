@@ -691,7 +691,7 @@ python3 -c "import pdfplumber;pdf=pdfplumber.open('output/福州香格里拉_AI�
 - [ ] **Step 4: 提交 + 导桌面**
 
 ```bash
-cp "output/福州香格里拉_AI可见度诊断报告.html" "output/福州香格里拉_AI可见度诊断报告.pdf" /mnt/c/Users/25468/Desktop/
+cp "output/福州香格里拉_AI可见度诊断报告.html" "output/福州香格里拉_AI可见度诊断报告.pdf" ~/Desktop/
 git add src/report scripts/build_geo_report.py
 git commit -m "报告层：HTML→PDF 交付（福州香格里拉）"
 ```
