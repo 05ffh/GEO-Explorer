@@ -151,6 +151,7 @@ def build_client_context(
     m: dict,
     grounding_corpus: str | None = None,
     gt_facts: dict | None = None,
+    client_tier: str | None = None,
 ) -> list[str]:
     """甲方已知属性（接地输入，两级，2026-09-18 架构）：事实清单（判决）+ 页面原文（佐证）+ AI 引用（补充）+ 档位。
 
@@ -173,8 +174,10 @@ def build_client_context(
     for a in (m.get("content_assets") or [])[:15]:
         if a.get("content"):
             ctx.append(a["content"])
-    if m.get("tier"):
-        ctx.append(f"档位：{m.get('tier')}")
+    # 档位来自 positioning_json（measurement_json 无该字段）——显式传入；缺了它档位从不送达子 agent
+    tier = client_tier or m.get("tier")
+    if tier:
+        ctx.append(f"档位：{tier}")
     return [x for x in ctx if x]
 
 
@@ -184,6 +187,7 @@ def generate_attribution_pending(
     grounding_corpus: str | None = None,
     gt_facts: dict | None = None,
     force: bool = False,
+    client_tier: str | None = None,
 ) -> dict:
     """输出归因层待提取清单：layer=attribution 且未提取的 judgment（题目+回答+甲方接地上下文）。
 
@@ -198,7 +202,7 @@ def generate_attribution_pending(
         raise ValueError(
             "接地上下文缺失：content_assets 未计算。需先跑命中判定 + finalize_measurement"
             "（如 scripts/finalize_v4.py hit <run_id> <patch>），再生成归因待提取，否则 type 分类不可靠")
-    ctx = client_context if client_context is not None else build_client_context(m, grounding_corpus, gt_facts)
+    ctx = client_context if client_context is not None else build_client_context(m, grounding_corpus, gt_facts, client_tier)
     # 判定规范随文件下发（2026-09-18 对抗审查修：归因 _ATTRIBUTION_SPEC 曾零消费者、主 agent 手贴
     # 易漂移——嵌进纯函数自包含，任何调用方都得 spec，防再漂移；对齐 _HIT_SPEC 固化）
     out: dict = {"platforms": {}, "client_context": ctx, "spec": _ATTRIBUTION_SPEC}

@@ -130,8 +130,11 @@ def _appendix(platforms: dict) -> dict:
     return out
 
 
-def build_report_data(run) -> dict:
-    m = run.measurement_json or {}
+def build_report_data(run, measurement: dict | None = None) -> dict:
+    # measurement 显式传入（调用方取**最新 sealed 快照**）优先：活 measurement_json 会被
+    # remeasure 的 draft 覆盖成未判草稿（gt_entry.write_measurement 恒写活值）→ 报告须读快照，
+    # 否则收敛期出报告会读到未判数据（2026-10-14 修复）。缺省回退活值（兼容旧调用/无快照）。
+    m = measurement if measurement is not None else (run.measurement_json or {})
     cv = m.get("competitor_visibility") or {}
     bands = cv.get("bands") or {}
     comp: dict[str, list] = {"main": [], "secondary": []}

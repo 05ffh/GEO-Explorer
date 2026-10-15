@@ -107,6 +107,10 @@ async def main():
         target_run_id, is_new = await _resolve_measure_target(db, run_row, current_fp)
         if is_new:
             print("⚠️ 警告: 指纹未匹配现有基线 → 新开 run（问法可能已变）。收敛应在同基线内进行。")
+        # 合并基底取**目标 run** 的 measurement：is_new 时新 run 本为空（不能拿旧 run 数据掺入，
+        # 否则旧基线判定污染新基线）；非 is_new 时即目标 run 现值（2026-10-14 修复）。
+        target_row = await db.get(CollectionRun, target_run_id)
+        base = {} if is_new else ((target_row.measurement_json if target_row else None) or existing)
 
         limiters = build_rate_limiters(list(layers))
         results = {}
@@ -116,7 +120,7 @@ async def main():
                 args.brand, args.city, brand_en, positioning,
                 make_ask_fn(adapter, limiters[pl]), platform=pl, layers=set(layer_set), system=system)
         now = datetime.now().isoformat(timespec="seconds")
-        measurement = merge_round_measurements(existing, results, layers, args.round, current_fp, now)
+        measurement = merge_round_measurements(base, results, layers, args.round, current_fp, now)
         remaining = finalize_measurement(measurement)
         await write_measurement(db, target_run_id, measurement, snapshot_type="draft")
         await db.commit()

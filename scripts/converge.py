@@ -357,12 +357,17 @@ async def main():
         ).scalars().all()
         # 按 round_no 分组，每轮取最新快照
         by_round = {}
+        skipped = []
         for s in snaps:
             rn = (s.measurement_json or {}).get("round_no")
             if rn is None:
+                skipped.append(s.snapshot_no)
                 continue
             if rn not in by_round or s.snapshot_no > by_round[rn].snapshot_no:
                 by_round[rn] = s
+        if skipped:
+            print(f"提示: 跳过 {len(skipped)} 个无 round_no 标记的快照"
+                  f"（snapshot_no={skipped}）——非收敛轮次，不入统计")
         if not by_round:
             print("错误: 该 run 无 round_no 标记的快照（先跑 remeasure.py --round N + seal）")
             await engine.dispose()

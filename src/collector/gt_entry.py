@@ -38,7 +38,6 @@ async def create_collection_run(
         brand_id=brand_id,
         city=city,
         region=region,
-        collection_status="pending",
     )
     db.add(run)
     await db.flush()
@@ -148,6 +147,20 @@ async def write_cdp_facts(db, collection_run_id: uuid.UUID, facts: dict) -> None
     run = await db.get(CollectionRun, collection_run_id)
     if run is not None:
         run.cdp_facts_json = facts
+        await db.flush()
+
+
+async def append_report_artifact(db, collection_run_id: uuid.UUID, record: dict) -> None:
+    """追加一条**报告产物溯源**到 collection_runs.report_json（报告层写侧接入）。
+
+    记：出生快照号 `snapshot_no` + 数据版本时间 + 产物 sha256 + lint 结果 + 交付记录。
+    意义：给定一份已交付报告，可机器回溯它对应哪版 sealed 数据（此前只能靠人工/文件名）。
+    深拷贝后重建 list（防 MutableDict 嵌套变更丢写）。
+    """
+    run = await db.get(CollectionRun, collection_run_id)
+    if run is not None:
+        arts = list((run.report_json or {}).get("artifacts") or [])
+        run.report_json = {"artifacts": arts + [dict(record)]}
         await db.flush()
 
 

@@ -6,6 +6,7 @@ from src.models.organization import Organization
 from src.collector.gt_entry import (
     get_or_create_brand, create_collection_run, write_positioning, write_search_result,
     append_competitors, write_measurement, write_cdp_facts, merge_cdp_facts_into_gt,
+    append_report_artifact,
 )
 
 
@@ -322,3 +323,18 @@ async def test_merge_cdp_facts_injects_provenance(db_session):
     assert merged["captured_at"] == "2026-10-12"
     # cdp_facts_json 保原始（未原地注入）
     assert "source_url" not in run.cdp_facts_json["facts"]["客房"][0]
+
+
+@pytest.mark.asyncio
+async def test_append_report_artifact_accumulates(db_session):
+    """报告写侧接入：append 溯源记录（出生快照号/产物 sha256），历史累积不覆盖。"""
+    org = Organization(name="报告溯源测试")
+    db_session.add(org)
+    await db_session.flush()
+    brand = await get_or_create_brand(db_session, "香格里拉", org.id)
+    run = await create_collection_run(db_session, org.id, brand.id, "福州", None)
+    assert run.report_json == {}
+    await append_report_artifact(db_session, run.id, {"snapshot_no": 4, "html_sha256": "a"})
+    await append_report_artifact(db_session, run.id, {"snapshot_no": 4, "html_sha256": "b"})
+    assert [x["html_sha256"] for x in run.report_json["artifacts"]] == ["a", "b"]
+    assert [x["snapshot_no"] for x in run.report_json["artifacts"]] == [4, 4]

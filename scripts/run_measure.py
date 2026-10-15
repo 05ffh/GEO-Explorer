@@ -83,14 +83,15 @@ def find_brand_en(brand_zh: str) -> str | None:
     return None
 
 
-# 酒旅定位字段（tier/星级/竞品/ADR 带）月级稳定，定位超 60 天才建议刷新。
-# 2026-10-14 30→60：GT 经多轮人工审核、定位（tier/竞品）稳定，换问法走轻路径（不重采 GT）时
-# 旧定位仍可用；30 天过苛会强迫重跑 run_gt_diagnosis 重采 GT → 徒增审核成本。
-POSITIONING_FRESH_DAYS = 60
+# 酒旅定位字段（tier/星级/竞品/ADR 带）月级稳定，定位超 90 天才建议刷新。
+# 2026-10-14 30→60 → 2026-10-16 60→90：GT 经多轮人工审核、定位（tier/竞品）稳定，换问法走轻路径
+# （不重采 GT）时旧定位仍可用；阈值过苛会强迫重跑 run_gt_diagnosis 重采 GT → 徒增审核成本。
+# 需要重采时由用户另行告知（非靠阈值自动触发）。
+POSITIONING_FRESH_DAYS = 90
 
 
 def check_positioning_freshness(positioning: dict) -> bool:
-    """校验定位新鲜度（强制）：positioned_at 缺失或 >60 天 → 拒绝测量，强制先跑 P2。
+    """校验定位新鲜度（强制）：positioned_at 缺失或 >90 天 → 拒绝测量，强制先跑 P2。
 
     定位是 P3 测量的前置（tier/competitors 决定题目），P3 不能跳过 P2 复用旧定位。
     返回 True（新鲜可用）/ False（过时/缺失，应退出）。
@@ -199,7 +200,6 @@ async def _clone_run_for_new_baseline(db, old: CollectionRun) -> CollectionRun:
         brand_id=old.brand_id,
         city=old.city,
         region=old.region,
-        collection_status="pending",
     )
     db.add(new)
     await db.flush()
@@ -239,6 +239,9 @@ def _build_measurement(brand, city, is_new_baseline, platforms, platform_results
             "brand": brand,
             "city": city,
             "collected_at": collected_at,
+            # 基线首测 = 收敛 round 0（converge 按 round_no 分组锚点；remeasure 的轮次从 1 起）。
+            # 缺此锚 converge 认不出 round 0（2026-10-14 修复：V5 靠手工标、V6 漏标）。
+            "round_no": 0,
             "platforms": {
                 p: {"judgments": v["judgments"], "collected_at": collected_at}
                 for p, v in platform_results.items()

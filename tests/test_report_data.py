@@ -93,6 +93,21 @@ def test_gt_facts_by_category():
     assert by["餐饮"]["count"] == 1
 
 
+def test_measurement_override_wins():
+    """报告须能读**显式传入的最新 sealed 快照**——活 measurement_json 会被 remeasure 的
+    draft 覆盖成未判草稿（gt_entry 恒写活值），故 override 优先于 run.measurement_json。"""
+    live_draft = {"overall": {"overall_hit_rate": None}, "platforms": {}}
+    snapshot = dict(_M)  # 已判：0.7873
+    d = build_report_data(_run(live_draft), measurement=snapshot)
+    assert d["hit_rate"] == 0.7873   # 用了 override，而非 live draft
+    assert d["hit_rate"] != live_draft["overall"]["overall_hit_rate"]
+
+
+def test_measurement_override_none_falls_back_to_live():
+    d = build_report_data(_run(_M), measurement=None)
+    assert d["hit_rate"] == 0.7873
+
+
 def test_sentiment_status_gate():
     """终判闸门：报告前须**全部层级** confirmed，否则识别为未终判。"""
     from src.report.report_data import sentiment_status

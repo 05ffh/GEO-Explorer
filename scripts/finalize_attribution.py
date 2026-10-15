@@ -44,7 +44,8 @@ async def main():
             # spec 由 generate_attribution_pending 内嵌（自包含契约，防漂移）
             corpus = await build_grounding_corpus(db, run.brand_id, run.city)
             out = generate_attribution_pending(m, grounding_corpus=corpus, gt_facts=run.gt_facts_json,
-                                               force="--force" in sys.argv)
+                                               force="--force" in sys.argv,
+                                               client_tier=(run.positioning_json or {}).get("tier"))
             out_path = None
             if "--out" in sys.argv:
                 i = sys.argv.index("--out")

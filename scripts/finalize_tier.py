@@ -58,6 +58,8 @@ async def main():
         positioning = dict(run.positioning_json or {})
         positioning["tier"] = tier
         positioning["tier_reason"] = reason
+        if args.adr is not None:
+            positioning["adr"] = args.adr   # 持久化 ADR：P3 主竞对「ADR 带内选」读 positioning.adr（competitor.select_primary）
         await write_positioning(db, run.id, positioning)
         await db.commit()
         print(f"档位精修完成: {brand_zh} → {tier}（{reason}）")

@@ -158,8 +158,20 @@ async def main():
             measurement = dict(snap.measurement_json)
             print(f"使用版本 v{args.version} [{snap.snapshot_type}] {snap.collected_at}")
         else:
-            measurement = dict(run.measurement_json or {})
-            print("使用最新 measurement_json")
+            snap = (
+                await db.execute(
+                    select(MeasurementSnapshot)
+                    .where(MeasurementSnapshot.collection_run_id == args.run_id)
+                    .order_by(MeasurementSnapshot.snapshot_no.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            if snap is not None:
+                measurement = dict(snap.measurement_json)
+                print(f"使用最新 sealed 快照 v{snap.snapshot_no} [{snap.snapshot_type}] {snap.collected_at}")
+            else:
+                measurement = dict(run.measurement_json or {})
+                print("警告: 无 sealed 快照，回退活 measurement_json（可能为未判定草稿）")
         if not measurement.get("platforms"):
             print("该 run 无测量数据")
             await engine.dispose()

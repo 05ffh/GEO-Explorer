@@ -69,7 +69,6 @@ import asyncio
 import json
 import sys
 
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.collector.gt_entry import write_measurement
@@ -78,7 +77,6 @@ from src.collector.judgment import _HIT_SPEC
 from src.collector.judgment_apply import apply_patch, generate_pending
 from src.config import settings
 from src.models.collection_run import CollectionRun
-from src.models.measurement_snapshot import MeasurementSnapshot
 
 
 async def main():
@@ -142,16 +140,12 @@ async def main():
             )
             if remaining > 0:
                 print(f"警告: 还有 {remaining} 题未判（recommendation=None），status 保持 partial")
-            # 判定=新版本（judge/rejudge），绝不原地覆盖——重判留痕（spec ⑫ 决策②）
-            has_snap = (await db.execute(
-                select(func.count()).select_from(MeasurementSnapshot)
-                .where(MeasurementSnapshot.collection_run_id == run_id)
-            )).scalar() > 0
-            snap_type = "rejudge" if has_snap else "judge"
-            await write_measurement(db, run_id, m, snapshot_type=snap_type)
+            # 单一收口（spec ⑫）：命中判定只写**活数据**，不开快照——盖章统一由 finalize_v4 seal 做。
+            # （此前 hit apply 也开 judge/rejudge 快照 → 某轮只做命中未 seal 时最新快照缺归因，converge 静默空）
+            await write_measurement(db, run_id, m, snapshot_type="draft")
             await db.commit()
             print(
-                f"已判定 {applied} 题并盖章为 {snap_type} 版本，status={m['status']}，"
+                f"已判定 {applied} 题（活数据，待 finalize_v4 seal 统一盖章）；status={m['status']}，"
                 f"overall_hit_rate={m['overall']['overall_hit_rate']}，"
                 f"miss_structure={m['miss_structure']}"
             )

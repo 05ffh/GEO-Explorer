@@ -189,6 +189,7 @@ def test_build_measurement_new_baseline_remeasure_uses_only_measured_platforms()
     m, st = _build_measurement("香格里拉", "福州", True, ["deepseek"], platform_results, existing)
     assert st == "full"
     assert list(m["platforms"].keys()) == ["deepseek"]  # 不合并 kimi 旧问法
+    assert m["round_no"] == 0  # 基线首测 = 收敛 round 0 锚点（converge 分组依赖；2026-10-14 修复）
 
 
 def test_build_measurement_same_baseline_remeasure_merges():

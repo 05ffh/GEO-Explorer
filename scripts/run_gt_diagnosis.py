@@ -103,8 +103,9 @@ async def main(brand_name: str, city: str, region: str | None):
     seen_urls: set[str] = set()
     async with session_factory() as db:
         # 承接的 positioning（competitors/personas）保留，tier 用本次重算；positioned_at 重新锚定
+        # tier 本次重算；但 derive_tier 推不出（表外品牌 → None）时保留承接的档位，防冲掉人工精修
         carried_pos.pop("positioned_at", None)
-        await write_positioning(db, run_id, {**carried_pos, "tier": tier,
+        await write_positioning(db, run_id, {**carried_pos, "tier": tier or carried_pos.get("tier"),
                                              "competitors": carried_pos.get("competitors", [])})
         senti_json = {"store_level": {**store, "status": "preliminary"}}
         if senti_grouped.get("brand_level"):     # 单档（体系B，无品牌级词）→ 不写 brand_level

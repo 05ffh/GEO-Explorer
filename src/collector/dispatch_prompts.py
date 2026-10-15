@@ -28,6 +28,8 @@ HIT_DISPATCH = (
     "\"referred_content\": [], \"has_hotel_recommendations\": true, "
     "\"hotels_recommended\": [], \"hotels_mentioned\": []}}}}\n```\n"
     "- 覆盖全部命中题，qid 与文件一致；无其他文字/解释\n"
+    "- **JSON 合法性（硬约束）**：文本字段（referred_content 等）里若需要引号，**一律用全角「」**"
+    "（不要出现半角 \" 作为内容）；输出前自检整份 JSON 能被 json.loads 解析\n"
     "- 你没有写文件权限，JSON 直接吐在回复里"
 )
 
@@ -52,5 +54,7 @@ ATTRIBUTION_DISPATCH = (
     "\"client_disadvantage_dims\": [{{\"dim\": \"...\", \"corpus_fact\": \"...\", \"evidence\": \"...\"}}], "
     "\"client_advantage_dims\": [{{\"dim\": \"...\", \"evidence\": \"...\"}}]}}}}\n```\n"
     "- 覆盖全部题，qid 与文件一致；无其他文字/解释\n"
+    "- **JSON 合法性（硬约束）**：evidence 等文本字段里若需要引号，**一律用全角「」**"
+    "（不要出现半角 \" 作为内容）；输出前自检整份 JSON 能被 json.loads 解析\n"
     "- 你没有写文件权限，JSON 直接吐在回复里"
 )
